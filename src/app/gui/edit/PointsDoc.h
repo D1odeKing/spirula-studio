@@ -22,11 +22,11 @@ namespace gui {
 
 class PointsDoc : public EditDoc {
 public:
-    // `dataset_dir` is "" for a loose PLY. `show` is called with the display
-    // cloud whenever it changes, which is how the GL preview is rebuilt; its
-    // last argument is one flag per live camera, for the frustum highlight.
+    // `dataset_dir` is "" for a loose PLY. `show` rebuilds the GL preview from
+    // the display cloud, with a selection flag and a colour (or null) per
+    // displayed camera.
     using Show = std::function<void(const ParsedDataset&, const PostSplitCameras&,
-                                    const uint8_t* selected)>;
+                                    const uint8_t* selected, const float* rgb)>;
     PointsDoc(ParsedDataset ds, PostSplitCameras post,
               const std::string& source, const std::string& dataset_dir,
               Show show);
@@ -65,6 +65,25 @@ public:
     const std::string& image_file(int64_t i) const { return _ds.image_filenames[(size_t)i]; }
     // What a folder save would drop, which is also what a repair starts without.
     spirula::SparseKeep sparse_keep() const;
+    std::array<double, 12> original_pose(int64_t i) const;
+    const ParsedDataset& parsed() const { return _ds; }
+
+    // A repair's answer, drawn before it is kept: not an edit, so not in the
+    // history. Poses are camera-to-world like Poses.
+    enum class Mark : uint8_t { Moved, Added, Failed };
+    struct AddedCamera {
+        std::string name;
+        int64_t like = 0;  // a camera whose intrinsics it is drawn with
+        std::array<double, 12> pose;
+    };
+    struct RepairPreview {
+        Poses poses;
+        std::map<int64_t, Mark> marks;
+        std::vector<AddedCamera> added;
+        bool empty() const { return poses.empty() && marks.empty() && added.empty(); }
+    };
+    void set_repair_preview(RepairPreview p);
+    const RepairPreview& repair_preview() const { return _preview; }
 
 protected:
     void publish_impl(bool geometry) override;
@@ -84,6 +103,16 @@ private:
     int64_t _live_cameras = -1;            // what the display was baked for
     Poses _moved;
     bool _poses_dirty = false;
+    RepairPreview _preview;
+    // What each camera of the display dataset is.
+    enum class Row : uint8_t { Live, Ghost, Added };
+    struct DisplayRow {
+        Row kind;
+        int64_t index;  // camera, or into _preview.added
+    };
+    std::vector<DisplayRow> _display_rows;
+    std::vector<float> _cam_rgb;
+    void append_camera(int64_t like, const std::array<double, 12>& c2w);
     std::string _dataset_dir;
     spirula::SparseFormat _fmt = spirula::SparseFormat::None;
     // The files as this session found them; every save filters these again.

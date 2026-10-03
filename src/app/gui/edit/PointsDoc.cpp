@@ -16,6 +16,14 @@ namespace gui {
 namespace {
 
 constexpr uint8_t kTint[3] = {255, 108, 13};
+// Frustum colours once any camera is marked; plain and selected are the
+// renderer's own (PreviewRenderer::render).
+constexpr float kFrustumPlain[3] = {1.0f, 0.62f, 0.25f};
+constexpr float kFrustumSelected[3] = {0.25f, 0.92f, 1.0f};
+constexpr float kFrustumHand[3] = {1.0f, 0.9f, 0.15f};
+constexpr float kFrustumRepaired[3] = {0.35f, 1.0f, 0.45f};
+constexpr float kFrustumFailed[3] = {1.0f, 0.3f, 0.3f};
+constexpr float kFrustumGhost[3] = {0.45f, 0.45f, 0.45f};
 
 // Keep the rows of every per-camera array a parser filled. A dataset that
 // carries none of an optional array keeps carrying none.
@@ -74,6 +82,7 @@ PointsDoc::PointsDoc(ParsedDataset ds, PostSplitCameras post,
 
     _display = _ds;
     _post_display = _post;
+    for (int64_t i = 0; i < _ds.num_cameras; i++) _display_rows.push_back({Row::Live, i});
     rebuild_display(false);
 }
 
@@ -93,10 +102,13 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
     if (cameras_changed && !ck.empty()) {
         _display = _ds;
         const int64_t nc = _ds.num_cameras;
-        for (const auto& kv : _moved)
+        auto put = [&](int64_t i, const std::array<double, 12>& c) {
             for (int k = 0; k < 12; k++)
-                _display.c2w[(size_t)kv.first * 12 + k] =
-                    (float)(kv.second[(size_t)k] - (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0));
+                _display.c2w[(size_t)i * 12 + k] =
+                    (float)(c[(size_t)k] - (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0));
+        };
+        for (const auto& kv : _moved) put(kv.first, kv.second);
+        for (const auto& kv : _preview.poses) put(kv.first, kv.second);
         keep_rows(_display.camera_models, nc, 1, ck.data());
         keep_rows(_display.camera_distortions, nc, 1, ck.data());
         keep_rows(_display.image_filenames, nc, 1, ck.data());
@@ -110,6 +122,22 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
         keep_rows(_display.dist_coeffs, nc, 8, ck.data());
         keep_rows(_display.redistort, nc, 1, ck.data());
         keep_rows(_display.exif_quarter_turns, nc, 1, ck.data());
+        _display_rows.clear();
+        for (int64_t i = 0; i < nc; i++)
+            if (ck[(size_t)i]) _display_rows.push_back({Row::Live, i});
+        // A camera that moved keeps a ghost where it was, so the step is visible.
+        for (int64_t i = 0; i < nc; i++) {
+            if (!ck[(size_t)i]) continue;
+            const bool hand = _moved.count(i) != 0;
+            const bool repaired = _preview.poses.count(i) != 0;
+            if (!hand && !repaired) continue;
+            append_camera(i, repaired && hand ? _moved.at(i) : original_pose(i));
+            _display_rows.push_back({Row::Ghost, i});
+        }
+        for (size_t j = 0; j < _preview.added.size(); j++) {
+            append_camera(_preview.added[j].like, _preview.added[j].pose);
+            _display_rows.push_back({Row::Added, (int64_t)j});
+        }
         _display.num_cameras = (int64_t)_display.widths.size();
         // The split table is derived, so it is rebuilt rather than filtered;
         // its rows are per FACE, which is not one per camera.
@@ -139,16 +167,67 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
         }
     }
 
-    // One flag per camera of the DISPLAY dataset, which is the live subset in
-    // its own order -- what the frusta are drawn from.
+    // One flag per camera of the DISPLAY dataset -- the live subset in its own
+    // order, then ghosts and added cameras -- which is what frusta are drawn from.
     _cam_highlight.assign((size_t)_display.num_cameras, 0);
+    _cam_rgb.clear();
     if (ck.empty()) return;
     const Selection& csel = sel_of(kCameras);
-    size_t live = 0;
-    for (size_t i = 0; i < ck.size() && live < _cam_highlight.size(); i++) {
-        if (!ck[i]) continue;
-        _cam_highlight[live++] = csel.weight((int64_t)i) ? 1 : 0;
+    const bool marked = !_moved.empty() || !_preview.empty();
+    if (marked) _cam_rgb.resize((size_t)_display.num_cameras * 3);
+    for (size_t r = 0; r < _display_rows.size() && r < _cam_highlight.size(); r++) {
+        const DisplayRow& d = _display_rows[r];
+        const bool sel = d.kind == Row::Live && csel.weight(d.index);
+        _cam_highlight[r] = sel ? 1 : 0;
+        if (!marked) continue;
+        const float* c = kFrustumPlain;
+        if (sel) c = kFrustumSelected;
+        else if (d.kind == Row::Ghost) c = kFrustumGhost;
+        else if (d.kind == Row::Added) c = kFrustumRepaired;
+        else if (_preview.marks.count(d.index))
+            c = _preview.marks.at(d.index) == Mark::Failed ? kFrustumFailed : kFrustumRepaired;
+        else if (_moved.count(d.index)) c = kFrustumHand;
+        for (int k = 0; k < 3; k++) _cam_rgb[r * 3 + k] = c[k];
     }
+}
+
+std::array<double, 12> PointsDoc::original_pose(int64_t i) const {
+    std::array<double, 12> c;
+    for (int k = 0; k < 12; k++)
+        c[(size_t)k] = (double)_ds.c2w[(size_t)i * 12 + k] +
+                       (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0);
+    return c;
+}
+
+// Row `like` of every per-camera array the parser filled, at pose `c2w` (raw frame).
+void PointsDoc::append_camera(int64_t like, const std::array<double, 12>& c2w) {
+    const int64_t nc = _ds.num_cameras;
+    auto row = [&](auto& dst, const auto& src, int stride) {
+        if ((int64_t)src.size() != nc * stride) return;
+        dst.insert(dst.end(), src.begin() + (ptrdiff_t)(like * stride),
+                   src.begin() + (ptrdiff_t)((like + 1) * stride));
+    };
+    row(_display.camera_models, _ds.camera_models, 1);
+    row(_display.camera_distortions, _ds.camera_distortions, 1);
+    row(_display.image_filenames, _ds.image_filenames, 1);
+    row(_display.mask_filenames, _ds.mask_filenames, 1);
+    row(_display.depth_filenames, _ds.depth_filenames, 1);
+    row(_display.normal_filenames, _ds.normal_filenames, 1);
+    row(_display.widths, _ds.widths, 1);
+    row(_display.heights, _ds.heights, 1);
+    row(_display.intrins, _ds.intrins, 4);
+    row(_display.dist_coeffs, _ds.dist_coeffs, 8);
+    row(_display.redistort, _ds.redistort, 1);
+    row(_display.exif_quarter_turns, _ds.exif_quarter_turns, 1);
+    for (int k = 0; k < 12; k++)
+        _display.c2w.push_back(
+            (float)(c2w[(size_t)k] - (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0)));
+}
+
+void PointsDoc::set_repair_preview(RepairPreview p) {
+    _preview = std::move(p);
+    _poses_dirty = true;
+    mark_geometry_dirty();
 }
 
 void PointsDoc::publish_impl(bool geometry) {
@@ -160,7 +239,8 @@ void PointsDoc::publish_impl(bool geometry) {
     _live_cameras = live_cams;
     rebuild_display(cameras_changed);
     _show(_display, _post_display,
-          _cam_highlight.empty() ? nullptr : _cam_highlight.data());
+          _cam_highlight.empty() ? nullptr : _cam_highlight.data(),
+          _cam_rgb.empty() ? nullptr : _cam_rgb.data());
 }
 
 // Points AND cameras, both filtered to what is live and both taken from the
@@ -256,12 +336,7 @@ std::vector<float> PointsDoc::camera_centres() const {
 
 std::array<double, 12> PointsDoc::camera_pose(int64_t i) const {
     auto it = _moved.find(i);
-    if (it != _moved.end()) return it->second;
-    std::array<double, 12> c;
-    for (int k = 0; k < 12; k++)
-        c[(size_t)k] = (double)_ds.c2w[(size_t)i * 12 + k] +
-                       (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0);
-    return c;
+    return it != _moved.end() ? it->second : original_pose(i);
 }
 
 void PointsDoc::set_moved_cameras(Poses p) {
@@ -312,7 +387,7 @@ std::unique_ptr<EditOp> make_camera_move_op(PointsDoc& doc, PointsDoc::Poses nex
 }
 
 void PointsDoc::revert_display() {
-    if (_show) _show(_ds, _post, nullptr);
+    if (_show) _show(_ds, _post, nullptr, nullptr);
 }
 
 

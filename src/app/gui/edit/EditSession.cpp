@@ -2,6 +2,7 @@
 
 #include "app/gui/edit/EditSession.h"
 
+#include "app/gui/GlLoader.h"
 #include "app/gui/Layout.h"
 #include "app/gui/ViewportPanel.h"
 #include "i18n/Message.h"
@@ -76,6 +77,14 @@ void EditSession::close() {
     discard_repair();
     _repair_avail = -1;
     _cam_xform = false;
+    if (_photo.worker.joinable()) _photo.worker.join();
+    if (_photo.tex) {
+        GLuint t = _photo.tex;
+        glDeleteTextures(1, &t);
+        _photo.tex = 0;
+    }
+    _photo.want = _photo.loaded = _photo.shown = -1;
+    _photo.pic = Picture{};
     if (_comp_worker.joinable()) _comp_worker.join();
     if (_save_worker.joinable()) _save_worker.join();
     if (_attr_worker.joinable()) _attr_worker.join();

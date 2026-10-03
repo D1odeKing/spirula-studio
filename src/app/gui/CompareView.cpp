@@ -482,9 +482,9 @@ void CompareView::begin_edit(int index) {
                            std::move(ds), std::move(post), src, dir,
                            [panel, key](const ParsedDataset& d,
                                         const PostSplitCameras& p,
-                                        const uint8_t* cam_sel) {
+                                        const uint8_t* cam_sel, const float* cam_rgb) {
                                panel->attach_preview_data(d, p, key, 1.0f,
-                                                          p.n_post > 0, cam_sel);
+                                                          p.n_post > 0, cam_sel, cam_rgb);
                            }),
                        panel);
             break;

@@ -8,6 +8,7 @@
 // knows nothing about editing and this knows nothing about how the panel
 // renders.
 
+#include "app/gui/Picture.h"
 #include "app/gui/SfmInProcess.h"
 #include "app/gui/ViewportInput.h"
 #include "app/gui/edit/Attributes.h"
@@ -189,6 +190,11 @@ private:
     bool camera_mode() const;
     void begin_camera_move();
     PointsDoc::Poses moved_by(const spirula::Sim3& shared_step) const;
+    void show_repair_preview();
+    // The selected camera's photograph, and the view from where it stands.
+    void draw_camera_photo(float full);
+    void look_through(int64_t camera);
+    void step_camera(int dir);
 
     // ---- selecting by attribute and by colour (EditAttributes.cpp) ----
     void draw_attribute_section(float full);
@@ -368,6 +374,17 @@ private:
     PointsDoc::Poses _cam_from;       // every hand move as the operator began
     PointsDoc::Poses _cam_start;      // the selected cameras' poses then
     std::function<void()> _on_model_replaced;
+    spirula::Sim3 _repair_moved;      // the placement the staged input was written with
+    // The photo panel: one load in flight, the latest request wins.
+    struct Photo {
+        std::thread worker;
+        std::atomic<bool> busy{false};
+        std::mutex mu;
+        int64_t want = -1, loaded = -1, shown = -1;
+        Picture pic;
+        unsigned tex = 0;
+        int w = 0, h = 0;
+    } _photo;
     std::mutex _repair_log_mtx;       // the worker writes, drain_log reads
     std::vector<std::string> _repair_log;
 
