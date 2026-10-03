@@ -8,10 +8,12 @@
 // knows nothing about editing and this knows nothing about how the panel
 // renders.
 
+#include "app/gui/SfmInProcess.h"
 #include "app/gui/ViewportInput.h"
 #include "app/gui/edit/Attributes.h"
 #include "app/gui/edit/EditDoc.h"
 #include "app/gui/edit/EditTool.h"
+#include "app/gui/edit/PointsDoc.h"
 #include "app/gui/edit/ElementGrid.h"
 #include "app/gui/edit/SelectShape.h"
 #include "app/gui/edit/TransformTool.h"
@@ -19,6 +21,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -73,6 +76,9 @@ public:
                                          const spirula::Sim3& placement)> f) {
         _on_saved = std::move(f);
     }
+    // Told when a kept repair replaced the model on disk: the pane and this
+    // document are stale, and the owner reopens both.
+    void set_on_model_replaced(std::function<void()> f) { _on_model_replaced = std::move(f); }
     // The owner's answer, once the user has chosen.
     void save_to(int target, const std::string& path);
     // Save over what the document came from, which is what the panel's Save
@@ -129,7 +135,8 @@ public:
     bool frame_bounds(double centre[3], double& radius) override;
     // A long job is in flight; editing waits for it.
     bool busy() const {
-        return _comp_busy.load() || _save_busy.load() || _attr_busy.load();
+        return _comp_busy.load() || _save_busy.load() || _attr_busy.load() ||
+               _repair_busy.load();
     }
     // Give up on it. The worker checks between cells, so this is not instant.
     void cancel_work();
@@ -146,7 +153,7 @@ private:
     spirula::Sim3 base_frame() const;
     bool xform_frame(XformFrame& f);
     bool pointer_in_view(float& x, float& y) const;
-    void pivot_model(double out[3]);
+    void pivot_model(double out[3], bool selection = false);
     void begin_xform(XformKind kind);
     // A step made in the shared frame / in saved coordinates, as one history
     // entry.
@@ -169,6 +176,19 @@ private:
                                      std::vector<int64_t>* index = nullptr) const;
     void enter_transform();
     void draw_transform_tab(float full);
+
+    // ---- repairing cameras through the SfM (EditRepair.cpp) ----
+    enum class RepairKind { Replace, Snap, Missing, Audit };
+    bool repair_available();
+    void draw_repair_tab(float full);
+    void start_repair(RepairKind kind);
+    void poll_repair();
+    void keep_repair();
+    void discard_repair();
+    // The Transform tool moves the selected cameras rather than the model.
+    bool camera_mode() const;
+    void begin_camera_move();
+    PointsDoc::Poses moved_by(const spirula::Sim3& shared_step) const;
 
     // ---- selecting by attribute and by colour (EditAttributes.cpp) ----
     void draw_attribute_section(float full);
@@ -333,7 +353,25 @@ private:
     bool _adjust_live = false;
     double _preview_at = 0.0;
 
-    int _tab = 0;                     // 0 select, 1 transform
+    // ---- repair ----
+    std::thread _repair_worker;
+    std::atomic<bool> _repair_busy{false}, _repair_cancel{false};
+    int _repair_avail = -1;           // -1 not yet looked, 0 no, 1 yes
+    std::string _repair_model;        // the model folder a Keep writes over
+    std::string _repair_stage;        // scratch folder of the run in flight or shown
+    std::string _repair_error;
+    InProcessResult _repair_result;
+    std::vector<RepairResultLine> _repair_report;
+    bool _repair_shown = false;       // a finished run is waiting on Keep or Discard
+    bool _repair_match = true;
+    bool _cam_xform = false;          // the running operator moves cameras
+    PointsDoc::Poses _cam_from;       // every hand move as the operator began
+    PointsDoc::Poses _cam_start;      // the selected cameras' poses then
+    std::function<void()> _on_model_replaced;
+    std::mutex _repair_log_mtx;       // the worker writes, drain_log reads
+    std::vector<std::string> _repair_log;
+
+    int _tab = 0;                     // 0 select, 1 transform, 2 repair
     bool _tab_force = false;
     bool _saved_over_source = false;
 

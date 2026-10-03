@@ -93,6 +93,10 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
     if (cameras_changed && !ck.empty()) {
         _display = _ds;
         const int64_t nc = _ds.num_cameras;
+        for (const auto& kv : _moved)
+            for (int k = 0; k < 12; k++)
+                _display.c2w[(size_t)kv.first * 12 + k] =
+                    (float)(kv.second[(size_t)k] - (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0));
         keep_rows(_display.camera_models, nc, 1, ck.data());
         keep_rows(_display.camera_distortions, nc, 1, ck.data());
         keep_rows(_display.image_filenames, nc, 1, ck.data());
@@ -151,7 +155,8 @@ void PointsDoc::publish_impl(bool geometry) {
     if (!_show) return;
     const int64_t live_cams =
         layer_count() > kCameras ? alive_count_of(kCameras) : 0;
-    const bool cameras_changed = geometry && live_cams != _live_cameras;
+    const bool cameras_changed = geometry && (live_cams != _live_cameras || _poses_dirty);
+    _poses_dirty = false;
     _live_cameras = live_cams;
     rebuild_display(cameras_changed);
     _show(_display, _post_display,
@@ -249,6 +254,63 @@ std::vector<float> PointsDoc::camera_centres() const {
     return out;
 }
 
+std::array<double, 12> PointsDoc::camera_pose(int64_t i) const {
+    auto it = _moved.find(i);
+    if (it != _moved.end()) return it->second;
+    std::array<double, 12> c;
+    for (int k = 0; k < 12; k++)
+        c[(size_t)k] = (double)_ds.c2w[(size_t)i * 12 + k] +
+                       (k % 4 == 3 ? _ds.center[(size_t)(k / 4)] : 0.0);
+    return c;
+}
+
+void PointsDoc::set_moved_cameras(Poses p) {
+    if (layer_count() <= kCameras) return;
+    std::vector<int64_t> touched;
+    for (const auto& kv : _moved) touched.push_back(kv.first);
+    for (const auto& kv : p) touched.push_back(kv.first);
+    _moved = std::move(p);
+    double A[16];
+    dsparse::train_to_normalized_inverse(_ds, A);
+    for (int64_t i : touched) {
+        const std::array<double, 12> c = camera_pose(i);
+        const double q[3] = {c[3] - _ds.center[0], c[7] - _ds.center[1],
+                             c[11] - _ds.center[2]};
+        float pos[3];
+        for (int r = 0; r < 3; r++)
+            pos[r] = (float)(A[r*4+0]*q[0] + A[r*4+1]*q[1] + A[r*4+2]*q[2] + A[r*4+3]);
+        set_position(kCameras, i, pos);
+    }
+    _poses_dirty = true;
+    mark_geometry_dirty();
+}
+
+namespace {
+
+class CameraMoveOp : public EditOp {
+public:
+    CameraMoveOp(PointsDoc::Poses before, PointsDoc::Poses after, std::string label)
+        : _before(std::move(before)), _after(std::move(after)), _label(std::move(label)) {}
+    void apply(EditDoc& d) override { static_cast<PointsDoc&>(d).set_moved_cameras(_after); }
+    void undo(EditDoc& d) override { static_cast<PointsDoc&>(d).set_moved_cameras(_before); }
+    std::string label() const override { return _label; }
+    size_t bytes() const override {
+        return (_before.size() + _after.size()) * (sizeof(int64_t) + 12 * sizeof(double));
+    }
+
+private:
+    PointsDoc::Poses _before, _after;
+    std::string _label;
+};
+
+}  // namespace
+
+std::unique_ptr<EditOp> make_camera_move_op(PointsDoc& doc, PointsDoc::Poses next,
+                                            std::string label) {
+    return std::make_unique<CameraMoveOp>(doc.moved_cameras(), std::move(next),
+                                          std::move(label));
+}
+
 void PointsDoc::revert_display() {
     if (_show) _show(_ds, _post, nullptr);
 }
@@ -281,17 +343,23 @@ std::string PointsDoc::default_save_path(int target) const {
     return t[(size_t)target].folder ? _dataset_dir : source_path();
 }
 
+spirula::SparseKeep PointsDoc::sparse_keep() const {
+    spirula::SparseKeep keep;
+    keep.points = alive_of(kPoints);
+    if (layer_count() <= kCameras) return keep;
+    const std::vector<uint8_t>& ck = alive_of(kCameras);
+    for (size_t i = 0; i < ck.size(); i++)
+        if (!ck[i] && i < _ds.image_filenames.size())
+            keep.drop_images.push_back(_ds.image_filenames[i]);
+    return keep;
+}
+
 void PointsDoc::save(int target, const std::string& path,
                      std::atomic<int>* progress) {
     const std::vector<SaveTarget> t = save_targets();
     if (target < 0 || target >= (int)t.size()) return;
     if (t[(size_t)target].folder) {
-        spirula::SparseKeep keep;
-        keep.points = alive_of(kPoints);
-        const std::vector<uint8_t>& ck = alive_of(kCameras);
-        for (size_t i = 0; i < ck.size(); i++)
-            if (!ck[i] && i < _ds.image_filenames.size())
-                keep.drop_images.push_back(_ds.image_filenames[i]);
+        const spirula::SparseKeep keep = sparse_keep();
         const spirula::Sim3 moved = file_placement();
         std::error_code ec;
         if (fs::equivalent(path, _dataset_dir, ec)) {

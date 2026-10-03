@@ -12,7 +12,10 @@
 #include "data/DatasetParser.h"
 #include "data/SparseEdit.h"
 
+#include <array>
 #include <functional>
+#include <map>
+#include <memory>
 #include <string>
 
 namespace gui {
@@ -53,6 +56,16 @@ public:
     spirula::SparseFormat format() const { return _fmt; }
     const std::string& dataset_dir() const { return _dataset_dir; }
 
+    // Cameras moved by hand: where Repair starts snapping them from. Save does
+    // not write them. Raw file frame, OpenGL camera-to-world, row-major 3x4.
+    using Poses = std::map<int64_t, std::array<double, 12>>;
+    const Poses& moved_cameras() const { return _moved; }
+    void set_moved_cameras(Poses p);
+    std::array<double, 12> camera_pose(int64_t i) const;
+    const std::string& image_file(int64_t i) const { return _ds.image_filenames[(size_t)i]; }
+    // What a folder save would drop, which is also what a repair starts without.
+    spirula::SparseKeep sparse_keep() const;
+
 protected:
     void publish_impl(bool geometry) override;
 
@@ -69,6 +82,8 @@ private:
     PostSplitCameras _post_display;
     std::vector<uint8_t> _cam_highlight;   // per live camera
     int64_t _live_cameras = -1;            // what the display was baked for
+    Poses _moved;
+    bool _poses_dirty = false;
     std::string _dataset_dir;
     spirula::SparseFormat _fmt = spirula::SparseFormat::None;
     // The files as this session found them; every save filters these again.
@@ -77,5 +92,9 @@ private:
     mutable bool _stats_read = false;
     Show _show;
 };
+
+// Both ends are stored, as make_placement_op does.
+std::unique_ptr<EditOp> make_camera_move_op(PointsDoc& doc, PointsDoc::Poses next,
+                                            std::string label);
 
 }  // namespace gui
