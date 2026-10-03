@@ -138,6 +138,11 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
             append_camera(_preview.added[j].like, _preview.added[j].pose);
             _display_rows.push_back({Row::Added, (int64_t)j});
         }
+        int64_t nth = 0;
+        for (const auto& kv : _placed) {
+            append_camera(kv.second.like, kv.second.pose);
+            _display_rows.push_back({Row::Placed, nth++});
+        }
         _display.num_cameras = (int64_t)_display.widths.size();
         // The split table is derived, so it is rebuilt rather than filtered;
         // its rows are per FACE, which is not one per camera.
@@ -173,17 +178,23 @@ void PointsDoc::rebuild_display(bool cameras_changed) {
     _cam_rgb.clear();
     if (ck.empty()) return;
     const Selection& csel = sel_of(kCameras);
-    const bool marked = !_moved.empty() || !_preview.empty();
+    const bool marked = !_moved.empty() || !_preview.empty() || !_placed.empty();
     if (marked) _cam_rgb.resize((size_t)_display.num_cameras * 3);
+    const int64_t current =
+        _placed.count(_placed_current)
+            ? (int64_t)std::distance(_placed.begin(), _placed.find(_placed_current))
+            : -1;
     for (size_t r = 0; r < _display_rows.size() && r < _cam_highlight.size(); r++) {
         const DisplayRow& d = _display_rows[r];
-        const bool sel = d.kind == Row::Live && csel.weight(d.index);
+        const bool sel = (d.kind == Row::Live && csel.weight(d.index)) ||
+                         (d.kind == Row::Placed && d.index == current);
         _cam_highlight[r] = sel ? 1 : 0;
         if (!marked) continue;
         const float* c = kFrustumPlain;
         if (sel) c = kFrustumSelected;
         else if (d.kind == Row::Ghost) c = kFrustumGhost;
         else if (d.kind == Row::Added) c = kFrustumRepaired;
+        else if (d.kind == Row::Placed) c = kFrustumHand;
         else if (_preview.marks.count(d.index))
             c = _preview.marks.at(d.index) == Mark::Failed ? kFrustumFailed : kFrustumRepaired;
         else if (_moved.count(d.index)) c = kFrustumHand;
@@ -227,6 +238,18 @@ void PointsDoc::append_camera(int64_t like, const std::array<double, 12>& c2w) {
 void PointsDoc::set_repair_preview(RepairPreview p) {
     _preview = std::move(p);
     _poses_dirty = true;
+    mark_geometry_dirty();
+}
+
+void PointsDoc::set_placed(PlacedMap p) {
+    _placed = std::move(p);
+    _poses_dirty = true;
+    mark_geometry_dirty();
+}
+
+void PointsDoc::set_placed_current(const std::string& name) {
+    if (name == _placed_current) return;
+    _placed_current = name;
     mark_geometry_dirty();
 }
 
@@ -378,7 +401,28 @@ private:
     std::string _label;
 };
 
+class PlaceMissingOp : public EditOp {
+public:
+    PlaceMissingOp(PointsDoc::PlacedMap before, PointsDoc::PlacedMap after, std::string label)
+        : _before(std::move(before)), _after(std::move(after)), _label(std::move(label)) {}
+    void apply(EditDoc& d) override { static_cast<PointsDoc&>(d).set_placed(_after); }
+    void undo(EditDoc& d) override { static_cast<PointsDoc&>(d).set_placed(_before); }
+    std::string label() const override { return _label; }
+    size_t bytes() const override {
+        return (_before.size() + _after.size()) * (64 + sizeof(PointsDoc::Placed));
+    }
+
+private:
+    PointsDoc::PlacedMap _before, _after;
+    std::string _label;
+};
+
 }  // namespace
+
+std::unique_ptr<EditOp> make_place_missing_op(PointsDoc& doc, PointsDoc::PlacedMap next,
+                                              std::string label) {
+    return std::make_unique<PlaceMissingOp>(doc.placed(), std::move(next), std::move(label));
+}
 
 std::unique_ptr<EditOp> make_camera_move_op(PointsDoc& doc, PointsDoc::Poses next,
                                             std::string label) {

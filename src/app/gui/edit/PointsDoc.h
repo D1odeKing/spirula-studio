@@ -85,6 +85,18 @@ public:
     void set_repair_preview(RepairPreview p);
     const RepairPreview& repair_preview() const { return _preview; }
 
+    // Images the model left out, put where the user thinks they were taken:
+    // where Register starts them from. Keyed by name under the image folder.
+    struct Placed {
+        int64_t like = 0;  // a camera whose intrinsics it is drawn with
+        std::array<double, 12> pose;
+    };
+    using PlacedMap = std::map<std::string, Placed>;
+    const PlacedMap& placed() const { return _placed; }
+    void set_placed(PlacedMap p);
+    // The one the panel is working on, drawn as selected.
+    void set_placed_current(const std::string& name);
+
 protected:
     void publish_impl(bool geometry) override;
 
@@ -104,11 +116,13 @@ private:
     Poses _moved;
     bool _poses_dirty = false;
     RepairPreview _preview;
+    PlacedMap _placed;
+    std::string _placed_current;
     // What each camera of the display dataset is.
-    enum class Row : uint8_t { Live, Ghost, Added };
+    enum class Row : uint8_t { Live, Ghost, Added, Placed };
     struct DisplayRow {
         Row kind;
-        int64_t index;  // camera, or into _preview.added
+        int64_t index;  // camera, into _preview.added, or the nth of _placed
     };
     std::vector<DisplayRow> _display_rows;
     std::vector<float> _cam_rgb;
@@ -125,5 +139,7 @@ private:
 // Both ends are stored, as make_placement_op does.
 std::unique_ptr<EditOp> make_camera_move_op(PointsDoc& doc, PointsDoc::Poses next,
                                             std::string label);
+std::unique_ptr<EditOp> make_place_missing_op(PointsDoc& doc, PointsDoc::PlacedMap next,
+                                              std::string label);
 
 }  // namespace gui

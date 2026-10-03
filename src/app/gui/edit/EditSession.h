@@ -194,7 +194,19 @@ private:
     // The selected camera's photograph, and the view from where it stands.
     void draw_camera_photo(float full);
     void look_through(int64_t camera);
+    void look_from(const std::array<double, 12>& c2w, int64_t like, bool move);
     void step_camera(int dir);
+    // Drives the photo loader; true once `path`'s photo is on the texture.
+    bool photo_of(const std::string& path);
+    void draw_photo_overlay(const ViewportOverlay& v);
+    // Images the model left out: placed by hand or guessed, then registered
+    // from there.
+    void read_missing();
+    void draw_missing_section(float full);
+    void pick_missing(int k);
+    void place_at_view();
+    void guess_missing();
+    int64_t like_of(const std::string& name) const;
 
     // ---- selecting by attribute and by colour (EditAttributes.cpp) ----
     void draw_attribute_section(float full);
@@ -380,11 +392,20 @@ private:
         std::thread worker;
         std::atomic<bool> busy{false};
         std::mutex mu;
-        int64_t want = -1, loaded = -1, shown = -1;
+        std::string want, loaded, shown;  // file paths
         Picture pic;
         unsigned tex = 0;
         int w = 0, h = 0;
     } _photo;
+    bool _photo_overlay = false;      // the photo laid over the viewport
+    float _photo_alpha = 0.5f;
+    std::vector<std::string> _missing;  // under the image folder, sorted
+    bool _missing_read = false;
+    int _missing_at = -1;
+    int64_t _missing_cam = -1;        // the camera selected when it was picked
+    std::string _images_dir;
+    PointsDoc::PlacedMap _placed_carry;  // across the reopen a Keep causes
+    std::string _placed_carry_dir;
     std::mutex _repair_log_mtx;       // the worker writes, drain_log reads
     std::vector<std::string> _repair_log;
 

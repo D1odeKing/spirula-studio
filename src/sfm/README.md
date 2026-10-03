@@ -371,7 +371,8 @@ frame -- and anything aligned with it -- stays put; `repair.txt` lists each
 target's outcome. Every step is on bearings, so equirect cameras need no case
 of their own. A model's rows are matched to feature rows by keypoint position,
 so a model written before `matches.bin` grew still loads. The GUI's editor
-drives the same code from its Repair tab.
+drives the same code from its Repair tab; how to use it is in
+[`docs/notes/camera-repair.md`](../../docs/notes/camera-repair.md).
 
 ## Options
 

@@ -1472,15 +1472,26 @@ public:
                 verdict[i] = RepairOutcome::Dropped;
             }
         }
-        for (const auto& h : hints) {
-            if (registerFromHint(h.first, h.second)) {
-                verdict[h.first] = before.count(h.first) ? RepairOutcome::Moved : RepairOutcome::Added;
-                placed.push_back(h.first);
-            } else if (before.count(h.first)) {
-                restore(h.first);
-            } else {
-                verdict[h.first] = RepairOutcome::Failed;
+        // A hinted camera may stand on points only another one makes, so the
+        // hints go round until none lands; a new image left over is grown.
+        std::map<uint32_t, Pose> waiting = hints;
+        for (bool progress = true; progress && !waiting.empty();) {
+            progress = false;
+            for (auto it = waiting.begin(); it != waiting.end();) {
+                if (!registerFromHint(it->first, it->second)) {
+                    ++it;
+                    continue;
+                }
+                verdict[it->first] = before.count(it->first) ? RepairOutcome::Moved : RepairOutcome::Added;
+                placed.push_back(it->first);
+                triangulateForImage(it->first);
+                progress = true;
+                it = waiting.erase(it);
             }
+        }
+        for (const auto& h : waiting) {
+            if (before.count(h.first)) restore(h.first);
+            else add.push_back(h.first);
         }
         for (uint32_t i : placed) triangulateForImage(i);
         for (uint32_t i : placed) completeFrameOf(i);

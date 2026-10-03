@@ -66,6 +66,13 @@ void EditSession::open(std::unique_ptr<EditDoc> doc, ViewportPanel* panel) {
     _seen_placement = Sim3();
     _seen_head = 0;
     push_placement();
+    // Placements a kept repair could not register outlive the reopen.
+    if (_doc && _doc->kind() == EditDoc::Kind::Points && !_placed_carry.empty() &&
+        static_cast<PointsDoc&>(*_doc).dataset_dir() == _placed_carry_dir) {
+        static_cast<PointsDoc&>(*_doc).set_placed(std::move(_placed_carry));
+        _tab = 2;
+    }
+    _placed_carry.clear();
 }
 
 void EditSession::close() {
@@ -83,8 +90,13 @@ void EditSession::close() {
         glDeleteTextures(1, &t);
         _photo.tex = 0;
     }
-    _photo.want = _photo.loaded = _photo.shown = -1;
+    _photo.want.clear();
+    _photo.loaded.clear();
+    _photo.shown.clear();
     _photo.pic = Picture{};
+    _missing.clear();
+    _missing_read = false;
+    _missing_at = -1;
     if (_comp_worker.joinable()) _comp_worker.join();
     if (_save_worker.joinable()) _save_worker.join();
     if (_attr_worker.joinable()) _attr_worker.join();
@@ -267,6 +279,7 @@ bool EditSession::on_viewport_input(const ViewportInput& in) {
 
 void EditSession::draw_viewport_overlay(const ViewportOverlay& v) {
     if (!_doc) return;
+    draw_photo_overlay(v);
     const ImVec2 origin(v.x, v.y);
     XformFrame f;
     const bool have = xform_frame(f);
