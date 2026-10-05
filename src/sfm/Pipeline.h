@@ -52,6 +52,10 @@ struct ExtractStats {
     std::string first_unmasked;   // an example, for the warning
     bool warned_empty = false;    // "this mask masked out everything", warned once
     bool warned_exif_mirror = false;   // "the tag also asked for a mirror", ditto
+    // Over the images this run decoded (GrayImage::gain, ::peak).
+    size_t decoded = 0;
+    float gain_min = 1.0f, gain_max = 1.0f;
+    float peak = 0.0f;
 };
 
 struct MatchStats {
@@ -262,10 +266,10 @@ void warnIfMasksLookInverted(const ExtractStats& st);
 void sampleFeatureColors(FeatureSet& fs, const GrayImage& img);
 void finishFeatures(FeatureSet& fs, const GrayImage& img);
 
-// An EXR capture states its own colour space; adopt it for any of
-// `image-gamut` / `image-linear` that `seen` does not already name.
-void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
-                        const std::set<std::string>& seen);
+// An EXR or a TIFF with an ICC profile states its own colour space; adopt it
+// for any of `image-gamut` / `image-linear` that `seen` does not already name.
+void adoptFileColorSpace(SfmConfig& cfg, const std::string& imagedir,
+                         const std::set<std::string>& seen);
 
 bool holdsImagesOutside(const std::filesystem::path& root,
                         const std::filesystem::path& nested);

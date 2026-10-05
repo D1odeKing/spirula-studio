@@ -38,6 +38,7 @@ namespace {
     /* ---- colour space ---- */                                              \
     X("image_gamut",                sfm.image_gamut)                          \
     X("image_is_linear",            sfm.image_is_linear)                      \
+    X("image_exposure",             sfm.image_exposure)                       \
     X("point_color_in_image_space", sfm.point_color_in_image_space)           \
     /* ---- masking ---- */                                                   \
     X("mask_enable",                sfm.prep.mask_enable)                     \

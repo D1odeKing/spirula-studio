@@ -38,10 +38,19 @@ fs::path temp_still(const char* tag) {
             ".jpg");
 }
 
+colorspace::Exposure exposure_of(const PreviewSource& src) {
+    colorspace::Exposure e;
+    colorspace::parse_exposure(src.image_exposure, e);
+    return e;
+}
+
 void convert_to_srgb(const PreviewSource& src, std::vector<uint8_t>& rgb) {
     colorspace::to_srgb_inplace(rgb.data(), rgb.size() / 3,
                                 src.image_gamut,
                                 src.image_is_linear.value_or(false));
+    colorspace::expose_srgb8_inplace(
+        rgb.data(), rgb.size(),
+        colorspace::exposure_gain_srgb8(exposure_of(src), rgb.data(), rgb.size() / 3, 1));
 }
 
 // A packed frame's lens `folder`, cut out in place.
@@ -64,8 +73,10 @@ bool load_photo(const PreviewSource& src, const std::string& path,
         convert_to_srgb(src, rgb);
     } else if (imagefile::handles(path)) {
         imagefile::Info info;
-        if (!imagefile::decode_srgb8(path, imagefile::Options(), info, rgb,
-                                     src.image_gamut, src.image_is_linear).empty())
+        imagefile::Options opt;
+        opt.exposure = exposure_of(src);
+        if (!imagefile::decode_srgb8(path, opt, info, rgb, src.image_gamut,
+                                     src.image_is_linear).empty())
             return false;
         w = info.width;
         h = info.height;
@@ -316,6 +327,7 @@ void scan_preview_frames(const PreviewSource& src,
     PreviewSource stored = src;
     stored.image_gamut.clear();
     stored.image_is_linear.reset();
+    stored.image_exposure.clear();
 #ifdef SS_BUILD_SAM
     if (src.is_video && src.builtin_decode) {
         std::string select_error;

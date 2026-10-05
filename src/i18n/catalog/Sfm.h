@@ -271,59 +271,75 @@ SS_MSG(lens_skip_images,
     RU("в его папке нет читаемых кадров"),
     TR("klasöründe okunabilen kare yok"));
 
-// The images are EXRs and the transfer was left to them; {0} is the gamut in
-// force. Everything here converts to sRGB before it looks at a pixel.
-SS_MSG(run_exr_color,
-    EN("EXR input read as linear {0}"),
-    JA("EXR 入力を線形 {0} として読み込みます"),
-    ZH_HANS("EXR 输入按线性 {0} 读取"),
-    ZH_HANT("EXR 輸入依線性 {0} 讀取"),
-    KO("EXR 입력을 선형 {0}(으)로 읽습니다"),
-    DE("EXR-Eingabe wird als lineares {0} gelesen"),
-    FR("Entrée EXR lue comme {0} linéaire"),
-    ES("Entrada EXR leída como {0} lineal"),
-    PT("Entrada EXR lida como {0} linear"),
-    IT("Ingresso EXR letto come {0} lineare"),
-    NL("EXR-invoer gelezen als lineair {0}"),
-    RU("Вход EXR читается как линейный {0}"),
-    TR("EXR girdisi doğrusal {0} olarak okunuyor"));
+// The images declare their colour space -- an EXR's header, a TIFF's ICC
+// profile -- and the transfer was left to them. {0} is the format ("EXR",
+// "TIFF"), {1} the gamut in force.
+SS_MSG(run_file_color_linear,
+    EN("{0} input read as linear {1}"),
+    JA("{0} 入力を線形 {1} として読み込みます"),
+    ZH_HANS("{0} 输入按线性 {1} 读取"),
+    ZH_HANT("{0} 輸入依線性 {1} 讀取"),
+    KO("{0} 입력을 선형 {1}(으)로 읽습니다"),
+    DE("{0}-Eingabe wird als lineares {1} gelesen"),
+    FR("Entrée {0} lue comme {1} linéaire"),
+    ES("Entrada {0} leída como {1} lineal"),
+    PT("Entrada {0} lida como {1} linear"),
+    IT("Ingresso {0} letto come {1} lineare"),
+    NL("{0}-invoer gelezen als lineair {1}"),
+    RU("Вход {0} читается как линейный {1}"),
+    TR("{0} girdisi doğrusal {1} olarak okunuyor"));
 
-SS_MSG(run_exr_gamut_from_file,
-    EN("EXR colour space: {0}, from the file"),
-    JA("EXR の色空間: {0}（ファイルの情報）"),
-    ZH_HANS("EXR 色彩空间: {0}（取自文件）"),
-    ZH_HANT("EXR 色彩空間: {0}（取自檔案）"),
-    KO("EXR 색 공간: {0}(파일에서 읽음)"),
-    DE("EXR-Farbraum: {0}, aus der Datei"),
-    FR("Espace colorimétrique EXR : {0}, d'après le fichier"),
-    ES("Espacio de color EXR: {0}, según el archivo"),
-    PT("Espaço de cor EXR: {0}, conforme o arquivo"),
-    IT("Spazio colore EXR: {0}, dal file"),
-    NL("EXR-kleurruimte: {0}, uit het bestand"),
-    RU("Цветовое пространство EXR: {0}, из файла"),
-    TR("EXR renk uzayı: {0}, dosyadan"));
+SS_MSG(run_file_color_display,
+    EN("{0} input read as display-encoded {1}"),
+    JA("{0} 入力を表示用エンコードの {1} として読み込みます"),
+    ZH_HANS("{0} 输入按显示编码的 {1} 读取"),
+    ZH_HANT("{0} 輸入依顯示編碼的 {1} 讀取"),
+    KO("{0} 입력을 디스플레이 인코딩된 {1}(으)로 읽습니다"),
+    DE("{0}-Eingabe wird als anzeigecodiertes {1} gelesen"),
+    FR("Entrée {0} lue comme {1} encodé pour l'affichage"),
+    ES("Entrada {0} leída como {1} codificado para pantalla"),
+    PT("Entrada {0} lida como {1} codificado para exibição"),
+    IT("Ingresso {0} letto come {1} codificato per lo schermo"),
+    NL("{0}-invoer gelezen als weergavegecodeerd {1}"),
+    RU("Вход {0} читается как экранно закодированный {1}"),
+    TR("{0} girdisi ekran kodlu {1} olarak okunuyor"));
 
-SS_MSG(run_exr_gamut_unknown,
-    EN("The EXR's color primaries match no known color space; reading it as Rec.709"),
-    JA("EXR の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
-    ZH_HANS("EXR 的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
-    ZH_HANT("EXR 的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
-    KO("EXR의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
-    DE("Die Primärfarben der EXR passen zu keinem bekannten Farbraum; "
+SS_MSG(run_file_gamut_from_file,
+    EN("{0} colour space: {1}, from the file"),
+    JA("{0} の色空間: {1}（ファイルの情報）"),
+    ZH_HANS("{0} 色彩空间: {1}（取自文件）"),
+    ZH_HANT("{0} 色彩空間: {1}（取自檔案）"),
+    KO("{0} 색 공간: {1}(파일에서 읽음)"),
+    DE("{0}-Farbraum: {1}, aus der Datei"),
+    FR("Espace colorimétrique {0} : {1}, d'après le fichier"),
+    ES("Espacio de color {0}: {1}, según el archivo"),
+    PT("Espaço de cor {0}: {1}, conforme o arquivo"),
+    IT("Spazio colore {0}: {1}, dal file"),
+    NL("{0}-kleurruimte: {1}, uit het bestand"),
+    RU("Цветовое пространство {0}: {1}, из файла"),
+    TR("{0} renk uzayı: {1}, dosyadan"));
+
+SS_MSG(run_file_gamut_unknown,
+    EN("The {0} input's color primaries match no known color space; reading it as Rec.709"),
+    JA("{0} 入力の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
+    ZH_HANS("{0} 输入的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
+    ZH_HANT("{0} 輸入的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
+    KO("{0} 입력의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
+    DE("Die Primärfarben der {0}-Eingabe passen zu keinem bekannten Farbraum; "
        "sie wird als Rec.709 gelesen"),
-    FR("Les primaires de l'EXR ne correspondent à aucun espace connu ; "
+    FR("Les primaires de l'entrée {0} ne correspondent à aucun espace connu ; "
        "lecture en Rec.709"),
-    ES("Los primarios del EXR no coinciden con ningún espacio conocido; "
+    ES("Los primarios de la entrada {0} no coinciden con ningún espacio conocido; "
        "se lee como Rec.709"),
-    PT("Os primários do EXR não correspondem a nenhum espaço conhecido; "
-       "lido como Rec.709"),
-    IT("I primari dell'EXR non corrispondono ad alcuno spazio noto; "
+    PT("Os primários da entrada {0} não correspondem a nenhum espaço conhecido; "
+       "lida como Rec.709"),
+    IT("I primari dell'ingresso {0} non corrispondono ad alcuno spazio noto; "
        "viene letto come Rec.709"),
-    NL("De primaire kleuren van de EXR passen bij geen bekende kleurruimte; "
-       "hij wordt als Rec.709 gelezen"),
-    RU("Основные цвета EXR не совпадают ни с одним известным пространством; "
-       "файл читается как Rec.709"),
-    TR("EXR'nin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
+    NL("De primaire kleuren van de {0}-invoer passen bij geen bekende kleurruimte; "
+       "die wordt als Rec.709 gelezen"),
+    RU("Основные цвета входа {0} не совпадают ни с одним известным пространством; "
+       "вход читается как Rec.709"),
+    TR("{0} girdisinin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
        "Rec.709 olarak okunuyor"));
 
 SS_MSG(run_masks,
@@ -754,6 +770,78 @@ SS_MSG(extract_mask_empty,
        "игнорируют чёрные, поэтому инвертированная маска убирает всё изображение."),
     TR("{0} maskesi {1} içinde tek bir anahtar nokta bırakmadı. Maskeler beyaz pikselleri "
        "tutar, siyahları yok sayar; ters çevrilmiş bir maske tüm görüntüyü eler."));
+
+// --image-exposure: what the detectors were shown, in signed EV. {0} and {1}
+// are the least and the most any one image was given.
+SS_MSG(extract_exposure_auto,
+    EN("Exposure for the detectors: auto, {0} to {1} EV"),
+    JA("検出器向けの露出: 自動、{0} ～ {1} EV"),
+    ZH_HANS("检测器所用曝光：自动，{0} 至 {1} EV"),
+    ZH_HANT("偵測器所用曝光：自動，{0} 至 {1} EV"),
+    KO("검출기용 노출: 자동, {0} ~ {1} EV"),
+    DE("Belichtung für die Detektoren: automatisch, {0} bis {1} EV"),
+    FR("Exposition pour les détecteurs : auto, de {0} à {1} EV"),
+    ES("Exposición para los detectores: auto, de {0} a {1} EV"),
+    PT("Exposição para os detectores: auto, de {0} a {1} EV"),
+    IT("Esposizione per i rilevatori: auto, da {0} a {1} EV"),
+    NL("Belichting voor de detectoren: automatisch, {0} tot {1} EV"),
+    RU("Экспозиция для детекторов: авто, от {0} до {1} EV"),
+    TR("Algılayıcılar için pozlama: otomatik, {0} ile {1} EV arası"));
+
+SS_MSG(extract_exposure_fixed,
+    EN("Exposure for the detectors: {0} EV"),
+    JA("検出器向けの露出: {0} EV"),
+    ZH_HANS("检测器所用曝光：{0} EV"),
+    ZH_HANT("偵測器所用曝光：{0} EV"),
+    KO("검출기용 노출: {0} EV"),
+    DE("Belichtung für die Detektoren: {0} EV"),
+    FR("Exposition pour les détecteurs : {0} EV"),
+    ES("Exposición para los detectores: {0} EV"),
+    PT("Exposição para os detectores: {0} EV"),
+    IT("Esposizione per i rilevatori: {0} EV"),
+    NL("Belichting voor de detectoren: {0} EV"),
+    RU("Экспозиция для детекторов: {0} EV"),
+    TR("Algılayıcılar için pozlama: {0} EV"));
+
+// Read as linear, and the largest value across all of them is exactly 1.0 --
+// what display-encoded pixels labelled linear look like.
+SS_MSG(extract_linear_peak_one,
+    EN("Images read as linear light normally go past 1.0, and none of these does: "
+       "either they are display-encoded (--no-image-linear), or their highlights "
+       "were clipped at white"),
+    JA("リニア光として読み込む画像は通常 1.0 を超えますが、これらはどれも超えていません。"
+       "表示用エンコードの画像（--no-image-linear）か、ハイライトが白でクリップされています"),
+    ZH_HANS("按线性光读取的图像通常会超过 1.0，而这些图像都没有：要么是显示编码的"
+            "（--no-image-linear），要么高光已在白点处被截断"),
+    ZH_HANT("依線性光讀取的影像通常會超過 1.0，而這些影像都沒有：要麼是顯示編碼的"
+            "（--no-image-linear），要麼高光已在白點處被截斷"),
+    KO("선형 광으로 읽는 이미지는 보통 1.0을 넘지만 이 이미지들은 하나도 넘지 않습니다. "
+       "디스플레이 인코딩된 이미지이거나(--no-image-linear) 하이라이트가 흰색에서 "
+       "잘렸습니다"),
+    DE("Als lineares Licht gelesene Bilder gehen meist über 1.0 hinaus, diese aber "
+       "nicht: Entweder sind sie anzeigecodiert (--no-image-linear), oder ihre "
+       "Lichter wurden bei Weiß abgeschnitten"),
+    FR("Des images lues en lumière linéaire dépassent normalement 1.0, et aucune "
+       "de celles-ci : soit elles sont encodées pour l'affichage "
+       "(--no-image-linear), soit leurs hautes lumières ont été écrêtées au blanc"),
+    ES("Las imágenes leídas como luz lineal suelen pasar de 1.0, y ninguna de estas "
+       "lo hace: o están codificadas para pantalla (--no-image-linear), o sus luces "
+       "se recortaron en el blanco"),
+    PT("Imagens lidas como luz linear costumam passar de 1.0, e nenhuma destas "
+       "passa: ou estão codificadas para exibição (--no-image-linear), ou os "
+       "realces foram cortados no branco"),
+    IT("Le immagini lette come luce lineare di solito superano 1.0, e nessuna di "
+       "queste lo fa: o sono codificate per lo schermo (--no-image-linear), o le "
+       "alte luci sono state tagliate al bianco"),
+    NL("Beelden die als lineair licht worden gelezen komen meestal boven 1.0, en "
+       "geen van deze doet dat: ze zijn weergavegecodeerd (--no-image-linear), of "
+       "hun hooglichten zijn bij wit afgekapt"),
+    RU("Изображения, читаемые как линейный свет, обычно выходят за 1.0, а эти — "
+       "нет: либо они экранно закодированы (--no-image-linear), либо их света "
+       "обрезаны на белом"),
+    TR("Doğrusal ışık olarak okunan görüntüler genellikle 1.0'ı aşar; bunların "
+       "hiçbiri aşmıyor: ya ekran kodlular (--no-image-linear) ya da parlak "
+       "alanları beyazda kırpılmış"));
 
 SS_MSG(extract_reusing,
     EN("Features an earlier run already wrote: {0}/{1} images -- keeping them."),

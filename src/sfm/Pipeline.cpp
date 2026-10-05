@@ -31,7 +31,7 @@
 
 #include "core/ColorSpace.h"
 #include "core/Env.h"
-#include "core/ExrImage.h"
+#include "core/ImageFile.h"
 #include "sfm/core/Cancel.h"
 #include "sfm/core/Events.h"
 #include "sfm/core/Exif.h"
@@ -827,11 +827,11 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
     return true;
 }
 
-// An EXR carries its own colour space. Reading it needs no declaration -- the
-// decoder falls back to the file's own -- but --point-color and the reported
-// space both do, so adopt it before any stage runs.
-void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
-                        const std::set<std::string>& seen) {
+// An EXR's header or a TIFF's ICC profile carries the colour space. Reading
+// needs no declaration -- the decoder falls back to the file's own -- but
+// --point-color and the reported space both do, so adopt it before any stage.
+void adoptFileColorSpace(SfmConfig& cfg, const std::string& imagedir,
+                         const std::set<std::string>& seen) {
     const bool take_gamut = !seen.count("image-gamut");
     const bool take_linear = !seen.count("image-linear");
     if (!take_gamut && !take_linear) return;
@@ -842,18 +842,40 @@ void adoptExrColorSpace(SfmConfig& cfg, const std::string& imagedir,
         if (!it->is_regular_file(ec)) continue;
         if (!isImageExt(it->path().extension().string()) || isSidecar(it->path()))
             continue;
-        exr::Info info;
-        if (!exr::declared_color_space(it->path().string(), info)) return;
-        if (take_gamut) cfg.image_gamut = info.gamut;
-        if (take_linear) cfg.image_is_linear = info.is_linear;
+        imagefile::DeclaredColor d;
+        if (!imagefile::declared_color_space(it->path().string(), d)) return;
+        if (take_gamut) cfg.image_gamut = d.gamut;
+        if (take_linear) cfg.image_is_linear = d.is_linear;
         const std::string name =
             cfg.image_gamut.empty() ? "Rec.709" : cfg.image_gamut;
-        if (take_linear) L::out(Tag::Run, M::run_exr_color, {name});
-        else             L::out(Tag::Run, M::run_exr_gamut_from_file, {name});
-        if (take_gamut && !info.gamut_known)
-            L::warn(Tag::Run, M::run_exr_gamut_unknown, {});
+        if (take_linear)
+            L::out(Tag::Run, cfg.image_is_linear ? M::run_file_color_linear
+                                                 : M::run_file_color_display,
+                   {d.format, name});
+        else
+            L::out(Tag::Run, M::run_file_gamut_from_file, {d.format, name});
+        if (take_gamut && !d.gamut_known)
+            L::warn(Tag::Run, M::run_file_gamut_unknown, {d.format});
         return;
     }
+}
+
+// What the detectors were shown, and a linear capture that never passed white:
+// the give-away of display-encoded pixels read as linear (docs/notes/exr.md).
+void reportDecodedLight(const SfmConfig& cfg, const ExtractStats& stats) {
+    if (!stats.decoded) return;
+    auto stops = [](float gain) {
+        char buf[16];
+        std::snprintf(buf, sizeof buf, "%+.1f", std::log2(gain));
+        return std::string(buf);
+    };
+    if (cfg.exposure.automatic)
+        L::out(Tag::Extract, M::extract_exposure_auto,
+               {stops(stats.gain_min), stops(stats.gain_max)});
+    else if (cfg.exposure.active())
+        L::out(Tag::Extract, M::extract_exposure_fixed, {stops(stats.gain_max)});
+    if (cfg.image_is_linear && stats.peak == 1.0f)
+        L::warn(Tag::Extract, M::extract_linear_peak_one, {});
 }
 
 void reportFeatureCompaction(const FeatureCompactionStats& stats) {
@@ -1518,6 +1540,7 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
     lopt.want_color = true;  // sample per-keypoint colors while the image is hot
     lopt.gamut = cfg.image_gamut;
     lopt.is_linear = cfg.image_is_linear;
+    lopt.exposure = cfg.exposure;
     lopt.flip_mask = cfg.flip_mask;
     lopt.apply_exif_orientation = cfg.exif_orientation == "apply";
     if (cfg.decode_budget_mb > 0)
@@ -1713,6 +1736,10 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
     };
     SerialWorker post;  // after postProcess: joined before it goes away
     auto extractOne = [&](size_t k, GrayImage& img, const GrayImage* next) {
+        stats.gain_min = stats.decoded ? std::min(stats.gain_min, img.gain) : img.gain;
+        stats.gain_max = stats.decoded ? std::max(stats.gain_max, img.gain) : img.gain;
+        stats.peak = std::max(stats.peak, img.peak);
+        stats.decoded++;
         FeatureSet f = ext->extractAhead(img, next);
         std::vector<float>().swap(img.data);  // the worker needs color, not luma
         post.submit([&postProcess, k, img = std::move(img), f = std::move(f)]() mutable {
@@ -1739,6 +1766,7 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
         extractOne(held->first, held->second, nullptr);
     }
     post.finish();
+    reportDecodedLight(cfg, stats);
     events::stage_end(Stage::Extract);
     return 0;
 }
@@ -2289,7 +2317,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         fs::path sibling = p.parent_path() / "masks";
         if (fs::is_directory(sibling)) cfg.mask_dir = sibling.string();
     }
-    adoptExrColorSpace(cfg, _imagedir, in.explicit_flags);
+    adoptFileColorSpace(cfg, _imagedir, in.explicit_flags);
 
     fs::path ws(_workspace);
     fs::create_directories(ws);

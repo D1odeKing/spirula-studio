@@ -235,9 +235,10 @@ std::vector<sam::SeedPrompt> seeds_from_clicks(const std::vector<MaskClick>& cli
 class ImagePrefetch {
 public:
     ImagePrefetch(std::vector<fs::path> files, const std::atomic<bool>& cancel,
-                  std::string gamut, std::optional<bool> is_linear)
+                  std::string gamut, std::optional<bool> is_linear,
+                  colorspace::Exposure exposure)
         : _files(std::move(files)), _cancel(cancel), _gamut(std::move(gamut)),
-          _is_linear(is_linear), _worker([this] { run(); }) {}
+          _is_linear(is_linear), _exposure(exposure), _worker([this] { run(); }) {}
     ~ImagePrefetch() {
         {
             std::lock_guard<std::mutex> lk(_mu);
@@ -282,7 +283,7 @@ private:
                 if (_cancel.load()) break;
                 Item item;
                 item.img = app::load_upright(f.string(), _gamut, _is_linear,
-                                             item.turn);
+                                             _exposure, item.turn);
                 std::unique_lock<std::mutex> lk(_mu);
                 _space.wait(lk, [this] { return _queue.size() < kDepth || _stop; });
                 if (_stop) break;
@@ -304,6 +305,7 @@ private:
     const std::atomic<bool>& _cancel;
     std::string _gamut;
     std::optional<bool> _is_linear;
+    colorspace::Exposure _exposure;
     std::deque<Item> _queue;
     std::mutex _mu;
     std::condition_variable _ready, _space;
@@ -2804,7 +2806,10 @@ bool DatasetPrep::generate_masks_builtin(const PrepJob& job, const PrepInput& in
     // Encoding a 1080p mask costs about a third of what the model costs to
     // produce it, and none of it needs the GPU.
     app::WriterPool writers;
-    ImagePrefetch reader(todo_files, _cancel, job.image_gamut, job.image_is_linear);
+    colorspace::Exposure exposure;
+    colorspace::parse_exposure(job.image_exposure, exposure);
+    ImagePrefetch reader(todo_files, _cancel, job.image_gamut, job.image_is_linear,
+                         exposure);
     RateLimitedProgress progress(_prog, Stage::Masks, lmsg::noun_images_masked,
                                  _masks_tally);
     for (size_t k = 0; k < todo.size(); k++) {

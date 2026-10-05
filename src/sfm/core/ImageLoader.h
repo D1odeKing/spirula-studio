@@ -58,6 +58,7 @@ struct ImageLoadOptions {
     // The files' colour space; decoded pixels are converted to sRGB.
     std::string gamut;
     std::optional<bool> is_linear;
+    colorspace::Exposure exposure;
     // Keypoint masks (sfm/core/Mask.h), one per entry of the `paths` passed to
     // loadImagesInOrder and in the same order; "" means "no mask for this
     // image". Empty (the default) skips mask decoding entirely. Masks are
@@ -142,9 +143,11 @@ inline ImageLoadPlan planImageLoad(const std::vector<std::pair<int, int>>& dims,
     // image either way.
     const size_t masks = (opt.mask_paths.empty() ? 0 : 1) +
                          (opt.feature_mask_paths.empty() ? 0 : 1);
-    plan.decode_peak_bytes =
-        maxPix * 3 + maxOutPix * (opt.want_color ? 7 : 4) + maxOutPix * 2 * masks;
-    plan.held_bytes = maxOutPix * (opt.want_color ? 7 : 4)  // gray float (+ RGB u8)
+    // An exposure keeps the unexposed colour beside the exposed (GrayImage::color).
+    const size_t colours = opt.want_color ? (opt.exposure.active() ? 2 : 1) : 0;
+    plan.decode_peak_bytes = maxPix * 3 * (colours > 1 ? 2 : 1) +
+                             maxOutPix * (4 + 3 * colours) + maxOutPix * 2 * masks;
+    plan.held_bytes = maxOutPix * (4 + 3 * colours)  // gray float (+ RGB u8)
                     + (masks ? maxOutPix : 0);
 
     unsigned hc = std::thread::hardware_concurrency();
@@ -185,7 +188,7 @@ inline void loadImagesInOrder(const std::vector<std::string>& paths, const Image
         try {
             out = loadGrayImage(paths[i], opt.max_image_size, opt.want_color, mp,
                                 opt.gamut, opt.is_linear, opt.flip_mask,
-                                opt.apply_exif_orientation, fmp);
+                                opt.apply_exif_orientation, fmp, opt.exposure);
         } catch (const std::exception& e) {
             err = e.what();
         }

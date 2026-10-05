@@ -9,6 +9,7 @@
 
 #include "core/ColorSpace.h"
 #include "core/HalfFloat.h"
+#include "core/IccProfile.h"
 #include "core/MappedFile.h"
 #include "external/miniz.h"
 
@@ -40,7 +41,7 @@ enum : uint16_t {
     kStripByteCounts = 279, kPlanarConfig = 284, kPredictor = 317,
     kTileWidth = 322, kTileLength = 323, kTileOffsets = 324,
     kTileByteCounts = 325, kExtraSamples = 338, kSampleFormat = 339,
-    kDngVersion = 50706,
+    kIccProfile = 34675, kDngVersion = 50706,
 };
 
 enum : uint16_t {
@@ -115,6 +116,7 @@ struct Directory {
     uint64_t planar = 1, predictor = 1, rows_per_strip = UINT32_MAX;
     uint64_t tile_w = 0, tile_h = 0;
     std::vector<uint64_t> strip_offsets, strip_counts, tile_offsets, tile_counts;
+    uint64_t icc_offset = 0, icc_size = 0;
     bool dng = false;
 };
 
@@ -144,6 +146,19 @@ std::string read_directory(Reader& r, Directory& d) {
         const uint64_t e = first + i * entry_size;
         const uint64_t tag = r.uint(e, 2);
         if (tag == kDngVersion) d.dng = true;
+        // Bytes, not integers, and a profile never fits inline.
+        if (tag == kIccProfile) {
+            const int field = r.big ? 8 : 4;
+            const uint64_t type = r.uint(e + 2, 2);
+            const uint64_t size = r.uint(e + 4, field);
+            const uint64_t at = r.uint(e + 4 + (uint64_t)field, field);
+            if (r.ok && (type == 1 || type == 7) && size > (uint64_t)field) {
+                d.icc_offset = at;
+                d.icc_size = size;
+            }
+            r.ok = true;
+            continue;
+        }
         // A tag this reader has no use for may be any type; one it needs and
         // cannot read surfaces below as missing.
         if (!entry_values(r, e, v)) { r.ok = true; continue; }
@@ -442,6 +457,15 @@ struct Decoder {
         info.channels = L.keep;
         info.sample = L.sample;
         info.compression = compression_name((uint64_t)L.compression);
+        icc::ColorSpace cs;
+        if (d.icc_size && d.icc_offset < map.size() && d.icc_size <= map.size() - d.icc_offset &&
+            icc::read(map.data() + d.icc_offset, (size_t)d.icc_size, cs) &&
+            cs.grey == (L.colour == 1)) {
+            info.icc = true;
+            info.gamut = cs.gamut;
+            info.is_linear = cs.is_linear;
+            info.gamut_known = cs.gamut_known;
+        }
         return "";
     }
 
@@ -694,31 +718,64 @@ std::string decode(const std::string& path, const Options& opt, Info& info,
     return "";
 }
 
+bool declared_color_space(const std::string& path, Info& info) {
+    return is_tiff(path) && probe(path, info).empty() && info.icc;
+}
+
 std::string decode_srgb8(const std::string& path, const Options& opt, Info& info,
                          std::vector<uint8_t>& out, const std::string& gamut,
-                         std::optional<bool> is_linear) {
+                         std::optional<bool> is_linear, std::vector<uint8_t>* unexposed) {
     std::vector<uint8_t> px;
     if (const std::string e = decode(path, opt, info, px); !e.empty()) return e;
     const int nc = opt.channels;
-    const size_t w = (size_t)info.width;
-    const colorspace::Srgb8Encoder enc(gamut, is_linear.value_or(false));
+    const size_t w = (size_t)info.width, h = (size_t)info.height;
+    const std::string& space = gamut.empty() ? info.gamut : gamut;
+    const bool linear = is_linear.value_or(info.is_linear);
     const Sample sample = info.sample;
     const float scale = sample == Sample::U8 ? 1.0f / 255.0f
                       : sample == Sample::U16 ? 1.0f / 65535.0f : 1.0f;
-    out.resize(w * (size_t)info.height * (size_t)nc);
-    std::vector<std::vector<float>> rows(worker_count(opt.threads, (size_t)info.height));
-    parallel((size_t)info.height, opt.threads, [&](size_t y, size_t t) {
+    auto value = [&](size_t i) -> float {
+        if (sample == Sample::U8)  return px[i] * scale;
+        if (sample == Sample::U16) return ((const uint16_t*)px.data())[i] * scale;
+        return ((const float*)px.data())[i];
+    };
+
+    const colorspace::Srgb8Encoder plain(space, linear);
+    std::vector<float> luma;
+    if (opt.exposure.automatic) {
+        const size_t step = colorspace::exposure_sample_step(w, h);
+        for (size_t y = 0; y < h; y += step)
+            for (size_t x = 0; x < w; x += step) {
+                float s[4], v[3];
+                for (int c = 0; c < nc; c++) s[c] = value((y * w + x) * (size_t)nc + (size_t)c);
+                plain.to_linear(s, nc, v);
+                luma.push_back(colorspace::luma709(v));
+            }
+    }
+    info.gain = colorspace::exposure_gain(opt.exposure, luma);
+    const colorspace::Srgb8Encoder enc(space, linear, info.gain);
+    const bool both = unexposed && info.gain != 1.0f;
+    if (unexposed) unexposed->assign(both ? w * h * (size_t)nc : 0, 0);
+
+    out.resize(w * h * (size_t)nc);
+    const size_t workers = worker_count(opt.threads, h);
+    std::vector<std::vector<float>> rows(workers);
+    std::vector<float> peaks(workers, 0.0f);
+    parallel(h, opt.threads, [&](size_t y, size_t t) {
         const size_t at = y * w * (size_t)nc;
         std::vector<float>& row = rows[t];
         row.resize(w * (size_t)nc);
+        float peak = peaks[t];
         for (size_t i = 0; i < row.size(); i++) {
-            if (sample == Sample::U8)       row[i] = px[at + i] * scale;
-            else if (sample == Sample::U16) row[i] = ((const uint16_t*)px.data())[at + i] * scale;
-            else                            row[i] = ((const float*)px.data())[at + i];
+            row[i] = value(at + i);
+            if (nc != 4 || i % 4 != 3) peak = std::max(peak, row[i]);
         }
+        peaks[t] = peak;
         enc(row.data(), out.data() + at, w, nc);
+        if (both) plain(row.data(), unexposed->data() + at, w, nc);
         return std::string();
     });
+    info.peak = *std::max_element(peaks.begin(), peaks.end());
     return "";
 }
 

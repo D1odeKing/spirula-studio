@@ -12,7 +12,9 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 
 namespace fs = std::filesystem;
@@ -125,7 +127,9 @@ double compute_normalized_transform(const double* c2w, int64_t n,
             max_abs = std::max(max_abs,
                 std::abs(R[r][0]*d[0] + R[r][1]*d[1] + R[r][2]*d[2]));
     }
-    double scale_factor = 1.0 / std::max(max_abs, 1e-12);
+    // Cameras all in one place (one photo, a tripod's turn) have no size to
+    // fit, and 1/1e-12 leaves train_to_normalized singular in float.
+    const double scale_factor = max_abs > 1e-9 ? 1.0 / max_abs : 1.0;
 
     // T_n_from_camera = scale * [R_align | -R_align @ center]
     for (int r = 0; r < 3; r++) {
@@ -628,6 +632,21 @@ void fit_camera_resolution(const DatasetParserConfig& cfg,
     if (src && src->source_model >= 0)
         srccam::rescale(src->source_model, src->params, sx, sy);
     W = tw; H = th;
+}
+
+void read_gauge(const std::string& dir, ParsedDataset& ds) {
+    std::ifstream f(dir + "/gauge.txt");
+    if (!f) return;
+    // Line at a time, so a comment with an odd number of words cannot shift
+    // every key onto the wrong value.
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream in(line);
+        std::string key, value;
+        if (!(in >> key >> value) || key[0] == '#') continue;
+        if (key == "oriented") ds.gauge_oriented = value == "1";
+        else if (key == "metric") ds.gauge_metric = value == "1";
+    }
 }
 
 }  // namespace dsparse

@@ -9,6 +9,7 @@
 #include <fstream>
 
 #include "i18n/Locale.h"
+#include "i18n/catalog/Lidar.h"
 #include "i18n/catalog/Log.h"
 
 #include "app/AppPaths.h"
@@ -277,6 +278,7 @@ void SfmRunner::take_masking(PrepJob& prep) {
     prep.mask_detector_threshold = _live.prep.mask_detector_threshold;
     prep.image_gamut = _live.prep.image_gamut;
     prep.image_is_linear = _live.prep.image_is_linear;
+    prep.image_exposure = _live.prep.image_exposure;
 }
 
 void SfmRunner::cancel() { _cancel = true; }
@@ -729,6 +731,10 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
     if (job.image_is_linear.has_value())
         argv.push_back(*job.image_is_linear ? "--image-linear"
                                             : "--no-image-linear");
+    if (!job.image_exposure.empty()) {
+        argv.push_back("--image-exposure");
+        argv.push_back(job.image_exposure);
+    }
     if (job.point_color_in_image_space) {
         argv.push_back("--point-color");
         argv.push_back("image");
@@ -804,6 +810,14 @@ void SfmRunner::run(SfmJob job) {
         }
 
         // ---- 1. frames and masks ------------------------------------------
+        // The scans' photographs are inputs too: their poses in the scan are
+        // what places the model in it.
+        LidarPrep lidar;
+        {
+            std::string err;
+            if (!add_scan_photo_inputs(job.lidar, ws.string(), job.prep.inputs, lidar, err))
+                return fail(err);
+        }
         PrepResult prep;
         {
             DatasetPrep dp(&_prog, _films, _cancel);
@@ -844,15 +858,42 @@ void SfmRunner::run(SfmJob job) {
             log(lmsg::one_camera_per_folder.get());
             job.camera_mode = 1;
         }
+        // A scan without photographs is matched through views of it.
+        if (job.lidar.enabled()) {
+            std::string err;
+            if (!render_scan_views(job.lidar, ws.string(), prep.image_dir, _prog, _cancel,
+                                   lidar, err))
+                return fail(_cancel.load() ? lmsg::err_cancelled.get() : err);
+        }
+        // A reconstruction that fails is not the end of a run whose scans
+        // carry photographs: those keep the scanner's poses.
+        const bool scanner_stands_in = job.lidar.enabled() && lidar.photos > 0;
+        // ... and when they are all the images there are, none is run: a
+        // scanner's cube faces mostly will not reconstruct (Matterport: 26 of
+        // 630), and its poses are what its points are in.
+        const bool scanner_only = job.lidar.scanner_only && lidar.photos > 0;
+        if (scanner_only) {
+            log(spirula::i18n::msg::lidar::scanner_poses_used.get(), false);
+            job.lidar.scanner_poses_only = true;
+        }
 
         // ---- 2. reconstruction --------------------------------------------
         take_reconstruction(job);
-        plan = plan_dataset(plan_job(job), prior, rec, req, &plan, Step::Model);
-        say(Step::Model);
-        const bool reuse_model = !makes(plan[Step::Model].act);
+        if (!lidar.sfm_args.empty()) job.camera_mode = std::max(job.camera_mode, 1);
+        PlanJob planned = plan_job(job);
+        // The rendered views' lens makes the model as much as the panel does.
+        if (!lidar.sfm_args.empty()) {
+            std::string views;
+            for (const std::string& a : lidar.sfm_args) views += (views.empty() ? "" : " ") + a;
+            planned.model.push_back({"scan_views", "", views});
+        }
+        plan = plan_dataset(planned, prior, rec, req, &plan, Step::Model);
+        if (!scanner_only) say(Step::Model);
+        const bool reuse_model = scanner_only || !makes(plan[Step::Model].act);
         if (!reuse_model) {
-            const std::vector<std::string> now = recon_args(job, prep);
-            record.begin(Step::Model, model_fields(job));
+            std::vector<std::string> now = recon_args(job, prep);
+            now.insert(now.end(), lidar.sfm_args.begin(), lidar.sfm_args.end());
+            record.begin(Step::Model, planned.model);
             set_stage(Stage::Features, lmsg::stage_reconstructing_features.get());
             // What features/ and matches.bin are still worth is the run's own
             // decision, per stage and per file (sfm/core/Resume.h). The
@@ -943,6 +984,10 @@ void SfmRunner::run(SfmJob job) {
                 }
                 if (_partial) log(lmsg::sfm_partial.get());
                 if (_not_metric) log(lmsg::sfm_not_metric.get());
+            } else if (rc != 0 && scanner_stands_in) {
+                log(spirula::i18n::msg::lidar::sfm_failed_scanner_poses.get(), false);
+                // Whatever sparse/ holds is an earlier run's, not this one's.
+                job.lidar.scanner_poses_only = true;
             } else if (rc != 0) {
                 return fail(gpu_failure
                                 ? fmt(lmsg::err_recon_gpu,
@@ -953,12 +998,28 @@ void SfmRunner::run(SfmJob job) {
 
         // Only for a run that reconstructed: a reused model may be a
         // transforms.json or a Metashape export, which has no sparse/ at all.
-        if (!reuse_model && !has_model(ws / "sparse"))
+        const bool modelled = !job.lidar.scanner_poses_only &&
+                              (reuse_model || has_model(ws / "sparse"));
+        if (!modelled && !scanner_stands_in)
             return fail(lmsg::err_no_reconstruction.get());
-        if (!reuse_model) record.finish(Step::Model);
+        if (!reuse_model && modelled) record.finish(Step::Model);
 
-        // ---- 3. depth and normals -------------------------------------------
+        // ---- 3. the laser scans: alignment, then their depth and normals ----
+        if (job.lidar.enabled()) {
+            // Masks folded into masks/ are already the right way round; ones
+            // read where they lie keep their own convention.
+            job.lidar.flip_masks = prep.mask_dir_flipped;
+            job.lidar.mask_dir = prep.mask_dir;
+            std::string err;
+            if (!run_lidar_step(job.lidar, ws.string(), prep.image_dir, _prog,
+                                _films.geometry, _cancel, err))
+                return fail(err);
+        }
+
+        // ---- 4. depth and normals -------------------------------------------
         take_geometry(job);
+        // The scans gave the run its depth and normals.
+        if (job.lidar.enabled()) job.geometry.enable = false;
         plan = plan_dataset(plan_job(job), prior, rec, req, &plan, Step::Geometry);
         say(Step::Geometry);
         if (makes(plan[Step::Geometry].act)) {
@@ -972,7 +1033,7 @@ void SfmRunner::run(SfmJob job) {
             record.finish(Step::Geometry);
         }
 
-        // ---- 4. tidy up ----------------------------------------------------
+        // ---- 5. tidy up ----------------------------------------------------
         // Swept by sweep_intermediates(), not here: the screen reads them
         // after the run ends. Only ones this run produced.
         {

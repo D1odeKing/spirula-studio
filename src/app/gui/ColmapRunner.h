@@ -165,6 +165,7 @@ struct ColmapJob {
     // The photographs' colour space; masking and geometry convert to sRGB.
     std::string image_gamut;
     std::optional<bool> image_is_linear;
+    std::string image_exposure;
 
     // Depth and normals, written after the reconstruction from the dataset it
     // produced. Shared with the built-in path (SfmJob), which runs the same

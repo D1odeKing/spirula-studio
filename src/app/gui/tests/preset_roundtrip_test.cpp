@@ -74,6 +74,7 @@ static void test_dataset_preset() {
 
     s.sfm.image_gamut = "Display P3";
     s.sfm.image_is_linear = true;
+    s.sfm.image_exposure = "auto";
     s.sfm.point_color_in_image_space = true;
 
     s.sfm.prep.mask_enable = true;
@@ -191,6 +192,7 @@ static void test_dataset_preset() {
 
     CHECK_EQ(b.sfm.image_gamut, s.sfm.image_gamut);
     CHECK(b.sfm.image_is_linear == s.sfm.image_is_linear);
+    CHECK(b.sfm.image_exposure == s.sfm.image_exposure);
     CHECK_EQ(b.sfm.point_color_in_image_space, s.sfm.point_color_in_image_space);
 
     CHECK_EQ(b.sfm.prep.mask_enable, s.sfm.prep.mask_enable);

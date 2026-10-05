@@ -627,6 +627,21 @@ SS_MSG(common_image_linear,
     RU("кадры -- линейный свет, а не экранное кодирование"),
     TR("kareler ekran kodlu değil, doğrusal ışıktır"));
 
+SS_MSG(common_image_exposure,
+    EN("brighten what the model sees, in linear light: auto, or stops"),
+    JA("モデルに渡す画像をリニア光で明るくします: auto または段数"),
+    ZH_HANS("在线性光中调亮模型看到的图像：auto 或档数"),
+    ZH_HANT("在線性光中調亮模型看到的影像：auto 或檔數"),
+    KO("모델이 보는 이미지를 선형 광에서 밝게 합니다: auto 또는 스톱 수"),
+    DE("was das Modell sieht, in linearem Licht aufhellen: auto oder Blendenstufen"),
+    FR("éclaircir en lumière linéaire ce que voit le modèle : auto, ou des diaphs"),
+    ES("aclarar en luz lineal lo que ve el modelo: auto, o pasos"),
+    PT("clarear em luz linear o que o modelo vê: auto, ou pontos"),
+    IT("schiarire in luce lineare ciò che vede il modello: auto, o stop"),
+    NL("wat het model ziet in lineair licht lichter maken: auto, of stops"),
+    RU("осветлить в линейном свете то, что видит модель: auto или ступени"),
+    TR("modelin gördüğünü doğrusal ışıkta aydınlat: auto ya da durak sayısı"));
+
 SS_MSG(common_max_size,
     EN("downscale inputs to fit (default 1600, 0 = off)"),
     JA("入力をこの大きさに収まるよう縮小します（既定 1600、0 で無効）"),

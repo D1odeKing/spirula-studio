@@ -3,7 +3,7 @@
 #include "app/gui/GuiApp.h"
 
 #include "core/ColorSpace.h"
-#include "core/ExrImage.h"
+#include "core/ImageFile.h"
 
 #include "checkpoint/SplatMerge.h"
 #include "checkpoint/SplatPly.h"
@@ -25,10 +25,12 @@
 #include "i18n/Locale.h"
 #include "i18n/catalog/Brand.h"
 #include "i18n/catalog/Dataset.h"
+#include "i18n/catalog/Lidar.h"
 #include "i18n/catalog/Geometry.h"
 #include "data/SparseEdit.h"
 #include "i18n/catalog/Edit.h"
 #include "i18n/catalog/Gui.h"
+#include "i18n/catalog/Log.h"
 #include "i18n/catalog/MaskEdit.h"
 #include "i18n/catalog/Partition.h"
 #include "i18n/catalog/Render.h"
@@ -62,6 +64,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -74,6 +77,7 @@ namespace msg = spirula::i18n::msg::gui;
 namespace emsg = spirula::i18n::msg::edit;
 namespace fld = spirula::i18n::msg::field;
 namespace dmsg = spirula::i18n::msg::dataset;
+namespace ldmsg = spirula::i18n::msg::lidar;
 namespace gmsg = spirula::i18n::msg::geometry;
 namespace tmsg = spirula::i18n::msg::train;
 namespace rmsg = spirula::i18n::msg::render;
@@ -931,7 +935,7 @@ void GuiApp::apply_dataset_settings(const DatasetSettings& in) {
     _use_found_masks = s.use_found_masks;
     _border_enable = s.border_enable;
     _frame_shapes = s.frame_shapes;
-    apply_frame_shapes();
+    apply_frame_shapes(_sources, _frame_shapes);
     _resume = s.sfm.prep.resume;
     _photo_import = s.sfm.prep.photo_import;
     _flip_found_masks = s.sfm.prep.flip_found_masks;
@@ -1649,6 +1653,7 @@ bool GuiApp::launch_batch_dataset(BatchTask& task, const BatchRow& row) {
     // A reconstruction brings up a Vulkan device of its own and wants the
     // VRAM the last training run is still holding.
     _runner.release_engine();
+    clear_lidar_sources();
     _sources = sources;
     _workspace = _workspace_auto = workspace;
     apply_dataset_settings(settings);
@@ -1942,8 +1947,57 @@ static std::vector<std::string> recent_models(const RecentList& r) {
     return out;
 }
 
+// Videos and folders of photos out of a drop; the rest is logged.
+std::vector<std::string> GuiApp::raw_inputs(const std::vector<std::string>& paths) {
+    std::error_code ec;
+    std::vector<std::string> sources;
+    for (const std::string& path : paths) {
+        const fs::path p(path);
+        if (fs::is_directory(p, ec)) {
+            if (folder_has_images(path)) sources.push_back(path);
+            else log(i18n::format(dmsg::log_drop_no_images, {path}));
+        } else if (fs::is_regular_file(p, ec)) {
+            if (is_video_path(path)) sources.push_back(path);
+            else log(i18n::format(dmsg::log_drop_unsupported, {path}));
+        }
+    }
+    return sources;
+}
+
 void GuiApp::handle_drop(const std::vector<std::string>& paths) {
     std::error_code ec;
+    // A laser scan is an input of the dataset screen wherever it lands, and so
+    // is a point-cloud PLY there or dropped with photos, videos or scans; a
+    // lone one elsewhere is to be looked at.
+    std::vector<std::string> scans, clouds, rest;
+    for (const std::string& p : paths) {
+        const bool file = fs::is_regular_file(p, ec);
+        if (file && is_lidar_drop(p)) scans.push_back(p);
+        else if (file && ply_is_point_cloud(p)) clouds.push_back(p);
+        else rest.push_back(p);
+    }
+    const bool raw_beside = std::any_of(rest.begin(), rest.end(), [&](const std::string& p) {
+        return fs::is_directory(p, ec) ? folder_has_images(p) : is_video_path(p);
+    });
+    if (_screen == Screen::NewDataset || raw_beside || !scans.empty())
+        scans.insert(scans.end(), clouds.begin(), clouds.end());
+    if (!scans.empty()) {
+        if (native_work_busy()) {
+            if (training_busy()) log(dmsg::log_drop_while_training.get());
+            return;
+        }
+        close_native_previews();
+        close_splat();
+        if (_screen != Screen::NewDataset) {
+            clear_sources();
+            clear_lidar_sources();
+            _screen = Screen::NewDataset;
+        }
+        const std::vector<std::string> sources = raw_inputs(rest);
+        if (!sources.empty()) add_sources(sources, /*replace=*/false);
+        add_lidar_sources(scans);
+        return;
+    }
     // The mesh screen is asking two specific questions -- which model, and
     // which photos -- so a drop there ANSWERS one of them instead of
     // navigating away. Dropping a splat .ply on a screen whose first field
@@ -2074,6 +2128,13 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
         request_open_splat(paths[0]);
         return;
     }
+    // An XGRIDS export: its dataset and its LiDAR map, on the dataset screen.
+    if (paths.size() == 1 && fs::is_directory(paths[0], ec) && !native_work_busy() &&
+        add_xgrids_export(paths[0])) {
+        close_splat();
+        _screen = Screen::NewDataset;
+        return;
+    }
     // A reconstruction that is not a trainable dataset -- a bare `sparse/`,
     // one of its models, or a folder holding one without the images -- is
     // something to look at and clean up, not something to train on.
@@ -2125,17 +2186,7 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
     }
 
     // Everything else is raw input: videos, and folders of photos.
-    std::vector<std::string> sources;
-    for (const std::string& path : paths) {
-        const fs::path p(path);
-        if (fs::is_directory(p, ec)) {
-            if (folder_has_images(path)) sources.push_back(path);
-            else log(i18n::format(dmsg::log_drop_no_images, {path}));
-        } else if (fs::is_regular_file(p, ec)) {
-            if (is_video_path(path)) sources.push_back(path);
-            else log(i18n::format(dmsg::log_drop_unsupported, {path}));
-        }
-    }
+    const std::vector<std::string> sources = raw_inputs(paths);
     if (sources.empty()) return;
     if (native_work_busy()) {
         if (training_busy()) log(dmsg::log_drop_while_training.get());
@@ -2211,7 +2262,10 @@ void GuiApp::refresh_sources() {
     // and stays put while the inputs still name it: a run filling it does not
     // make it somebody else's, and a fresh _2 would mean starting over.
     if (_workspace.empty() || _workspace == _workspace_auto) {
-        if (!workspace_named_by(_sources, _workspace))
+        // A scan alone is a dataset of its photographs, written beside it.
+        if (_sources.empty() && !_lidar.empty())
+            _workspace = fs::path(_lidar[0].path).replace_extension("").string() + "_dataset";
+        else if (!workspace_named_by(_sources, _workspace))
             _workspace = default_workspace(_sources);
         _workspace_auto = _workspace;
     }
@@ -2323,7 +2377,7 @@ void GuiApp::replace_source(size_t input, const std::string& path) {
         _sfm_job.image_gamut.clear();
         _sfm_job.image_is_linear.reset();
     }
-    adopt_exr_color_space();
+    adopt_file_color_space();
     refresh_sources();
 }
 bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
@@ -2347,19 +2401,9 @@ bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
     close_native_previews();
     close_splat();
     if (replace && !inputs.empty()) {
-        _sources.clear();
-        _source_path_edits.clear();
-        _mask_preview_input = 0;
-        // A capture dropped again is restored from again (restore_from_record).
-        _restored_ws.clear();
-        // A different capture is a different job, and the geometry options
-        // are remembered nowhere: a run must never quietly cost an hour of
-        // inference nobody asked for. (Not mid-run: that would disable it.)
-        if (!dataset_busy()) _geometry = GeometryJob{};
-        // ... and a different capture is a different colour space.
-        _sfm_job.image_gamut.clear();
-        _sfm_job.image_is_linear.reset();
-        _color_space_touched = false;
+        clear_sources();
+        // Started from elsewhere, it is a new dataset, scans and all.
+        if (_screen != Screen::NewDataset) clear_lidar_sources();
     }
     const size_t first_new = _sources.size();
     for (const std::string& path : inputs) {
@@ -2374,7 +2418,7 @@ bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
         _border_enable = true;
         if (in.stencil.empty()) in.stencil.detect_border = true;
     }
-    apply_frame_shapes(first_new);
+    apply_frame_shapes(_sources, _frame_shapes, first_new);
     for (const std::string& masks : mask_folders) {
         if (attach_mask_folder(_sources, masks))
             log(i18n::format(dmsg::log_masks_attached, {masks}));
@@ -2386,13 +2430,33 @@ bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
     reapply_dataset_builtin();
     if (_mask_preview_input >= (int)_sources.size()) _mask_preview_input = 0;
-    adopt_exr_color_space();
+    adopt_file_color_space();
     refresh_sources();
     return true;
 }
 
+void GuiApp::clear_sources() {
+    _sources.clear();
+    _source_path_edits.clear();
+    _mask_preview_input = 0;
+    // A capture dropped again is restored from again (restore_from_record).
+    _restored_ws.clear();
+    // A different capture is a different job, and the geometry options
+    // are remembered nowhere: a run must never quietly cost an hour of
+    // inference nobody asked for. (Not mid-run: that would disable it.)
+    if (!dataset_busy()) _geometry = GeometryJob{};
+    // ... and a different capture is a different colour space.
+    _sfm_job.image_gamut.clear();
+    _sfm_job.image_is_linear.reset();
+    _color_space_touched = false;
+}
+
 void GuiApp::add_existing_dataset(const std::string& dir) {
-    if (dir.empty()) return;
+    if (dir.empty() || add_xgrids_export(dir)) return;
+    add_dataset_folder(dir);
+}
+
+void GuiApp::add_dataset_folder(const std::string& dir) {
     // The ordinary route already lands on the right pair for the usual
     // layout: resolve_photo_folder picks images/ out of the folder and
     // refresh_sources makes its parent -- this folder -- the output.
@@ -2419,22 +2483,24 @@ void GuiApp::save_run_stencils() {
     for (const std::string& f : written) log(i18n::format(dmsg::stencil_autosaved, {f}));
 }
 
-void GuiApp::apply_frame_shapes(size_t first_input) {
-    if (_frame_shapes.empty()) return;
+void GuiApp::apply_frame_shapes(std::vector<PrepInput>& inputs, std::string& preset,
+                                size_t first_input) {
+    if (preset.empty()) return;
     app::MaskSet set;
     std::string err;
-    if (!load_stencil_preset(_frame_shapes, set, err)) {
+    if (!load_stencil_preset(preset, set, err)) {
         log(i18n::format(dmsg::stencil_load_failed, {err}));
-        _frame_shapes.clear();
+        preset.clear();
         return;
     }
-    for (size_t i = first_input; i < _sources.size(); i++)
-        app::apply_mask_set(_sources[i].stencil, set);
+    for (size_t i = first_input; i < inputs.size(); i++)
+        app::apply_mask_set(inputs[i].stencil, set);
 }
 
-// A folder of EXRs declares its own colour space, and the picker for it is
-// under Advanced where nobody would think to look. Fill it in and say so.
-void GuiApp::adopt_exr_color_space() {
+// A folder of EXRs, or of TIFFs with an ICC profile, declares its own colour
+// space, and the picker for it is under Advanced where nobody would think to
+// look. Fill it in from the first such file and say so.
+void GuiApp::adopt_file_color_space() {
     if (_color_space_touched) return;
     std::error_code ec;
     for (const PrepInput& s : _sources) {
@@ -2444,13 +2510,14 @@ void GuiApp::adopt_exr_color_space() {
             if (!it->is_regular_file(ec)) continue;
             std::string e = it->path().extension().string();
             for (char& c : e) c = (char)std::tolower((unsigned char)c);
-            if (e != ".exr") continue;
-            exr::Info info;
-            if (!exr::declared_color_space(it->path().string(), info)) return;
-            _sfm_job.image_gamut = info.gamut;
-            _sfm_job.image_is_linear = info.is_linear;
-            log(i18n::format(dmsg::log_exr_color_space,
-                             {info.gamut.empty() ? "Rec.709" : info.gamut}));
+            if (e != ".exr" && e != ".tif" && e != ".tiff") continue;
+            imagefile::DeclaredColor d;
+            if (!imagefile::declared_color_space(it->path().string(), d)) return;
+            _sfm_job.image_gamut = d.gamut;
+            _sfm_job.image_is_linear = d.is_linear;
+            log(i18n::format(d.is_linear ? dmsg::log_file_color_linear
+                                         : dmsg::log_file_color_display,
+                             {d.format, d.gamut.empty() ? "Rec.709" : d.gamut}));
             return;
         }
     }
@@ -2478,6 +2545,7 @@ const char* GuiApp::dir_key(PickAction a, FileDialog::Mode m) {
         case PickAction::MeshSource:        return "model";
         case PickAction::StencilFile:       return "stencil";
         case PickAction::SeedPointcloud:    return "seed_pointcloud";
+        case PickAction::LidarSource:       return "lidar";
         case PickAction::RenderProjectSave:
         case PickAction::RenderProjectOpen: return "render_project";
         case PickAction::RenderOutput:      return "render_output";
@@ -2608,6 +2676,11 @@ void GuiApp::handle_dialog_result(const std::vector<std::string>& paths) {
             break;
         case PickAction::MeshPhotos:
             _mesh_job.data_dir = path;
+            break;
+        case PickAction::LidarSource:
+            if (_pick_lidar < 0) add_lidar_sources(paths);
+            else if (!path.empty()) replace_lidar_source((size_t)_pick_lidar, path);
+            _pick_lidar = -1;
             break;
         case PickAction::MeshOutput:
             // Only the folder is picked; the file name keeps whatever
@@ -3597,6 +3670,7 @@ void GuiApp::open_reconstruction(const std::string& workspace) {
     for (const PrepInput& in : decode_record_inputs(read_dataset_record(workspace).inputs).rows)
         if (!in.path.empty() && fs::exists(fs::u8path(in.path), ec)) inputs.push_back(in.path);
     _redo_frames = _redo_masks = _redo_model = _redo_geometry = false;
+    clear_lidar_sources();
     if (!inputs.empty()) {
         add_sources(inputs, /*replace=*/true);
         _workspace = workspace;
@@ -3606,9 +3680,7 @@ void GuiApp::open_reconstruction(const std::string& workspace) {
     } else {
         close_native_previews();
         close_splat();
-        _sources.clear();
-        _source_path_edits.clear();
-        _mask_preview_input = 0;
+        clear_sources();
         refresh_sources();
         _workspace = workspace;
     }
@@ -3715,14 +3787,30 @@ void GuiApp::request_model_download(const std::string& id, const std::string& de
 // download, not something the run can do anything about, so it is asked before
 // starting rather than reported twenty minutes in.
 bool GuiApp::mask_model_missing() const {
-    if (!_mask_enable) return false;
+    return mask_model_missing(_mask_enable, _sources);
+}
+
+bool GuiApp::mask_model_missing(bool enable, const std::vector<PrepInput>& inputs) const {
+    if (!enable) return false;
     // Inputs that arrived with their own masks are never segmented, so a job
     // made only of those needs no model at all.
-    bool all_bring_masks = !_sources.empty();
-    for (const PrepInput& s : _sources)
+    bool all_bring_masks = !inputs.empty();
+    for (const PrepInput& s : inputs)
         all_bring_masks = all_bring_masks && !s.mask_dir.empty();
     if (all_bring_masks) return false;
     return selected_mask_model().empty();
+}
+
+void GuiApp::draw_model_fetch(FileDownload& dl, const Msg& missing, const Msg& get,
+                              const std::function<void()>& request) {
+    ImGui::SameLine();
+    ui::TextDisabled(missing);
+    ImGui::SameLine();
+    if (dl.state() == FileDownload::State::Running)
+        ui::ProgressBarRaw(std::max(dl.progress(), 0.0f), ImVec2(px(200.0f), 0),
+                           dl.status().c_str());
+    else if (ui::Button(get))
+        request();
 }
 
 const WorkspaceState& GuiApp::workspace_state() {
@@ -3745,6 +3833,30 @@ const WorkspaceState& GuiApp::workspace_state() {
 // The panel edits one set of fields; each runner gets its own struct because
 // their remaining options do not overlap. This is the one place they are
 // copied across, so a field cannot be set on the screen and silently not run.
+void GuiApp::fill_masking(PrepJob& prep) const {
+    // A click-only pick hides the prompt boxes, so what is left in them is not run.
+    const MaskModelFiles mask_model = selected_mask_model();
+    prep.mask_prompt = mask_model.text ? _mask.prompt : "";
+    prep.mask_negative_prompt = mask_model.text ? _mask.negative_prompt : "";
+    prep.mask_feature_prompt = mask_model.text ? _mask.feature_prompt : "";
+    prep.mask_keep_subject = _mask.keep_subject;
+    prep.mask_max_image_size = _mask.max_image_size;
+    prep.mask_dilate_ratio = _mask.boundary_ratio();
+    prep.mask_threshold = _mask.threshold;
+    prep.mask_nms = _mask.nms;
+    prep.mask_memory = _mask_memory;
+    prep.mask_detect_every = _mask_detect_every;
+    prep.mask_memory_frames = _mask_memory_frames;
+    prep.mask_clicks = _mask.clicks;
+    prep.mask_model_path = mask_model.model;
+    prep.mask_detector_path = mask_model.detector;
+    prep.mask_detector_threshold = _mask.box_threshold;
+    // The one frozen choice, re-applied here because a job is rebuilt from
+    // panel state and would otherwise drop it. Empty before the freeze, which
+    // is exactly what an unstarted job wants.
+    prep.device = _native_device_uuid;
+}
+
 void GuiApp::sync_dataset_jobs() {
     PrepJob prep;
     prep.inputs = _sources;
@@ -3767,28 +3879,11 @@ void GuiApp::sync_dataset_jobs() {
     prep.mask_enable = _mask_enable;
     prep.flip_found_masks = _use_found_masks && _flip_found_masks;
     prep.photo_import = _photo_import;
-    // A click-only pick hides the prompt boxes, so what is left in them is not run.
-    const MaskModelFiles mask_model = selected_mask_model();
-    prep.mask_prompt = mask_model.text ? _mask.prompt : "";
-    prep.mask_negative_prompt = mask_model.text ? _mask.negative_prompt : "";
-    prep.mask_feature_prompt = mask_model.text ? _mask.feature_prompt : "";
-    prep.mask_keep_subject = _mask.keep_subject;
-    prep.mask_max_image_size = _mask.max_image_size;
-    prep.mask_dilate_ratio = _mask.boundary_ratio();
-    prep.mask_threshold = _mask.threshold;
-    prep.mask_nms = _mask.nms;
-    prep.mask_memory = _mask_memory;
-    prep.mask_detect_every = _mask_detect_every;
-    prep.mask_memory_frames = _mask_memory_frames;
-    prep.mask_clicks = _mask.clicks;
-    prep.mask_model_path = mask_model.model;
-    prep.mask_detector_path = mask_model.detector;
-    prep.mask_detector_threshold = _mask.box_threshold;
-    // The one frozen choice, re-applied here because this function rebuilds
-    // prep from panel state and would otherwise drop it. Empty before the
-    // freeze, which is exactly what an unstarted job wants.
-    prep.device = _native_device_uuid;
+    if (!_lidar.empty() && !_lidar_in_frame && prep.photo_import == PhotoImport::InPlace)
+        prep.photo_import = PhotoImport::ConvertJpeg;
+    fill_masking(prep);
     _sfm_job.prep = prep;
+    _sfm_job.lidar = lidar_job();
 
     _colmap_job.inputs = prep.inputs;
     _colmap_job.workspace = prep.workspace;
@@ -3854,6 +3949,9 @@ void GuiApp::sync_dataset_jobs() {
         _sfm_job.image_is_linear;
     _sfm_job.prep.image_gamut = _sfm_job.image_gamut;
     _sfm_job.prep.image_is_linear = _sfm_job.image_is_linear;
+    _colmap_job.image_exposure = _sfm_job.geometry.image_exposure =
+        _colmap_job.geometry.image_exposure = _sfm_job.prep.image_exposure =
+            _sfm_job.image_exposure;
 }
 
 void GuiApp::update_dataset_job() {
@@ -4186,30 +4284,46 @@ void GuiApp::draw_dataset_source() {
         edited = true;
     }
     if (edited) refresh_sources();
+    draw_lidar_rows(path_w, one_line);
 
+    // The ways in, on one line while they fit: four labels run off a narrow
+    // panel in several languages.
+    const float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+    auto same_line_if_fits = [&](const Msg& next, bool button) {
+        const ImGuiStyle& st = ImGui::GetStyle();
+        const float w = ImGui::CalcTextSize(next.get()).x + (button ? st.FramePadding.x * 2 : 0);
+        if (ImGui::GetItemRectMax().x + st.ItemSpacing.x + w <= right) ImGui::SameLine();
+    };
     if (ui::Button(dmsg::add_video)) {
         open_pick(PickAction::SourceVideo, msg::pick_videos.get(),
                   FileDialog::Mode::File, video_dialog_filters(), "",
                   /*multi_select=*/true);
     }
     ui::help_on_hover(dmsg::add_video_help);
-    ImGui::SameLine();
+    same_line_if_fits(dmsg::add_photos, true);
     if (ui::Button(dmsg::add_photos)) {
         open_pick(PickAction::SourceImages, msg::pick_photo_folder.get(),
                   FileDialog::Mode::Folder);
     }
     ui::help_on_hover(dmsg::add_photos_help);
-    if (_sources.empty()) {
-        ImGui::SameLine();
-        ui::TextDisabled(dmsg::no_input_yet);
-    }
-    // A row of its own: a finished dataset is not raw input, and three button
-    // labels in a row run off the edge of a narrow panel in several languages.
+    same_line_if_fits(dmsg::add_dataset, true);
     if (ui::Button(dmsg::add_dataset)) {
         open_pick(PickAction::SourceDataset, msg::pick_existing_dataset.get(),
                   FileDialog::Mode::Folder);
     }
     ui::help_on_hover(dmsg::add_dataset_help);
+    same_line_if_fits(ldmsg::add_scan, true);
+    if (ui::Button(ldmsg::add_scan)) {
+        _pick_lidar = -1;
+        open_pick(PickAction::LidarSource, ldmsg::pick_scan.get(), FileDialog::Mode::File,
+                  {".e57", ".las", ".ply"}, "", /*multi_select=*/true);
+    }
+    ui::help_on_hover(ldmsg::add_scan_help);
+    if (_sources.empty() && _lidar.empty()) {
+        same_line_if_fits(dmsg::no_input_yet, false);
+        ui::TextDisabled(dmsg::no_input_yet);
+    }
+    draw_lidar_options();
 
     // Masks that came WITH the photos are adopted automatically, which is
     // right for a prepared capture and wrong for a folder whose masks/ happens
@@ -4230,8 +4344,11 @@ void GuiApp::draw_dataset_source() {
             ui::help_on_hover(dmsg::flip_found_masks_help);
             ImGui::Unindent();
         }
+        // A scan's photographs or views join the images, so they cannot be
+        // read where they are.
         photo_import_combo(&_photo_import,
-                           _sources.size() > 1 || (!_sources.empty() && _sources[0].heif));
+                           _sources.size() > 1 || (!_sources.empty() && _sources[0].heif) ||
+                               (!_lidar.empty() && !_lidar_in_frame));
     }
 
     ImGui::SetNextItemWidth(px(-220.0f));
@@ -4771,6 +4888,7 @@ PreviewSource GuiApp::preview_source(size_t input) const {
     src.device = _native_device_uuid;
     src.image_gamut = _sfm_job.image_gamut;
     src.image_is_linear = _sfm_job.image_is_linear;
+    src.image_exposure = _sfm_job.image_exposure;
     src.look.auto_rotate = _sfm_job.prep.auto_rotate;
     if (in.pano360.valid() && _sfm_job.prep.pano.mode != app::Pano360Mode::Off) {
         src.look.eac = in.pano360;
@@ -5112,24 +5230,39 @@ void GuiApp::open_mask_preview() {
                   _mask_enable ? selected_mask_model() : MaskModelFiles{});
 }
 
-void GuiApp::draw_masking_options() {
+GuiApp::MaskingPanel GuiApp::dataset_masking_panel() {
+    MaskingPanel p;
+    p.inputs = &_sources;
+    p.enable = &_mask_enable;
+    p.border = &_border_enable;
+    p.features = &_mask_features;
+    p.preview_input = &_mask_preview_input;
+    p.frame_shapes = &_frame_shapes;
+    p.preview_ready = _source_probes_ready;
+    p.preview_wait = &dmsg::sensors_reading;
+    p.open_preview = [this] { open_mask_preview(); };
+    return p;
+}
+
+void GuiApp::draw_masking_options(const MaskingPanel& p) {
+    std::vector<PrepInput>& inputs = *p.inputs;
     // Masks that came with an input need no checkbox and no model: they are
     // already the answer. Say so where the question is asked, because the
     // alternative is a user turning masking on to "make sure" and waiting
     // twenty minutes for masks they already had.
     int with_masks = 0;
-    for (const PrepInput& s : _sources)
+    for (const PrepInput& s : inputs)
         if (!s.mask_dir.empty()) with_masks++;
     if (with_masks > 0) {
-        if (with_masks == (int)_sources.size())
+        if (with_masks == (int)inputs.size())
             ui::TextColoredWrapped(kOk, dmsg::masks_found_all);
         else
             ui::TextColoredWrapped(kOk, dmsg::masks_found_some,
-                                   {with_masks, (int)_sources.size()});
+                                   {with_masks, (int)inputs.size()});
     }
 
     ImGui::BeginDisabled(!backends().builtin_masking);
-    ui::Checkbox(dmsg::mask_enable, &_mask_enable);
+    ui::Checkbox(dmsg::mask_enable, p.enable);
     ImGui::EndDisabled();
     if (backends().builtin_masking) {
         ui::help_on_hover(dmsg::mask_enable_help);
@@ -5140,28 +5273,29 @@ void GuiApp::draw_masking_options() {
 
     // A sibling, not a child: the stencil is geometry, so it works with no
     // model downloaded and on a build with no segmentation in it at all.
-    if (ui::Checkbox(dmsg::mask_border_enable, &_border_enable) && _border_enable) {
+    if (ui::Checkbox(dmsg::mask_border_enable, p.border) && *p.border && p.fit_lens_border) {
         // Ticking it has to do something on its own. The fisheye border is
         // what it is for, so an input with nothing drawn on it yet gets the
         // fit, unless it is a GoPro's sphere, whose views have no border.
-        for (PrepInput& in : _sources)
+        for (PrepInput& in : inputs)
             if (in.stencil.empty() && !in.pano360.valid() && !is_pano360_path(in.path))
                 in.stencil.detect_border = true;
     }
     ui::help_on_hover(dmsg::mask_border_enable_help);
-    if (_border_enable) {
+    std::string& frame_shapes = *p.frame_shapes;
+    if (*p.border) {
         ImGui::Indent();
         ImGui::SetNextItemWidth(px(240.0f));
         const std::string shown =
-            _frame_shapes.empty() ? dmsg::stencil_areas_per_input.get() : _frame_shapes;
+            frame_shapes.empty() ? dmsg::stencil_areas_per_input.get() : frame_shapes;
         if (ui::BeginCombo(dmsg::stencil_areas_preset, shown.c_str())) {
             if (ImGui::IsWindowAppearing()) _frame_shapes_list = list_stencil_presets();
-            if (ui::Selectable(dmsg::stencil_areas_per_input, _frame_shapes.empty()))
-                _frame_shapes.clear();
-            for (const StencilPreset& p : _frame_shapes_list)
-                if (ui::SelectableRaw(stencil_preset_label(p), p.name == _frame_shapes)) {
-                    _frame_shapes = p.name;
-                    apply_frame_shapes();
+            if (ui::Selectable(dmsg::stencil_areas_per_input, frame_shapes.empty()))
+                frame_shapes.clear();
+            for (const StencilPreset& sp : _frame_shapes_list)
+                if (ui::SelectableRaw(stencil_preset_label(sp), sp.name == frame_shapes)) {
+                    frame_shapes = sp.name;
+                    apply_frame_shapes(inputs, frame_shapes);
                 }
             ImGui::EndCombo();
         }
@@ -5172,17 +5306,17 @@ void GuiApp::draw_masking_options() {
     // Asked wherever the dataset ends up with masks at all, including ones
     // that arrived with the photographs: what it decides is the reconstruction,
     // not whether they are written.
-    if (_mask_enable || _border_enable || with_masks > 0) {
-        ui::Checkbox(dmsg::mask_for_features, &_mask_features);
+    if (p.features && (*p.enable || *p.border || with_masks > 0)) {
+        ui::Checkbox(dmsg::mask_for_features, p.features);
         ui::help_on_hover(dmsg::mask_for_features_help);
     }
-    if (!_mask_enable && !_border_enable) return;
+    if (!*p.enable && !*p.border) return;
 
     ImGui::Indent();
 
     const ModelEntry* entry = find_model(_model_id);
 
-    if (_mask_enable) {
+    if (*p.enable) {
         const ModelEntry* before = entry;
         draw_mask_model_picker(_model_id, &_mask_detector_id, _download, [this] {
             request_model_download(_model_id, _mask_detector_id);
@@ -5214,7 +5348,7 @@ void GuiApp::draw_masking_options() {
             }
             ui::help_on_hover(dmsg::mask_forget_clicks_help);
             const std::string unprompted =
-                inputs_without_clicks(_sources, _mask.clicks);
+                inputs_without_clicks(inputs, _mask.clicks);
             if (!unprompted.empty() && (_mask.prompt.empty() || !selected_mask_model().text))
                 ui::TextColoredWrapped(kWarn, dmsg::mask_inputs_need_clicks,
                                        {unprompted});
@@ -5222,33 +5356,33 @@ void GuiApp::draw_masking_options() {
     }
 
     const bool mask_preview_busy = native_work_busy();
-    const bool mask_preview_blocked = mask_preview_busy || !_source_probes_ready;
+    const bool mask_preview_blocked = mask_preview_busy || !p.preview_ready;
     ImGui::BeginDisabled(mask_preview_blocked);
-    if (ui::Button(dmsg::mask_try)) open_mask_preview();
+    if (ui::Button(dmsg::mask_try)) p.open_preview();
     ImGui::EndDisabled();
     ui::help_on_hover_disabled(
         mask_preview_busy ? dmsg::step_locked
-        : !_source_probes_ready ? dmsg::sensors_reading : dmsg::mask_try_help);
+        : !p.preview_ready && p.preview_wait ? *p.preview_wait : dmsg::mask_try_help);
     // Which input it opens, and so which input a NEW click prompts; the ones
     // already made stay with their own (MaskClick::source).
-    if (_sources.size() > 1) {
+    if (inputs.size() > 1) {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(px(220.0f));
         std::vector<const char*> names;
-        for (const PrepInput& s : _sources) names.push_back(s.subdir.c_str());
-        int pick = _mask_preview_input;
+        for (const PrepInput& s : inputs) names.push_back(s.subdir.c_str());
+        int pick = *p.preview_input;
         if (ui::ComboRaw(ui::detail::label(dmsg::mask_on_input), &pick,
                          names.data(), (int)names.size()) &&
-            pick != _mask_preview_input) {
-            _mask_preview_input = pick;
+            pick != *p.preview_input) {
+            *p.preview_input = pick;
             // An open panel is showing the old input's frames and editing its
             // stencil; point both at the new one.
-            if (_segment.is_open()) open_mask_preview();
+            if (_segment.is_open()) p.open_preview();
         }
         ui::help_on_hover(dmsg::mask_on_input_help);
     }
 
-    if (!_mask_enable) {
+    if (!*p.enable) {
         ImGui::Unindent();
         return;
     }
@@ -5350,7 +5484,7 @@ void GuiApp::draw_masking_options() {
 
         // The rest is the memory bank, which photos never get.
         bool any_video = false;
-        for (const PrepInput& s : _sources) any_video = any_video || s.is_video;
+        for (const PrepInput& s : inputs) any_video = any_video || s.is_video;
         if (any_video) {
             // A clicked object means nothing on any frame but its own without
             // the bank, so it forces the option on and the box shows what will
@@ -5577,6 +5711,7 @@ const Msg& step_name(Stage s) {
         case Stage::Features:  return dmsg::step_features;
         case Stage::Matching:  return dmsg::step_matching;
         case Stage::Mapping:   return dmsg::step_mapping;
+        case Stage::Align:     return spirula::i18n::msg::lidar::step_align;
         case Stage::Geometry:  return dmsg::step_geometry;
         case Stage::Finishing: return dmsg::step_finishing;
     }
@@ -5592,25 +5727,26 @@ ImVec4 step_color(StageStatus st) {
     }
 }
 
-}  // namespace
+// A run's steps as a row, in the order it takes them, the running one with its
+// own bar under it. This is what the log used to be the only view of.
+struct RunStep {
+    Stage stage;
+    const Msg* name;
+};
 
-// The six steps as a row, the running one with its own bar under it. This is
-// what the log used to be the only view of.
-void GuiApp::draw_dataset_steps() {
-    RunProgress* prog = dataset_steps();
+void draw_run_steps(const RunProgress& prog, const std::vector<RunStep>& steps) {
     Stage running = Stage::Frames;
     bool any = false;
-    for (int i = 0; i < kNumStages; i++) {
-        const Stage s = (Stage)i;
-        const StageProgress p = prog->stage(s);
+    for (size_t i = 0; i < steps.size(); i++) {
+        const StageProgress p = prog.stage(steps[i].stage);
         if (i) {
             ImGui::SameLine(0.0f, px(6.0f));
             ui::TextDisabledRaw(">");
             ImGui::SameLine(0.0f, px(6.0f));
         }
-        ui::TextColored(step_color(p.status), step_name(s));
+        ui::TextColored(step_color(p.status), *steps[i].name);
         if (p.status == StageStatus::Running) {
-            running = s;
+            running = steps[i].stage;
             any = true;
         }
     }
@@ -5618,13 +5754,54 @@ void GuiApp::draw_dataset_steps() {
     // A step that can say how far through it is gets a bar; one that cannot
     // (the mapper counts registrations, not a total) gets its own sentence.
     if (any) {
-        const StageProgress p = prog->stage(running);
+        const StageProgress p = prog.stage(running);
         if (p.fraction >= 0.0f)
             ui::ProgressBarRaw(p.fraction, ImVec2(-1, 0),
                                p.detail.empty() ? nullptr : p.detail.c_str());
         else if (!p.detail.empty())
             ui::TextDisabledRaw(p.detail);
     }
+}
+
+// The views that have something to show, as a row of choices; the one drawn
+// follows `implied`, the running step's, until the user picks one. -1 when
+// none has anything.
+int draw_view_tabs(const Msg* const* names, const bool* avail, int n, int implied,
+                   int& pinned) {
+    int tab = pinned >= 0 ? pinned : (implied >= 0 ? implied : 0);
+    if (!avail[tab]) {
+        tab = -1;
+        for (int i = 0; i < n && tab < 0; i++)
+            if (avail[i]) tab = i;
+    }
+    bool first = true;
+    for (int i = 0; i < n; i++) {
+        if (!avail[i]) continue;
+        if (!first) ImGui::SameLine();
+        first = false;
+        if (ui::RadioButton(*names[i], tab == i)) {
+            tab = i;
+            // Picking one pins it: following the run is the default, not the
+            // rule, and a user who opened the match map to look at a seam
+            // should not lose it the moment mapping starts.
+            pinned = i;
+        }
+    }
+    return tab;
+}
+
+}  // namespace
+
+void GuiApp::draw_dataset_steps() {
+    std::vector<RunStep> all;
+    for (int i = 0; i < kNumStages; i++) {
+        // Only a run with a laser scan has the step at all.
+        if ((Stage)i == Stage::Align && _lidar.empty() &&
+            dataset_steps()->stage(Stage::Align).status == StageStatus::Pending)
+            continue;
+        all.push_back({(Stage)i, &step_name((Stage)i)});
+    }
+    draw_run_steps(*dataset_steps(), all);
 }
 
 // How much the view changed along every input, as the adaptive pass measures
@@ -5709,6 +5886,7 @@ int GuiApp::preview_for_stage() {
         case Stage::Masks:     return 1;
         case Stage::Features:  return 2;
         case Stage::Matching:  return 3;
+        case Stage::Align:
         case Stage::Geometry:  return 5;
         case Stage::Mapping:
         case Stage::Finishing: return 4;
@@ -5842,29 +6020,11 @@ void GuiApp::draw_dataset_preview(float height) {
 
     const int implied = preview_for_stage();
     if (dataset_busy() && implied >= 0) _preview_last_stage = implied;
-    int tab = _preview_tab >= 0 ? _preview_tab : (implied >= 0 ? implied : 0);
-    if (!avail[tab]) {
-        for (int i = 0; i < 7; i++)
-            if (avail[i]) { tab = i; break; }
-    }
-
     const Msg* names[7] = {&dmsg::view_frames, &dmsg::view_masks,
                            &dmsg::view_features, &dmsg::view_matrix,
                            &dmsg::view_model, &dmsg::view_geometry,
                            &dmsg::view_motion};
-    bool first = true;
-    for (int i = 0; i < 7; i++) {
-        if (!avail[i]) continue;
-        if (!first) ImGui::SameLine();
-        first = false;
-        if (ui::RadioButton(*names[i], tab == i)) {
-            tab = i;
-            // Picking one pins it: following the run is the default, not the
-            // rule, and a user who opened the match map to look at a seam
-            // should not lose it the moment mapping starts.
-            _preview_tab = i;
-        }
-    }
+    const int tab = draw_view_tabs(names, avail, 7, implied, _preview_tab);
     if (tab == 3) ui::help_on_hover(dmsg::matrix_help);
     if (tab == 6) ui::help_on_hover(dmsg::frame_spacing_help);
 
@@ -6615,6 +6775,29 @@ void GuiApp::draw_color_space_options(bool with_point_color) {
         source_changed = true;
     }
     ui::help_on_hover(dmsg::input_is_linear_help);
+
+    // "" / "auto" / a number of stops: item 2 keeps a number even at zero.
+    std::string& ex = _sfm_job.image_exposure;
+    int exposure = ex.empty() ? 0 : ex == "auto" ? 1 : 2;
+    ImGui::SetNextItemWidth(px(260.0f));
+    if (ui::Combo(dmsg::input_exposure, &exposure,
+                  {&dmsg::exposure_as_stored, &dmsg::exposure_auto, &dmsg::exposure_fixed})) {
+        ex = exposure == 0 ? "" : exposure == 1 ? "auto" : "+2.0";
+        source_changed = true;
+    }
+    ui::help_on_hover(dmsg::input_exposure_help);
+    if (exposure == 2) {
+        colorspace::Exposure e;
+        colorspace::parse_exposure(ex, e);
+        float stops = e.stops;
+        ImGui::SetNextItemWidth(px(260.0f));
+        if (ui::SliderFloat(dmsg::input_exposure_stops, &stops, -4.0f, 10.0f, "%+.1f EV")) {
+            char buf[16];
+            std::snprintf(buf, sizeof buf, "%+.1f", stops);
+            ex = buf;
+            source_changed = true;
+        }
+    }
     if (source_changed) close_native_previews();
 
     // COLMAP writes its own point cloud, so the choice is the built-in SfM's.
@@ -7040,11 +7223,12 @@ void GuiApp::draw_dataset_form(float height, bool running) {
     draw_dataset_basics();
     ImGui::Spacing();
     ImGui::BeginDisabled(dataset_locked(Stage::Masks));
-    draw_masking_options();
+    draw_masking_options(dataset_masking_panel());
     ImGui::EndDisabled();
     ImGui::Spacing();
 
-    ImGui::BeginDisabled(dataset_locked(Stage::Geometry));
+    // A laser scan gives the run its depth and normals.
+    ImGui::BeginDisabled(dataset_locked(Stage::Geometry) || !_lidar.empty());
     draw_geometry_options();
     ImGui::EndDisabled();
     ImGui::Spacing();
@@ -7064,7 +7248,7 @@ void GuiApp::draw_dataset_form(float height, bool running) {
     // ---- run / status ----
     const float action_y0 = ImGui::GetCursorPosY();
     ImGui::Spacing();
-    bool input_missing = _sources.empty() || _workspace.empty();
+    bool input_missing = (_sources.empty() && _lidar.empty()) || _workspace.empty();
     for (const PrepInput& s : _sources)
         input_missing = input_missing || s.path.empty();
     const bool ready = !running && !input_missing && _source_probes_ready;
@@ -7096,21 +7280,18 @@ void GuiApp::draw_dataset_form(float height, bool running) {
             FileDownload& dl = need_mask_model ? _download
                                : need_feat_model ? _feat_download.current()
                                                  : _geom_download.current();
-            ImGui::SameLine();
-            ui::TextDisabled(need_mask_model   ? dmsg::mask_model_first
+            draw_model_fetch(dl,
+                             need_mask_model   ? dmsg::mask_model_first
                              : need_feat_model ? dmsg::feat_model_first
-                                               : dmsg::geom_model_first);
-            ImGui::SameLine();
-            if (dl.state() == FileDownload::State::Running)
-                ui::ProgressBarRaw(std::max(dl.progress(), 0.0f),
-                                   ImVec2(px(200.0f), 0), dl.status().c_str());
-            else if (ui::Button(need_mask_model   ? dmsg::mask_get_model
-                                : need_feat_model ? dmsg::feat_get_model
-                                                  : dmsg::geom_get_model)) {
-                if (need_mask_model)      request_model_download(_model_id, _mask_detector_id);
-                else if (need_feat_model) request_feature_download();
-                else                      request_geometry_download();
-            }
+                                               : dmsg::geom_model_first,
+                             need_mask_model   ? dmsg::mask_get_model
+                             : need_feat_model ? dmsg::feat_get_model
+                                               : dmsg::geom_get_model,
+                             [&] {
+                                 if (need_mask_model)      request_model_download(_model_id, _mask_detector_id);
+                                 else if (need_feat_model) request_feature_download();
+                                 else                      request_geometry_download();
+                             });
         }
         if (ready) {
             draw_dataset_rerun(workspace_state());

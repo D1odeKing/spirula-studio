@@ -632,7 +632,7 @@ static int cmdExtract(int argc, char** argv) {
 
     // ---- directory (batch) ----
     if (fs::is_directory(image)) {
-        adoptExrColorSpace(cfg, image, seen);
+        adoptFileColorSpace(cfg, image, seen);
         fs::path outdir = output.empty() ? fs::path("features") : fs::path(output);
         ExtractStats st;
         int rc = extractDirectory(image, outdir, cfg, st);
@@ -661,7 +661,8 @@ static int cmdExtract(int argc, char** argv) {
                     {image, cfg.mask_dir});
     }
     GrayImage img = loadGrayImage(image, cfg.max_image_size, /*want_color=*/true, maskpath,
-                                  cfg.image_gamut, cfg.image_is_linear, cfg.flip_mask);
+                                  cfg.image_gamut, cfg.image_is_linear, cfg.flip_mask,
+                                  false, "", cfg.exposure);
     if (cfg.sift.verbose)
         L::err(Tag::Extract, M::extract_to_gray,
                {image, img.width, img.height});

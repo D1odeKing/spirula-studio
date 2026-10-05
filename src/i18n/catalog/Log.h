@@ -1695,71 +1695,100 @@ SS_MSG(ppisp_exif_exposure,
     RU("Экспозиция PPISP инициализирована из EXIF ({0} из {1} фото)"),
     TR("PPISP pozlaması EXIF'ten başlatıldı ({1} fotoğraftan {0})"));
 
-// Printed when the input images are EXRs and no colour space was given on the
-// command line; {0} is the gamut read out of the file.
-SS_MSG(exr_color_space,
-    EN("EXR input read as linear {0} (--image-color-gamut, --image-color-is-linear)"),
-    JA("EXR 入力を線形 {0} として読み込みます"
+// Printed when the images declare their colour space -- an EXR's header, a
+// TIFF's ICC profile -- and none was given on the command line. {0} is the
+// format ("EXR", "TIFF"), {1} the gamut read out of the file.
+SS_MSG(file_color_linear,
+    EN("{0} input read as linear {1} (--image-color-gamut, --image-color-is-linear)"),
+    JA("{0} 入力を線形 {1} として読み込みます"
        "（--image-color-gamut, --image-color-is-linear）"),
-    ZH_HANS("EXR 输入按线性 {0} 读取（--image-color-gamut、--image-color-is-linear）"),
-    ZH_HANT("EXR 輸入依線性 {0} 讀取（--image-color-gamut、--image-color-is-linear）"),
-    KO("EXR 입력을 선형 {0}(으)로 읽습니다"
+    ZH_HANS("{0} 输入按线性 {1} 读取（--image-color-gamut、--image-color-is-linear）"),
+    ZH_HANT("{0} 輸入依線性 {1} 讀取（--image-color-gamut、--image-color-is-linear）"),
+    KO("{0} 입력을 선형 {1}(으)로 읽습니다"
        "(--image-color-gamut, --image-color-is-linear)"),
-    DE("EXR-Eingabe wird als lineares {0} gelesen "
+    DE("{0}-Eingabe wird als lineares {1} gelesen "
        "(--image-color-gamut, --image-color-is-linear)"),
-    FR("Entrée EXR lue comme {0} linéaire "
+    FR("Entrée {0} lue comme {1} linéaire "
        "(--image-color-gamut, --image-color-is-linear)"),
-    ES("Entrada EXR leída como {0} lineal "
+    ES("Entrada {0} leída como {1} lineal "
        "(--image-color-gamut, --image-color-is-linear)"),
-    PT("Entrada EXR lida como {0} linear "
+    PT("Entrada {0} lida como {1} linear "
        "(--image-color-gamut, --image-color-is-linear)"),
-    IT("Ingresso EXR letto come {0} lineare "
+    IT("Ingresso {0} letto come {1} lineare "
        "(--image-color-gamut, --image-color-is-linear)"),
-    NL("EXR-invoer gelezen als lineair {0} "
+    NL("{0}-invoer gelezen als lineair {1} "
        "(--image-color-gamut, --image-color-is-linear)"),
-    RU("Вход EXR читается как линейный {0} "
+    RU("Вход {0} читается как линейный {1} "
        "(--image-color-gamut, --image-color-is-linear)"),
-    TR("EXR girdisi doğrusal {0} olarak okunuyor "
+    TR("{0} girdisi doğrusal {1} olarak okunuyor "
+       "(--image-color-gamut, --image-color-is-linear)"));
+
+SS_MSG(file_color_display,
+    EN("{0} input read as display-encoded {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    JA("{0} 入力を表示用エンコードの {1} として読み込みます"
+       "（--image-color-gamut, --image-color-is-linear）"),
+    ZH_HANS("{0} 输入按显示编码的 {1} 读取"
+            "（--image-color-gamut、--image-color-is-linear）"),
+    ZH_HANT("{0} 輸入依顯示編碼的 {1} 讀取"
+            "（--image-color-gamut、--image-color-is-linear）"),
+    KO("{0} 입력을 디스플레이 인코딩된 {1}(으)로 읽습니다"
+       "(--image-color-gamut, --image-color-is-linear)"),
+    DE("{0}-Eingabe wird als anzeigecodiertes {1} gelesen "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    FR("Entrée {0} lue comme {1} encodé pour l'affichage "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    ES("Entrada {0} leída como {1} codificado para pantalla "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    PT("Entrada {0} lida como {1} codificado para exibição "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    IT("Ingresso {0} letto come {1} codificato per lo schermo "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    NL("{0}-invoer gelezen als weergavegecodeerd {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    RU("Вход {0} читается как экранно закодированный {1} "
+       "(--image-color-gamut, --image-color-is-linear)"),
+    TR("{0} girdisi ekran kodlu {1} olarak okunuyor "
        "(--image-color-gamut, --image-color-is-linear)"));
 
 // The same, for a run that declared the transfer itself and left only the
 // primaries to the file.
-SS_MSG(exr_gamut_from_file,
-    EN("EXR colour space {0}, from the file (--image-color-gamut)"),
-    JA("EXR の色空間は {0} です（ファイルの情報、--image-color-gamut）"),
-    ZH_HANS("EXR 色彩空间为 {0}（取自文件，--image-color-gamut）"),
-    ZH_HANT("EXR 色彩空間為 {0}（取自檔案，--image-color-gamut）"),
-    KO("EXR 색 공간은 {0}입니다(파일에서 읽음, --image-color-gamut)"),
-    DE("EXR-Farbraum {0}, aus der Datei (--image-color-gamut)"),
-    FR("Espace colorimétrique EXR {0}, d'après le fichier (--image-color-gamut)"),
-    ES("Espacio de color EXR {0}, según el archivo (--image-color-gamut)"),
-    PT("Espaço de cor EXR {0}, conforme o arquivo (--image-color-gamut)"),
-    IT("Spazio colore EXR {0}, dal file (--image-color-gamut)"),
-    NL("EXR-kleurruimte {0}, uit het bestand (--image-color-gamut)"),
-    RU("Цветовое пространство EXR {0}, из файла (--image-color-gamut)"),
-    TR("EXR renk uzayı {0}, dosyadan (--image-color-gamut)"));
+SS_MSG(file_gamut_from_file,
+    EN("{0} colour space {1}, from the file (--image-color-gamut)"),
+    JA("{0} の色空間は {1} です（ファイルの情報、--image-color-gamut）"),
+    ZH_HANS("{0} 色彩空间为 {1}（取自文件，--image-color-gamut）"),
+    ZH_HANT("{0} 色彩空間為 {1}（取自檔案，--image-color-gamut）"),
+    KO("{0} 색 공간은 {1}입니다(파일에서 읽음, --image-color-gamut)"),
+    DE("{0}-Farbraum {1}, aus der Datei (--image-color-gamut)"),
+    FR("Espace colorimétrique {0} {1}, d'après le fichier (--image-color-gamut)"),
+    ES("Espacio de color {0} {1}, según el archivo (--image-color-gamut)"),
+    PT("Espaço de cor {0} {1}, conforme o arquivo (--image-color-gamut)"),
+    IT("Spazio colore {0} {1}, dal file (--image-color-gamut)"),
+    NL("{0}-kleurruimte {1}, uit het bestand (--image-color-gamut)"),
+    RU("Цветовое пространство {0} {1}, из файла (--image-color-gamut)"),
+    TR("{0} renk uzayı {1}, dosyadan (--image-color-gamut)"));
 
-SS_MSG(exr_gamut_unknown,
-    EN("The EXR's color primaries match no known color space; reading it as Rec.709"),
-    JA("EXR の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
-    ZH_HANS("EXR 的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
-    ZH_HANT("EXR 的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
-    KO("EXR의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
-    DE("Die Primärfarben der EXR passen zu keinem bekannten Farbraum; "
+SS_MSG(file_gamut_unknown,
+    EN("The {0} input's color primaries match no known color space; reading it as Rec.709"),
+    JA("{0} 入力の原色はどの既知の色空間とも一致しません。Rec.709 として読み込みます"),
+    ZH_HANS("{0} 输入的色彩基色不属于任何已知色彩空间，按 Rec.709 读取"),
+    ZH_HANT("{0} 輸入的色彩基色不屬於任何已知色彩空間，依 Rec.709 讀取"),
+    KO("{0} 입력의 원색이 알려진 색 공간과 일치하지 않습니다. Rec.709로 읽습니다"),
+    DE("Die Primärfarben der {0}-Eingabe passen zu keinem bekannten Farbraum; "
        "sie wird als Rec.709 gelesen"),
-    FR("Les primaires de l'EXR ne correspondent à aucun espace connu ; "
+    FR("Les primaires de l'entrée {0} ne correspondent à aucun espace connu ; "
        "lecture en Rec.709"),
-    ES("Los primarios del EXR no coinciden con ningún espacio conocido; "
+    ES("Los primarios de la entrada {0} no coinciden con ningún espacio conocido; "
        "se lee como Rec.709"),
-    PT("Os primários do EXR não correspondem a nenhum espaço conhecido; "
-       "lido como Rec.709"),
-    IT("I primari dell'EXR non corrispondono ad alcuno spazio noto; "
+    PT("Os primários da entrada {0} não correspondem a nenhum espaço conhecido; "
+       "lida como Rec.709"),
+    IT("I primari dell'ingresso {0} non corrispondono ad alcuno spazio noto; "
        "viene letto come Rec.709"),
-    NL("De primaire kleuren van de EXR passen bij geen bekende kleurruimte; "
-       "hij wordt als Rec.709 gelezen"),
-    RU("Основные цвета EXR не совпадают ни с одним известным пространством; "
-       "файл читается как Rec.709"),
-    TR("EXR'nin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
+    NL("De primaire kleuren van de {0}-invoer passen bij geen bekende kleurruimte; "
+       "die wordt als Rec.709 gelezen"),
+    RU("Основные цвета входа {0} не совпадают ни с одним известным пространством; "
+       "вход читается как Rec.709"),
+    TR("{0} girdisinin ana renkleri bilinen hiçbir renk uzayıyla eşleşmiyor; "
        "Rec.709 olarak okunuyor"));
 
 SS_MSG(output_directory,

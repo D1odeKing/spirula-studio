@@ -579,6 +579,43 @@ SS_MSG(opt_image_linear,
     TR("Veri kümesi görüntülerini ekran kodlu değil, doğrusal ışık olarak ele "
        "al."));
 
+SS_MSG(opt_image_exposure,
+    EN("Brighten what the model sees, in linear light, without touching the "
+       "files: auto lifts each image darker than a typical photograph, or give "
+       "a number of stops."),
+    JA("ファイルを変えずに、モデルに渡す画像をリニア光で明るくします。auto は一般的な"
+       "写真より暗い画像をそれぞれ持ち上げ、数値なら段数です。"),
+    ZH_HANS("在线性光中调亮模型看到的图像，不改动文件：auto 会提亮比普通照片暗的"
+            "每张图像，也可给出档数。"),
+    ZH_HANT("在線性光中調亮模型看到的影像，不改動檔案：auto 會提亮比一般照片暗的"
+            "每張影像，也可給出檔數。"),
+    KO("파일은 그대로 두고 모델이 보는 이미지를 선형 광에서 밝게 합니다. auto 는 "
+       "일반 사진보다 어두운 이미지를 각각 끌어올리고, 숫자는 스톱 수입니다."),
+    DE("Hellt in linearem Licht auf, was das Modell sieht, ohne die Dateien zu "
+       "ändern: auto hebt jedes Bild an, das dunkler als ein typisches Foto ist, "
+       "oder eine Zahl von Blendenstufen."),
+    FR("Éclaircit en lumière linéaire ce que voit le modèle, sans toucher aux "
+       "fichiers : auto relève chaque image plus sombre qu'une photo typique, ou "
+       "indiquez un nombre de diaphs."),
+    ES("Aclara en luz lineal lo que ve el modelo, sin tocar los archivos: auto "
+       "levanta cada imagen más oscura que una foto típica, o indique un número "
+       "de pasos."),
+    PT("Clareia em luz linear o que o modelo vê, sem mexer nos arquivos: auto "
+       "ergue cada imagem mais escura que uma foto típica, ou indique um número "
+       "de pontos."),
+    IT("Schiarisce in luce lineare ciò che vede il modello, senza toccare i "
+       "file: auto solleva ogni immagine più scura di una foto tipica, oppure "
+       "indica un numero di stop."),
+    NL("Maakt in lineair licht lichter wat het model ziet, zonder de bestanden "
+       "te wijzigen: auto tilt elk beeld op dat donkerder is dan een gewone "
+       "foto, of geef een aantal stops."),
+    RU("Осветляет в линейном свете то, что видит модель, не трогая файлы: auto "
+       "поднимает каждое изображение темнее обычной фотографии, либо укажите "
+       "число ступеней."),
+    TR("Modelin gördüğünü dosyalara dokunmadan doğrusal ışıkta aydınlatır: auto, "
+       "tipik bir fotoğraftan koyu olan her görüntüyü yükseltir; ya da bir durak "
+       "sayısı verin."));
+
 SS_MSG(opt_overwrite,
     EN("Recompute maps that are already on disk. Without it a run continues "
        "where the last one stopped."),

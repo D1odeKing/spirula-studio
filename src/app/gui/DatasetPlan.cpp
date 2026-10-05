@@ -349,6 +349,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
     job.max_features = job.max_image_size = 0;
     job.image_gamut.clear();
     job.image_is_linear.reset();
+    job.image_exposure.clear();
     job.point_color_in_image_space = false;
     for (size_t k = 1; k < a.size(); k++) {
         const std::string& flag = a[k];
@@ -384,6 +385,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
         else if (flag == "--image-gamut") job.image_gamut = take();
         else if (flag == "--image-linear") job.image_is_linear = true;
         else if (flag == "--no-image-linear") job.image_is_linear = false;
+        else if (flag == "--image-exposure") job.image_exposure = take();
         else if (flag == "--point-color") job.point_color_in_image_space = take() == "image";
         else if (flag == "--masks") { take(); job.mask_features = true; }
         else if (flag == "--no-masks") job.mask_features = false;
@@ -508,6 +510,7 @@ StepFields masks_fields(const PrepJob& job) {
         add(f, "mask_box_threshold", "", num(job.mask_detector_threshold));
     }
     add(f, "mask_max_size", "", num(job.mask_max_image_size));
+    if (!job.image_exposure.empty()) add(f, "image_exposure", "", job.image_exposure);
     add(f, "mask_threshold", "", num(job.mask_threshold));
     add(f, "mask_nms", "", num(job.mask_nms));
     if (segment) {
@@ -557,6 +560,7 @@ StepFields model_fields(const SfmJob& job) {
     add(f, "exif_attitude", "", sfm_pick(kSfmExifAttitude, job.exif_attitude, 2));
     if (!job.image_gamut.empty()) add(f, "image_gamut", "", job.image_gamut);
     if (job.image_is_linear) add(f, "image_linear", "", onoff(*job.image_is_linear));
+    if (!job.image_exposure.empty()) add(f, "image_exposure", "", job.image_exposure);
     add(f, "point_color", "", job.point_color_in_image_space ? "image" : "srgb");
     if (!job.extra_args.empty()) add(f, "extra_args", "", job.extra_args);
     add_rigs(f, p);
@@ -619,6 +623,7 @@ StepFields geometry_fields(const GeometryJob& g) {
     if (g.normal_jpg) add(f, "jpeg_quality", "", num(g.jpeg_quality));
     if (!g.image_gamut.empty()) add(f, "image_gamut", "", g.image_gamut);
     if (g.image_is_linear) add(f, "image_linear", "", onoff(*g.image_is_linear));
+    if (!g.image_exposure.empty()) add(f, "image_exposure", "", g.image_exposure);
     return f;
 }
 
@@ -632,9 +637,12 @@ std::vector<std::string> geometry_kinds(const GeometryJob& g) {
 PlanJob plan_job(const SfmJob& job) {
     PlanJob p;
     p.prep = job.prep;
+    p.reconstruct = !job.lidar.scanner_only;
     p.model = model_fields(job);
     p.mask_features = job.mask_features;
     p.geometry = job.geometry;
+    // The scans give the run its depth and normals.
+    if (job.lidar.enabled()) p.geometry.enable = false;
     return p;
 }
 
@@ -727,6 +735,7 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
     const bool masks_feed = masks_reach_features(job.prep, job.mask_features);
     if (fixed(Step::Model)) {
         md = (*done)[Step::Model];
+    } else if (!job.reconstruct) {
     } else if (!ws.model) {
         set(md, Act::Run);
     } else if (req.redo_model) {

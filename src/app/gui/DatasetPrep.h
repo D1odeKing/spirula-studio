@@ -273,6 +273,7 @@ struct PrepJob {
     // segmenter sees them, which is what it was trained on.
     std::string image_gamut;
     std::optional<bool> image_is_linear;
+    std::string image_exposure;      // --image-exposure: "", "auto" or stops
 
     // ---- masking ----
     bool mask_enable = false;

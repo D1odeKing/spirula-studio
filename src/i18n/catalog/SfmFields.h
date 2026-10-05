@@ -668,6 +668,57 @@ SS_MSG(image_linear_help,
        "закодированными"),
     TR("Girdi görüntülerini ekran kodlu değil, doğrusal ışık olarak ele al"));
 
+SS_MSG(image_exposure_help,
+    EN("Brighten what the detectors see, in linear light, without touching the "
+       "files: auto lifts each image whose median is darker than a typical "
+       "photograph's, or give a number of stops (2, -1). Point colours and the "
+       "training images keep the files' own values"),
+    JA("ファイルを変えずに、検出器に渡す画像だけをリニア光で明るくする。auto は"
+       "中央値が一般的な写真より暗い画像をそれぞれ持ち上げ、数値なら段数（2、-1）。"
+       "点群の色と学習用画像はファイル本来の値のまま"),
+    ZH_HANS("在线性光中只调亮检测器看到的图像，不改动文件：auto 会把中位亮度低于"
+            "普通照片的每张图像提亮，也可给出档数（2、-1）。点云颜色和训练图像保持"
+            "文件原值"),
+    ZH_HANT("在線性光中只調亮偵測器看到的影像，不改動檔案：auto 會把中位亮度低於"
+            "一般照片的每張影像提亮，也可給出檔數（2、-1）。點雲顏色與訓練影像維持"
+            "檔案原值"),
+    KO("파일은 그대로 두고 검출기가 보는 이미지만 선형 광에서 밝게 합니다. auto 는 "
+       "중앙값이 일반 사진보다 어두운 이미지를 각각 끌어올리고, 숫자는 스톱 "
+       "수입니다(2, -1). 점 구름 색과 학습 이미지는 파일 본래 값을 유지합니다"),
+    DE("Hellt in linearem Licht auf, was die Detektoren sehen, ohne die Dateien "
+       "zu ändern: auto hebt jedes Bild an, dessen Median dunkler ist als bei "
+       "einem typischen Foto, oder eine Zahl von Blendenstufen (2, -1). "
+       "Punktfarben und Trainingsbilder behalten die Werte der Dateien"),
+    FR("Éclaircit en lumière linéaire ce que voient les détecteurs, sans toucher "
+       "aux fichiers : auto relève chaque image dont la médiane est plus sombre "
+       "que celle d'une photo typique, ou indiquez un nombre de diaphs (2, -1). "
+       "Les couleurs des points et les images d'entraînement gardent les valeurs "
+       "des fichiers"),
+    ES("Aclara en luz lineal lo que ven los detectores, sin tocar los archivos: "
+       "auto levanta cada imagen cuya mediana es más oscura que la de una foto "
+       "típica, o indique un número de pasos (2, -1). Los colores de los puntos y "
+       "las imágenes de entrenamiento conservan los valores de los archivos"),
+    PT("Clareia em luz linear o que os detectores veem, sem mexer nos arquivos: "
+       "auto ergue cada imagem cuja mediana é mais escura que a de uma foto "
+       "típica, ou indique um número de pontos (2, -1). As cores dos pontos e as "
+       "imagens de treino mantêm os valores dos arquivos"),
+    IT("Schiarisce in luce lineare ciò che vedono i rilevatori, senza toccare i "
+       "file: auto solleva ogni immagine la cui mediana è più scura di quella di "
+       "una foto tipica, oppure indica un numero di stop (2, -1). I colori dei "
+       "punti e le immagini di addestramento mantengono i valori dei file"),
+    NL("Maakt in lineair licht lichter wat de detectoren zien, zonder de "
+       "bestanden te wijzigen: auto tilt elk beeld op waarvan de mediaan donkerder "
+       "is dan bij een gewone foto, of geef een aantal stops (2, -1). Puntkleuren "
+       "en trainingsbeelden houden de waarden van de bestanden"),
+    RU("Осветляет в линейном свете то, что видят детекторы, не трогая файлы: auto "
+       "поднимает каждое изображение, медиана которого темнее, чем у обычной "
+       "фотографии, либо укажите число ступеней (2, -1). Цвета точек и обучающие "
+       "изображения сохраняют значения файлов"),
+    TR("Algılayıcıların gördüğünü dosyalara dokunmadan doğrusal ışıkta aydınlatır: "
+       "auto, medyanı tipik bir fotoğrafınkinden koyu olan her görüntüyü "
+       "yükseltir; ya da bir durak sayısı verin (2, -1). Nokta renkleri ve eğitim "
+       "görüntüleri dosyaların kendi değerlerini korur"));
+
 SS_MSG(point_color_help,
     EN("Colour space the sparse point cloud is written in. image writes the "
        "points in the same space as the photographs, which the trainer assumes "

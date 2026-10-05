@@ -113,11 +113,12 @@ void applyExifOrientation(GrayImage& img) {
         spirula::orient_pixels(img.data.data(), img.width, img.height, 1,
                                xf.turns_cw, false, gray.data());
         img.data.swap(gray);
-        if (img.hasColor()) {
-            std::vector<uint8_t> rgb(img.rgb.size());
-            spirula::orient_pixels(img.rgb.data(), img.width, img.height, 3,
-                                   xf.turns_cw, false, rgb.data());
-            img.rgb.swap(rgb);
+        for (std::vector<uint8_t>* px : {&img.rgb, &img.color}) {
+            if (px->empty()) continue;
+            std::vector<uint8_t> turned(px->size());
+            spirula::orient_pixels(px->data(), img.width, img.height, 3,
+                                   xf.turns_cw, false, turned.data());
+            px->swap(turned);
         }
         if (!img.mask.empty()) {
             std::vector<uint8_t> bits(img.mask.bits.size());
@@ -141,32 +142,43 @@ GrayImage loadGrayImage(const std::string& path, int max_image_size, bool want_c
                         const std::string& mask_path,
                         const std::string& gamut, std::optional<bool> is_linear,
                         bool flip_mask, bool apply_exif_orientation,
-                        const std::string& feature_mask_path) {
+                        const std::string& feature_mask_path,
+                        const colorspace::Exposure& exposure) {
     int w = 0, h = 0, chan = 0;
     // Force 3 channels; we do our own luma so behavior is decoder-independent.
     // An EXR or TIFF decodes on this thread: the pool above already owns every core.
-    std::vector<uint8_t> own_rgb;
+    std::vector<uint8_t> own_rgb, plain;
     unsigned char* rgb = nullptr;
+    GrayImage img;
     if (imagefile::handles(path)) {
         imagefile::Info info;
         imagefile::Options opt;
         opt.threads = 1;
-        const std::string err =
-            imagefile::decode_srgb8(path, opt, info, own_rgb, gamut, is_linear);
+        opt.exposure = exposure;
+        const std::string err = imagefile::decode_srgb8(path, opt, info, own_rgb, gamut,
+                                                        is_linear, want_color ? &plain : nullptr);
         if (!err.empty())
             throw std::runtime_error("cannot decode image " + path + ": " + err);
         w = info.width;
         h = info.height;
         rgb = own_rgb.data();
+        img.gain = info.gain;
+        img.peak = info.peak;
     } else {
         rgb = stbi_load(path.c_str(), &w, &h, &chan, 3);
         if (!rgb)
             throw std::runtime_error("cannot decode image " + path + ": " + stbi_failure_reason());
+        const size_t n = (size_t)w * h * 3;
+        if (is_linear.value_or(false)) img.peak = *std::max_element(rgb, rgb + n) / 255.0f;
         colorspace::to_srgb_inplace(rgb, (size_t)w * h, gamut,
                                     is_linear.value_or(false));
+        img.gain = colorspace::exposure_gain_srgb8(exposure, rgb, (size_t)w, (size_t)h);
+        if (img.gain != 1.0f) {
+            if (want_color) plain.assign(rgb, rgb + n);
+            colorspace::expose_srgb8_inplace(rgb, n, img.gain);
+        }
     }
 
-    GrayImage img;
     img.orig_width = w;
     img.orig_height = h;
 
@@ -185,6 +197,9 @@ GrayImage loadGrayImage(const std::string& path, int max_image_size, bool want_c
     if (want_color) {
         img.rgb = (dw == w && dh == h) ? std::vector<uint8_t>(rgb, rgb + (size_t)w * h * 3)
                                        : downscaleRgb(rgb, w, h, dw, dh);
+        if (!plain.empty())
+            img.color = (dw == w && dh == h) ? std::move(plain)
+                                             : downscaleRgb(plain.data(), w, h, dw, dh);
     }
     if (dw == w && dh == h) {
         img.data.resize((size_t)w * h);

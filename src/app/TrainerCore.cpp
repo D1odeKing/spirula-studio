@@ -11,7 +11,7 @@
 #include "checkpoint/SplatPly.h"
 #include "config/TrainConfigJson.h"
 #include "core/ColorSpace.h"
-#include "core/ExrImage.h"
+#include "core/ImageFile.h"
 #include "i18n/catalog/Log.h"
 #include "data/CameraMath.h"
 #include "data/ImageProbe.h"
@@ -889,21 +889,25 @@ void TrainerSession::load_dataset() {
         log(lfmt(lmsg::scene_centered, {ds.center_mode, xyz}));
     }
 
-    // An EXR carries its own colour space, and nothing downstream can recover
-    // it: DataManager hands the engine the file's raw scene-linear floats. The
-    // two halves are adopted independently, so declaring one keeps the other.
-    exr::Info exr_info;
+    // An EXR's header or a TIFF's ICC profile: nothing downstream can recover
+    // it, since DataManager hands the engine the raw samples. The halves are
+    // adopted independently, so declaring one keeps the other.
+    imagefile::DeclaredColor declared;
     if (!ds.image_filenames.empty() &&
-        exr::declared_color_space(ds.image_filenames.front(), exr_info)) {
+        imagefile::declared_color_space(ds.image_filenames.front(), declared)) {
         const bool take_gamut = cfg.image_color_gamut.empty();
         const bool take_linear = !cfg.image_color_is_linear.has_value();
-        if (take_gamut) cfg.image_color_gamut = exr_info.gamut;
-        if (take_linear) cfg.image_color_is_linear = exr_info.is_linear;
+        if (take_gamut) cfg.image_color_gamut = declared.gamut;
+        if (take_linear) cfg.image_color_is_linear = declared.is_linear;
         const std::string name =
             cfg.image_color_gamut.empty() ? "Rec.709" : cfg.image_color_gamut;
-        if (take_linear)     log(lfmt(lmsg::exr_color_space, {name}));
-        else if (take_gamut) log(lfmt(lmsg::exr_gamut_from_file, {name}));
-        if (take_gamut && !exr_info.gamut_known) log(lmsg::exr_gamut_unknown.get());
+        if (take_linear)
+            log(lfmt(declared.is_linear ? lmsg::file_color_linear : lmsg::file_color_display,
+                     {declared.format, name}));
+        else if (take_gamut)
+            log(lfmt(lmsg::file_gamut_from_file, {declared.format, name}));
+        if (take_gamut && !declared.gamut_known)
+            log(lfmt(lmsg::file_gamut_unknown, {declared.format}));
     }
 
     // Scale both cloud and cameras before baking view matrices.

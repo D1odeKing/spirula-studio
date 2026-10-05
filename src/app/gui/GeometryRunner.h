@@ -41,6 +41,7 @@ struct GeometryJob {
     // The dataset's colour space; frames convert to sRGB before inference.
     std::string image_gamut;
     std::optional<bool> image_is_linear;
+    std::string image_exposure;
 };
 
 // One checkpoint the screen offers, MoGe's three first and each family's

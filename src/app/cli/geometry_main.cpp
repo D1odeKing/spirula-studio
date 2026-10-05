@@ -72,7 +72,8 @@ struct Options {
     bool overwrite = false;
     // The dataset's colour space; frames convert to sRGB before inference.
     std::string image_gamut;
-    std::optional<bool> image_is_linear;   // unset: an EXR's own header decides
+    std::optional<bool> image_is_linear;   // unset: the file's own declaration
+    colorspace::Exposure image_exposure;
 };
 
 void help_row(const char* flags, const spirula::i18n::Msg& m, int col = 26) {
@@ -109,6 +110,7 @@ void usage() {
     help_row("--overwrite", G::opt_overwrite);
     help_row("--image-gamut <name>", G::opt_image_gamut);
     help_row("--image-linear / --no-image-linear", G::opt_image_linear);
+    help_row("--image-exposure auto|<stops>", G::opt_image_exposure);
     // English, like the other deep diagnostics in this repository: what it
     // prints is a table of numerical errors, read by whoever changed the warp.
     std::fprintf(stderr, "    --check                   "
@@ -570,6 +572,9 @@ int spirula_geometry_main(int argc, char** argv) {
         else if (a == "--image-gamut") o.image_gamut = next();
         else if (a == "--image-linear") o.image_is_linear = true;
         else if (a == "--no-image-linear") o.image_is_linear = false;
+        else if (a == "--image-exposure") {
+            if (!colorspace::parse_exposure(next(), o.image_exposure)) { usage(); return 2; }
+        }
         else if (a == "--device") { device = next(); device_set = true; }
         else if (!a.empty() && a[0] == '-') {
             std::fprintf(stderr, "unknown option '%s'\n\n", a.c_str());
@@ -756,8 +761,9 @@ int spirula_geometry_main(int argc, char** argv) {
             const int64_t i = todo[j].i;
             return std::async(std::launch::async, [&, i] {
                 const app::GeometryWarp& warp = warps[(size_t)group[(size_t)i]];
-                const nn::Image img = nn::load_image(ds.image_filenames[(size_t)i],
-                                                     o.image_gamut, o.image_is_linear);
+                const nn::Image img =
+                    nn::load_image(ds.image_filenames[(size_t)i], o.image_gamut,
+                                   o.image_is_linear, o.image_exposure);
                 if (img.empty()) return std::vector<float>();
                 return app::resize_area(img.data.data(), img.width, img.height,
                                         img.channels, warp.sampleWidth(),

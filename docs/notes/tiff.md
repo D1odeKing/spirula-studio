@@ -45,10 +45,33 @@ than its file could hold is refused before anything is allocated.
 
 ## Colour space and metadata
 
-A TIFF's colour space lives in an ICC profile, which is not read. Every reader
-therefore treats a TIFF like a PNG: display-encoded Rec.709 unless the run says
-otherwise (`--image-color-is-linear`, `--image-color-gamut`, and the SfM / SAM /
-geometry equivalents). A float TIFF from a linear HDR merge needs
+A TIFF's colour space lives in its ICC profile (tag 34675), which
+`core/IccProfile.h` reads when it is a **matrix/TRC** profile -- three colorants
+and a curve per channel, or a grey curve -- which is what raw developers and
+Photoshop write for RGB working spaces. Two facts come out of it:
+
+- **Gamut.** The colorants are compared, within 0.003, against each gamut in
+  `core/ColorSpace.h` Bradford-adapted to the ICC's D50 white (and, for older
+  profiles that skip the adaptation, unadapted). An unmatched set -- Display
+  P3, ProPhoto -- leaves `gamut_known` false and falls back to Rec.709, as an
+  EXR's unknown chromaticities do.
+- **Linearity.** The curves (`curv` table or gamma, `para` types 0-4) are
+  linear when each is within 0.01 of the identity at 0.05 ... 0.95.
+
+The result is `tiff::Info::{icc, gamut, is_linear, gamut_known}`, and it is
+adopted exactly as an EXR's header is (`imagefile::declared_color_space`): the
+trainer, `spirula sfm` and the dataset screen fill whichever half the run left
+unset, and `decode_srgb8` falls back to it. A TIFF without a profile -- or with
+a LUT-based one -- is still treated like a PNG: display-encoded Rec.709.
+
+Lightroom Classic's "Rec. 2020" export (issue #127) is the case this was built
+for: 16-bit, colorants that match Rec.2020, and a BT.709 curve (`para` type 3,
+γ 2.22 with a linear toe). It reads as **display-encoded** Rec.2020, not linear
+-- passing `--image-linear` for it double-encodes the pixels. Display-encoded
+pixels are decoded with the sRGB curve whatever the profile's own curve is;
+BT.709's differs from it mostly in the deep shadows.
+
+A float TIFF from a linear HDR merge that carries no profile still needs
 `--image-color-is-linear true`; values above 1 reach the trainer unclipped
 either way.
 

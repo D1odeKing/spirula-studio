@@ -135,8 +135,8 @@ SS_MSG(input_is_linear,
     RU("Кодировка света на входе"),
     TR("Girdi ışık kodlaması"));
 
-// Item 0 of BOTH colour-space pickers: an EXR declares its own, and this is
-// what says "do not override it".
+// Item 0 of BOTH colour-space pickers: an EXR or a TIFF with an ICC profile
+// declares its own, and this is what says "do not override it".
 SS_MSG(space_from_file,
     EN("From the file"), JA("ファイルから"), ZH_HANS("取自文件"),
     ZH_HANT("取自檔案"), KO("파일에서"), DE("Aus der Datei"),
@@ -159,41 +159,137 @@ SS_MSG(transfer_display,
 
 SS_MSG(input_is_linear_help,
     EN("Whether the pictures hold scene-linear light (EXR, linear 16-bit) or "
-       "ordinary display-encoded values. Read from an EXR's own header unless "
-       "you set it here."),
+       "ordinary display-encoded values. Read from an EXR's header or a TIFF's "
+       "ICC profile unless you set it here."),
     JA("写真がシーンリニアの光（EXR、リニア 16 ビット）か、通常の表示用に"
-       "エンコードされた値かです。ここで設定しない限り、EXR のヘッダーから"
-       "読み取ります。"),
+       "エンコードされた値かです。ここで設定しない限り、EXR のヘッダーや TIFF の"
+       " ICC プロファイルから読み取ります。"),
     ZH_HANS("照片存的是场景线性光（EXR、线性 16 位），还是普通的显示编码数值。"
-            "除非在此设置，否则取自 EXR 自己的文件头。"),
+            "除非在此设置，否则取自 EXR 的文件头或 TIFF 的 ICC 配置文件。"),
     ZH_HANT("照片存的是場景線性光（EXR、線性 16 位元），還是普通的顯示編碼數值。"
-            "除非在此設定，否則取自 EXR 自己的檔頭。"),
+            "除非在此設定，否則取自 EXR 的檔頭或 TIFF 的 ICC 設定檔。"),
     KO("사진이 장면 선형 광(EXR, 선형 16비트)인지 보통의 디스플레이 인코딩 "
-       "값인지입니다. 여기서 설정하지 않으면 EXR 헤더에서 읽습니다."),
+       "값인지입니다. 여기서 설정하지 않으면 EXR 헤더나 TIFF 의 ICC "
+       "프로파일에서 읽습니다."),
     DE("Ob die Bilder szenenlineares Licht (EXR, lineare 16 Bit) oder gewöhnliche "
-       "anzeigecodierte Werte enthalten. Wird aus dem Kopf einer EXR gelesen, "
-       "solange Sie es hier nicht setzen."),
+       "anzeigecodierte Werte enthalten. Wird aus dem Kopf einer EXR oder dem "
+       "ICC-Profil einer TIFF gelesen, solange Sie es hier nicht setzen."),
     FR("Si les images contiennent de la lumière scène-linéaire (EXR, 16 bits "
        "linéaire) ou des valeurs encodées pour l'affichage. Lu dans l'en-tête "
-       "d'un EXR tant que vous ne le réglez pas ici."),
+       "d'un EXR ou le profil ICC d'un TIFF tant que vous ne le réglez pas ici."),
     ES("Si las fotos guardan luz escena-lineal (EXR, 16 bits lineal) o valores "
        "corrientes codificados para pantalla. Se lee de la cabecera de un EXR "
-       "mientras no lo fije aquí."),
+       "o del perfil ICC de un TIFF mientras no lo fije aquí."),
     PT("Se as fotos guardam luz cena-linear (EXR, 16 bits linear) ou valores "
-       "comuns codificados para exibição. Lido do cabeçalho de um EXR enquanto "
-       "não o definir aqui."),
+       "comuns codificados para exibição. Lido do cabeçalho de um EXR ou do "
+       "perfil ICC de um TIFF enquanto não o definir aqui."),
     IT("Se le foto contengono luce scena-lineare (EXR, 16 bit lineare) o comuni "
        "valori codificati per la visualizzazione. Letto dall'intestazione di un "
-       "EXR finché non lo imposti qui."),
+       "EXR o dal profilo ICC di un TIFF finché non lo imposti qui."),
     NL("Of de foto's scène-lineair licht (EXR, lineair 16-bits) bevatten of "
        "gewone voor weergave gecodeerde waarden. Wordt uit de kop van een EXR "
-       "gelezen zolang u het hier niet instelt."),
+       "of het ICC-profiel van een TIFF gelezen zolang u het hier niet instelt."),
     RU("Хранят ли снимки сцен-линейный свет (EXR, линейные 16 бит) или обычные "
-       "значения с кодировкой для дисплея. Читается из заголовка EXR, пока вы не "
-       "зададите это здесь."),
+       "значения с кодировкой для дисплея. Читается из заголовка EXR или "
+       "ICC-профиля TIFF, пока вы не зададите это здесь."),
     TR("Fotoğrafların sahne-doğrusal ışık (EXR, doğrusal 16 bit) mi yoksa "
        "sıradan ekran için kodlanmış değerler mi tuttuğu. Burada ayarlamadığınız "
-       "sürece bir EXR'nin başlığından okunur."));
+       "sürece bir EXR'nin başlığından ya da bir TIFF'in ICC profilinden okunur."));
+
+// What reconstruction, masking and geometry see, never what training reads
+// (--image-exposure). Item 2 opens a number of stops.
+SS_MSG(input_exposure,
+    EN("Exposure for analysis"), JA("解析用の露出"), ZH_HANS("分析用曝光"),
+    ZH_HANT("分析用曝光"), KO("분석용 노출"), DE("Belichtung für die Analyse"),
+    FR("Exposition pour l'analyse"), ES("Exposición para el análisis"),
+    PT("Exposição para a análise"), IT("Esposizione per l'analisi"),
+    NL("Belichting voor analyse"), RU("Экспозиция для анализа"),
+    TR("Analiz için pozlama"));
+
+SS_MSG(exposure_as_stored,
+    EN("As stored"), JA("ファイルのまま"), ZH_HANS("保持原样"), ZH_HANT("保持原樣"),
+    KO("저장된 그대로"), DE("Wie gespeichert"), FR("Telle quelle"), ES("Tal cual"),
+    PT("Como está"), IT("Così com'è"), NL("Zoals opgeslagen"), RU("Как есть"),
+    TR("Olduğu gibi"));
+
+SS_MSG(exposure_auto,
+    EN("Auto"), JA("自動"), ZH_HANS("自动"), ZH_HANT("自動"), KO("자동"),
+    DE("Automatisch"), FR("Automatique"), ES("Automática"), PT("Automática"),
+    IT("Automatica"), NL("Automatisch"), RU("Авто"), TR("Otomatik"));
+
+SS_MSG(exposure_fixed,
+    EN("Fixed"), JA("固定"), ZH_HANS("固定"), ZH_HANT("固定"), KO("고정"),
+    DE("Fest"), FR("Fixe"), ES("Fija"), PT("Fixa"), IT("Fissa"), NL("Vast"),
+    RU("Фиксированная"), TR("Sabit"));
+
+SS_MSG(input_exposure_stops,
+    EN("Stops"), JA("段数"), ZH_HANS("档数"), ZH_HANT("檔數"), KO("스톱"),
+    DE("Blendenstufen"), FR("Diaphs"), ES("Pasos"), PT("Pontos"), IT("Stop"),
+    NL("Stops"), RU("Ступени"), TR("Durak"));
+
+SS_MSG(input_exposure_help,
+    EN("Brightens what reconstruction, AI masking and depth/normal estimation "
+       "see, in linear light, without changing the files or what training reads. "
+       "Auto lifts each picture darker than a typical photograph -- raw exports "
+       "pulled down to keep their highlights. Point cloud colours keep the files' "
+       "own values."),
+    JA("再構成・AI マスキング・深度/法線推定に渡す画像を、ファイルや学習が読む値は"
+       "変えずにリニア光で明るくします。自動は一般的な写真より暗い画像をそれぞれ"
+       "持ち上げます（ハイライトを残すために暗く書き出した RAW 現像など）。点群の"
+       "色はファイル本来の値のままです。"),
+    ZH_HANS("在线性光中调亮重建、AI 遮罩与深度/法线估计所看到的图像，不改动文件，"
+            "也不改变训练读取的数值。自动会提亮比普通照片暗的每张图像——例如为保留"
+            "高光而压暗导出的 RAW。点云颜色保持文件原值。"),
+    ZH_HANT("在線性光中調亮重建、AI 遮罩與深度/法線估計所看到的影像，不改動檔案，"
+            "也不改變訓練讀取的數值。自動會提亮比一般照片暗的每張影像——例如為保留"
+            "高光而壓暗匯出的 RAW。點雲顏色維持檔案原值。"),
+    KO("재구성, AI 마스킹, 깊이/법선 추정이 보는 이미지를 선형 광에서 밝게 하며, "
+       "파일이나 학습이 읽는 값은 바꾸지 않습니다. 자동은 일반 사진보다 어두운 "
+       "이미지를 각각 끌어올립니다(하이라이트를 지키려고 어둡게 내보낸 RAW 등). "
+       "점 구름 색은 파일 본래 값을 유지합니다."),
+    DE("Hellt in linearem Licht auf, was Rekonstruktion, KI-Maskierung und "
+       "Tiefen-/Normalenschätzung sehen, ohne die Dateien oder das, was das "
+       "Training liest, zu ändern. Automatisch hebt jedes Bild an, das dunkler als "
+       "ein typisches Foto ist -- etwa RAW-Exporte, die für die Lichter "
+       "abgedunkelt wurden. Punktwolkenfarben behalten die Werte der Dateien."),
+    FR("Éclaircit en lumière linéaire ce que voient la reconstruction, le masquage "
+       "par IA et l'estimation de profondeur/normales, sans changer les fichiers "
+       "ni ce que lit l'entraînement. Automatique relève chaque image plus sombre "
+       "qu'une photo typique -- des exports RAW assombris pour garder les hautes "
+       "lumières. Les couleurs du nuage de points gardent les valeurs des "
+       "fichiers."),
+    ES("Aclara en luz lineal lo que ven la reconstrucción, el enmascarado por IA "
+       "y la estimación de profundidad/normales, sin cambiar los archivos ni lo "
+       "que lee el entrenamiento. Automática levanta cada imagen más oscura que "
+       "una foto típica -- exportaciones RAW oscurecidas para conservar las "
+       "luces. Los colores de la nube de puntos conservan los valores de los "
+       "archivos."),
+    PT("Clareia em luz linear o que a reconstrução, o mascaramento por IA e a "
+       "estimativa de profundidade/normais veem, sem mudar os arquivos nem o que "
+       "o treino lê. Automática ergue cada imagem mais escura que uma foto típica "
+       "-- exportações RAW escurecidas para manter os realces. As cores da nuvem "
+       "de pontos mantêm os valores dos arquivos."),
+    IT("Schiarisce in luce lineare ciò che vedono ricostruzione, mascheratura con "
+       "IA e stima di profondità/normali, senza cambiare i file né ciò che legge "
+       "l'addestramento. Automatica solleva ogni immagine più scura di una foto "
+       "tipica -- esportazioni RAW scurite per salvare le alte luci. I colori "
+       "della nuvola di punti mantengono i valori dei file."),
+    NL("Maakt in lineair licht lichter wat reconstructie, AI-maskering en "
+       "diepte-/normaalschatting zien, zonder de bestanden of wat de training "
+       "leest te veranderen. Automatisch tilt elk beeld op dat donkerder is dan "
+       "een gewone foto -- RAW-exports die donkerder zijn gemaakt om de "
+       "hooglichten te sparen. Puntenwolkkleuren houden de waarden van de "
+       "bestanden."),
+    RU("Осветляет в линейном свете то, что видят реконструкция, ИИ-маскирование "
+       "и оценка глубины/нормалей, не меняя файлы и то, что читает обучение. "
+       "Авто поднимает каждое изображение темнее обычной фотографии — например, "
+       "RAW, выгруженные темнее ради светов. Цвета облака точек сохраняют "
+       "значения файлов."),
+    TR("Yeniden oluşturmanın, yapay zekâ maskelemenin ve derinlik/normal "
+       "kestiriminin gördüğünü, dosyaları ya da eğitimin okuduğunu değiştirmeden "
+       "doğrusal ışıkta aydınlatır. Otomatik, tipik bir fotoğraftan koyu olan her "
+       "görüntüyü yükseltir -- parlak alanları korumak için koyu dışa aktarılmış "
+       "RAW'lar gibi. Nokta bulutu renkleri dosyaların kendi değerlerini korur."));
 
 SS_MSG(point_color_image_space,
     EN("Point cloud colours in the input colour space"),
@@ -12238,23 +12334,45 @@ SS_MSG(license_no_browser,
 // Log lines this screen writes
 // ===========================================================================
 
-// The pictures are EXRs, so the colour space under Advanced was filled in from
-// their header; {0} is the gamut it found.
-SS_MSG(log_exr_color_space,
-    EN("These are EXR images: reading them as linear {0}, from the file."),
-    JA("EXR 画像です。ファイルの情報に従い、線形 {0} として読み込みます。"),
-    ZH_HANS("这些是 EXR 图像：按文件所记录的线性 {0} 读取。"),
-    ZH_HANT("這些是 EXR 影像：依檔案所記錄的線性 {0} 讀取。"),
-    KO("EXR 이미지입니다. 파일에 기록된 대로 선형 {0}(으)로 읽습니다."),
-    DE("Das sind EXR-Bilder: Sie werden laut Datei als lineares {0} gelesen."),
-    FR("Ce sont des images EXR : elles sont lues comme {0} linéaire, "
+// The pictures declare their colour space (an EXR's header, a TIFF's ICC
+// profile), so the one under Advanced was filled in from it; {0} is the
+// format, {1} the gamut it found.
+SS_MSG(log_file_color_linear,
+    EN("These are {0} images: reading them as linear {1}, from the file."),
+    JA("{0} 画像です。ファイルの情報に従い、線形 {1} として読み込みます。"),
+    ZH_HANS("这些是 {0} 图像：按文件所记录的线性 {1} 读取。"),
+    ZH_HANT("這些是 {0} 影像：依檔案所記錄的線性 {1} 讀取。"),
+    KO("{0} 이미지입니다. 파일에 기록된 대로 선형 {1}(으)로 읽습니다."),
+    DE("Das sind {0}-Bilder: Sie werden laut Datei als lineares {1} gelesen."),
+    FR("Ce sont des images {0} : elles sont lues comme {1} linéaire, "
        "d'après le fichier."),
-    ES("Son imágenes EXR: se leen como {0} lineal, según el archivo."),
-    PT("São imagens EXR: lidas como {0} linear, conforme o arquivo."),
-    IT("Sono immagini EXR: vengono lette come {0} lineare, dal file."),
-    NL("Dit zijn EXR-beelden: ze worden gelezen als lineair {0}, uit het bestand."),
-    RU("Это снимки EXR: они читаются как линейный {0}, по данным файла."),
-    TR("Bunlar EXR görüntüleri: dosyaya göre doğrusal {0} olarak okunuyor."));
+    ES("Son imágenes {0}: se leen como {1} lineal, según el archivo."),
+    PT("São imagens {0}: lidas como {1} linear, conforme o arquivo."),
+    IT("Sono immagini {0}: vengono lette come {1} lineare, dal file."),
+    NL("Dit zijn {0}-beelden: ze worden gelezen als lineair {1}, uit het bestand."),
+    RU("Это снимки {0}: они читаются как линейный {1}, по данным файла."),
+    TR("Bunlar {0} görüntüleri: dosyaya göre doğrusal {1} olarak okunuyor."));
+
+SS_MSG(log_file_color_display,
+    EN("These are {0} images: reading them as display-encoded {1}, from the file."),
+    JA("{0} 画像です。ファイルの情報に従い、表示用エンコードの {1} として読み込みます。"),
+    ZH_HANS("这些是 {0} 图像：按文件所记录的显示编码 {1} 读取。"),
+    ZH_HANT("這些是 {0} 影像：依檔案所記錄的顯示編碼 {1} 讀取。"),
+    KO("{0} 이미지입니다. 파일에 기록된 대로 디스플레이 인코딩된 {1}(으)로 읽습니다."),
+    DE("Das sind {0}-Bilder: Sie werden laut Datei als anzeigecodiertes {1} gelesen."),
+    FR("Ce sont des images {0} : elles sont lues comme {1} encodé pour "
+       "l'affichage, d'après le fichier."),
+    ES("Son imágenes {0}: se leen como {1} codificado para pantalla, según el "
+       "archivo."),
+    PT("São imagens {0}: lidas como {1} codificado para exibição, conforme o "
+       "arquivo."),
+    IT("Sono immagini {0}: vengono lette come {1} codificato per lo schermo, "
+       "dal file."),
+    NL("Dit zijn {0}-beelden: ze worden gelezen als weergavegecodeerd {1}, uit "
+       "het bestand."),
+    RU("Это снимки {0}: они читаются как экранно закодированный {1}, по данным "
+       "файла."),
+    TR("Bunlar {0} görüntüleri: dosyaya göre ekran kodlu {1} olarak okunuyor."));
 
 SS_MSG(log_masks_attached,
     EN("Using {0} as the masks for the images beside it."),

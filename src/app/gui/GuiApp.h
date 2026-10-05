@@ -23,6 +23,7 @@
 #include "app/gui/PairPreview.h"
 #include "app/gui/SfmProgress.h"
 #include "app/gui/Layout.h"
+#include "app/gui/LidarStep.h"
 #include "app/gui/MeshRunner.h"
 #include "app/gui/ModelCache.h"
 #include "app/gui/RecentList.h"
@@ -35,13 +36,15 @@
 #include "app/gui/TrainPreset.h"
 #include "app/gui/TrainRunner.h"
 #include "app/gui/ViewportPanel.h"
+#include "data/PointCloudFile.h"
 
+#include <atomic>
 #include <cstdint>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <map>
-#include <atomic>
 #include <string>
 #include <thread>
 #include <utility>
@@ -118,7 +121,7 @@ private:
         MeshSource, MeshPhotos, MeshOutput, AddSplatFile, SplatFolder,
         EditSaveFile, EditSaveFolder, RenderProjectSave, RenderProjectOpen,
         RenderOutput, RenderAddModel, StencilFile, SeedPointcloud,
-        ConfigPath
+        ConfigPath, LidarSource
     };
     // Which reconstruction back end the New Dataset screen runs.
     enum class Engine { BuiltIn, Colmap };
@@ -312,6 +315,10 @@ private:
     // find them. `detector_id` is ignored for an entry that takes none.
     void request_model_download(const std::string& id, const std::string& detector_id);
     bool mask_model_missing() const;
+    bool mask_model_missing(bool enable, const std::vector<PrepInput>& inputs) const;
+    // What is missing and the button that fetches it, or its download's bar.
+    void draw_model_fetch(FileDownload& dl, const spirula::i18n::Msg& missing,
+                          const spirula::i18n::Msg& get, const std::function<void()>& request);
     bool license_accepted(const std::string& family) const;
 
     // ---- screens ----
@@ -353,7 +360,23 @@ private:
     // path (an image header, or one `ffmpeg -i`) and remembered.
     bool input_pixel_size(const std::string& path, bool is_video,
                           int& w, int& h);
-    void draw_masking_options();
+    // What the masking options edit: the inputs and switches it is handed.
+    struct MaskingPanel {
+        std::vector<PrepInput>* inputs = nullptr;
+        bool* enable = nullptr;
+        bool* border = nullptr;
+        bool* features = nullptr;       // null: no reconstruction to keep them from
+        int* preview_input = nullptr;
+        std::string* frame_shapes = nullptr;
+        bool fit_lens_border = true;    // ticking the stencil fits a fisheye rim
+        bool preview_ready = true;      // frames to try the mask on
+        const spirula::i18n::Msg* preview_wait = nullptr;   // why not, when not
+        std::function<void()> open_preview;
+    };
+    MaskingPanel dataset_masking_panel();
+    void draw_masking_options(const MaskingPanel& p);
+    // The job's mask_* fields from the shared settings; `mask_enable` excepted.
+    void fill_masking(PrepJob& prep) const;
     void draw_geometry_options();
     // Opens the geometry preview on the output folder when it already holds a
     // reconstruction -- the only case where the real cameras are known -- and
@@ -414,6 +437,7 @@ private:
     // folder itself the output, so the run adds to it instead of building a
     // copy beside it.
     void add_existing_dataset(const std::string& dir);
+    void add_dataset_folder(const std::string& dir);
     // Every option back to what a freshly picked input would have given it.
     // The inputs, the output folder and the mask prompt are not options.
     void reset_recon_options();
@@ -443,6 +467,27 @@ private:
     // the picker, the drop handler and the "mesh this run" shortcut.
     void set_mesh_source(const std::string& path);
     void start_meshing();
+    // LiDAR scans on the dataset screen (LidarSources.cpp): rows laid out as
+    // the inputs' above them, and the switches a run with them has.
+    void draw_lidar_rows(float path_w, bool one_line);
+    void draw_lidar_options();
+    void add_lidar_sources(const std::vector<std::string>& paths);
+    void replace_lidar_source(size_t i, const std::string& path);
+    void clear_lidar_sources();
+    // An XGRIDS export picked as a dataset: its fisheye model, its LAS, its
+    // masks the other way round. False when `dir` is no such export.
+    bool add_xgrids_export(const std::string& dir);
+    // E57 / LAS / LAZ by name; a PLY says in its header, and is a scan where
+    // a dataset is being put together and something to look at elsewhere.
+    static bool is_lidar_drop(const std::string& path);
+    std::vector<std::string> raw_inputs(const std::vector<std::string>& paths);
+    static bool ply_is_point_cloud(const std::string& path);
+    // The scans' photographs are the only images and could keep their poses.
+    bool scanner_poses_offered() const;
+    LidarJob lidar_job() const;
+    // The input list emptied for a different capture, with what was decided
+    // about it; the scans stay.
+    void clear_sources();
     // Would the run about to start actually get cameras? Resolves the dataset
     // the way the child does -- the folder typed here, else the `data` entry
     // in the run's config.json -- so the screen can warn BEFORE the run that
@@ -545,7 +590,7 @@ private:
     bool any_found_masks() const;
     // Adopt the EXR colour space when the pictures are EXRs, unless the user
     // has already set one by hand.
-    void adopt_exr_color_space();
+    void adopt_file_color_space();
     void run_pending_if_stopped();
     void append_logs();
     void log(const std::string& s, bool detail = false);
@@ -601,7 +646,7 @@ private:
     std::string _pending_path;       // dataset dir for Pending::OpenDataset
     bool _pending_batch_skip = false;  // Pending::StartBatch's argument
     bool _parse_dirty = false;       // dataparser option edited -> reload
-    bool _color_space_touched = false;  // see adopt_exr_color_space
+    bool _color_space_touched = false;  // see adopt_file_color_space
 
     // ---- the one frozen native GPU choice ----
     // Typed request, including explicit Auto; frozen flag makes it immutable.
@@ -689,6 +734,21 @@ private:
     // and what it answered.
     std::string _mesh_data_probe_key;
     bool _mesh_data_probe_found = false;
+
+    // ---- laser scans the dataset is aligned with (LidarSources.cpp) ----
+    struct LidarInput {
+        std::string path;
+        std::string edit;             // the path box, until it is committed
+        int64_t points = 0;           // as the header declares
+        int64_t photos = 0;           // images an E57 carries with poses
+        std::vector<spirula::cloud::Station> stations;
+    };
+    bool read_lidar_input(const std::string& path, LidarInput& in);
+    std::vector<LidarInput> _lidar;
+    int _pick_lidar = -1;             // the row a Browse... replaces; -1 adds
+    bool _lidar_photos = true;        // the scans' photographs join the reconstruction
+    bool _lidar_in_frame = false;     // the model is already in the scans' frame
+    bool _lidar_keep_poses = true;    // ... or are all there is: no reconstruction
 
     // Dataset creation. Both runners exist; only one runs, chosen by _engine
     // (and forced when only one is available).
@@ -787,7 +847,8 @@ private:
     // once the panel edits what it drew, since the name no longer says what is.
     std::string _frame_shapes;
     std::vector<StencilPreset> _frame_shapes_list;   // read when the picker opens
-    void apply_frame_shapes(size_t first_input = 0);
+    void apply_frame_shapes(std::vector<PrepInput>& inputs, std::string& preset,
+                            size_t first_input = 0);
     void save_run_stencils();
     MaskSettings _mask;
     SegmentPanel _segment;

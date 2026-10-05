@@ -26,6 +26,7 @@
 #endif
 #include "app/gui/FilmReel.h"
 #include "app/gui/GeometryRunner.h"
+#include "app/gui/LidarStep.h"
 #include "app/gui/PrepProgress.h"
 #include "i18n/catalog/Dataset.h"
 
@@ -111,6 +112,8 @@ struct SfmJob {
     // ... and so is this: the depth and normal maps are written after the
     // reconstruction, from the dataset it produced, whichever engine made it.
     GeometryJob geometry;
+    // Laser scans the model is aligned with; they replace the geometry step.
+    LidarJob lidar;
 
     // ---- reconstruction ----
     // What the user asked to redo or keep; the plan (DatasetPlan.h) decides
@@ -195,6 +198,9 @@ struct SfmJob {
     // what those detectors and models were trained on. Empty = Rec.709/sRGB.
     std::string image_gamut;
     std::optional<bool> image_is_linear;
+    // What the detectors and models see, brightened in linear light: "", "auto"
+    // or stops (core/ColorSpace.h). Training reads the files as they are.
+    std::string image_exposure;
     // false: the sparse point cloud stays sRGB (train with point-color-gamut
     // Rec.709). true: written in the images' space, the trainer's default.
     bool point_color_in_image_space = false;
