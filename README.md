@@ -171,15 +171,10 @@ Collection of splats created by the users of Spirula Studio can also be found on
 
 Some splats created by the author of Spirula Studio can also be found on my [SuperSplat page](https://superspl.at/user?id=harry7557558).
 
-<!-- ![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/643dadb5/v1/m.webp)&nbsp;
-![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/ed448729/v1/m.webp)&nbsp;
-![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/05e46a4b/v1/m.webp)&nbsp;
-![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/9dd8696b/v1/m.webp)&nbsp;
-![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/0bcb61c6/v1/m.webp)&nbsp;
-![](https://s3-eu-west-1.amazonaws.com/images.playcanvas.com/splat/cdd6f9a2/v1/m.webp)&nbsp; -->
-
 ## Trivia
 
 Spirula Studio (formerly spirulae-splat) is named after the now-inactive project [spirulae](https://github.com/harry7557558/spirulae), which was named after the [deep-ocean cephalopod mollusk](https://en.wikipedia.org/wiki/Spirula).
 
 Spirula Studio is developed and maintained almost entirely by one person. Issues and PRs welcome &ndash; I sometimes respond late, but rest assured that I do review them all.
+
+<!-- If you want to sponsor Spirula Studio, you may use [GitHub sponsor](https://github.com/sponsors/harry7557558) for voluntary donation. For custom arrangements, please reach out to me. -->
