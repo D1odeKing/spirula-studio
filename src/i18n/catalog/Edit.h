@@ -1534,6 +1534,21 @@ SS_MSG(target_mesh_obj,
     RU("Wavefront OBJ"),
     TR("Wavefront OBJ"));
 
+SS_MSG(target_mesh_gltf,
+    EN("glTF JSON (GLTF)"),
+    JA("glTF JSON (GLTF)"),
+    ZH_HANS("glTF JSON (GLTF)"),
+    ZH_HANT("glTF JSON (GLTF)"),
+    KO("glTF JSON (GLTF)"),
+    DE("glTF JSON (GLTF)"),
+    FR("glTF JSON (GLTF)"),
+    ES("glTF JSON (GLTF)"),
+    PT("glTF JSON (GLTF)"),
+    IT("glTF JSON (GLTF)"),
+    NL("glTF JSON (GLTF)"),
+    RU("glTF JSON (GLTF)"),
+    TR("glTF JSON (GLTF)"));
+
 SS_MSG(target_mesh_glb,
     EN("glTF binary (GLB)"),
     JA("glTF バイナリ (GLB)"),

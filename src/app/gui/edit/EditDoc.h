@@ -236,8 +236,8 @@ public:
     // says whether to; 0 when the document has no siblings.
     virtual int linked_count() const { return 0; }
     virtual void set_linked(bool on) { (void)on; }
-    // What "Save" (as opposed to "Save a copy") would overwrite, "" when the
-    // document has no home to write back to.
+    // What "Save" (as opposed to "Save a copy") would overwrite in this
+    // target's format, "" when there is no such file to write back to.
     virtual std::string default_save_path(int target) const { (void)target; return {}; }
 
     const std::string& source_path() const { return _source; }

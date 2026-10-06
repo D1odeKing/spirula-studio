@@ -278,7 +278,9 @@ std::vector<SaveTarget> PointsDoc::save_targets() const {
 std::string PointsDoc::default_save_path(int target) const {
     const std::vector<SaveTarget> t = save_targets();
     if (target < 0 || target >= (int)t.size()) return {};
-    return t[(size_t)target].folder ? _dataset_dir : source_path();
+    if (t[(size_t)target].folder) return _dataset_dir;
+    // A dataset's source is its folder, which a PLY cannot be written over.
+    return source_path() == _dataset_dir ? std::string() : source_path();
 }
 
 void PointsDoc::save(int target, const std::string& path,

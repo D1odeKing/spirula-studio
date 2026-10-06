@@ -324,11 +324,22 @@ void MeshDoc::revert_display() {
 std::vector<SaveTarget> MeshDoc::save_targets() const {
     return {{&msg::target_mesh_ply, ".ply", false},
             {&msg::target_mesh_obj, ".obj", false},
+            {&msg::target_mesh_gltf, ".gltf", false},
             {&msg::target_mesh_glb, ".glb", false},
             {&msg::target_mesh_stl, ".stl", false}};
 }
 
-std::string MeshDoc::default_save_path(int) const { return source_path(); }
+// Case-sensitive, as mesh_output_strip_ext is: anything else and the write
+// lands beside the source instead of over it.
+std::string MeshDoc::default_save_path(int target) const {
+    const std::vector<SaveTarget> t = save_targets();
+    if (target < 0 || target >= (int)t.size()) return {};
+    const std::string& s = source_path();
+    const std::string& ext = t[(size_t)target].ext;
+    const bool same = s.size() > ext.size() &&
+                      s.compare(s.size() - ext.size(), ext.size(), ext) == 0;
+    return same ? s : std::string();
+}
 
 void MeshDoc::set_siblings(std::vector<std::string> paths) {
     _siblings.clear();
@@ -344,8 +355,8 @@ int MeshDoc::save_steps(int) const {
 
 void MeshDoc::save(int target, const std::string& path,
                    std::atomic<int>* progress) {
-    static const char* kFmt[] = {"ply", "obj", "glb", "stl"};
-    const int t = std::clamp(target, 0, 3);
+    const std::vector<SaveTarget> targets = save_targets();
+    const int t = std::clamp(target, 0, (int)targets.size() - 1);
     const std::vector<uint8_t>& keep = alive_of(0);
 
     // Drop the faces a deleted vertex took with it, then the vertices nothing
@@ -381,7 +392,8 @@ void MeshDoc::save(int target, const std::string& path,
         mode = meshing::MeshColorMode::Texture;
     else if (!out.C.empty())
         mode = meshing::MeshColorMode::Vertex;
-    const meshing::MeshFormatSpec spec = meshing::parse_one_mesh_format(kFmt[t]);
+    const meshing::MeshFormatSpec spec =
+        meshing::parse_one_mesh_format(targets[(size_t)t].ext);
     if (!meshing::check_export_support(spec, mode).empty()) {
         mode = out.C.empty() ? meshing::MeshColorMode::None
                              : meshing::MeshColorMode::Vertex;

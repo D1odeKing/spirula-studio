@@ -841,22 +841,31 @@ void CompareView::draw_toolbar() {
         EditDoc* d = _edit.doc();
         const int linked = d ? d->linked_count() : 0;
         if (linked > 0) ui::TextDisabledWrapped(emsg::mesh_link_edits_help);
+        // Waited for, so the pane reads back what was written; a save that
+        // failed keeps the editor open with its error.
+        auto save = [this, d, &finish] {
+            _edit.save_in_place();
+            _edit.wait_for_save();
+            if (d && d->dirty()) {
+                _discard_then = nullptr;
+                ImGui::CloseCurrentPopup();
+            } else {
+                finish();
+            }
+        };
         ImGui::BeginDisabled(!_edit.can_save_in_place());
         if (linked > 0) {
             if (ui::Button(emsg::save_this_only)) {
                 d->set_linked(false);
-                _edit.save_in_place();
-                finish();
+                save();
             }
             ImGui::SameLine();
             if (ui::Button(emsg::save_all_files, {(long long)(linked + 1)})) {
                 d->set_linked(true);
-                _edit.save_in_place();
-                finish();
+                save();
             }
         } else if (ui::Button(emsg::save_over)) {
-            _edit.save_in_place();
-            finish();
+            save();
         }
         ImGui::EndDisabled();
         if (linked == 0) ImGui::SameLine();
