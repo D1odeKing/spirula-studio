@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sfm/geometry/Linalg.h"
+#include "sfm/geometry/LinAlg.h"
 
 #include <cstdint>
 #include <functional>

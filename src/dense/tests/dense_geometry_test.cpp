@@ -169,9 +169,9 @@ void test_source_cameras() {
             check(refine_point(expected + Vec3{0.0002,-0.0001,0.0001}, observations, options, refined), "source refinement rejected");
             check((refined.position - expected).norm() < 1e-7, "source refinement did not converge");
             auto wrong = observations[1];
-            sfm::Vec2 near, far;
-            check(project(cameras[1],expected * 0.95,near) && project(cameras[1],expected * 1.05,far), "epipolar fixture not visible");
-            const auto tangent = pixel_residual(cameras[1],far,near);
+            sfm::Vec2 n, f;
+            check(project(cameras[1],expected * 0.95,n) && project(cameras[1],expected * 1.05,f), "epipolar fixture not visible");
+            const auto tangent = pixel_residual(cameras[1],f,n);
             const double length = std::hypot(tangent.x,tangent.y);
             check(length > 0, "epipolar fixture degenerate");
             wrong.pixel.x += -tangent.y / length * 2; wrong.pixel.y += tangent.x / length * 2;
@@ -267,9 +267,9 @@ void test_camera_matrix() {
     const Vec3 point{0.2, 0.1, 4};
     Observation a = observe(panorama, point), b = observe(photo, point);
     GeometryOptions options; options.max_reprojection_error = 1;
-    sfm::Vec2 near, far;
-    check(project(photo, point * 0.95, near) && project(photo, point * 1.05, far), "scale fixture not visible");
-    const auto tangent = pixel_residual(photo, far, near);
+    sfm::Vec2 n, f;
+    check(project(photo, point * 0.95, n) && project(photo, point * 1.05, f), "scale fixture not visible");
+    const auto tangent = pixel_residual(photo, f, n);
     const double length = std::hypot(tangent.x, tangent.y);
     auto shifted = b;
     shifted.pixel.x += -tangent.y / length * 0.8; shifted.pixel.y += tangent.x / length * 0.8;

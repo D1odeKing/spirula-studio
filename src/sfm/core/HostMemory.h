@@ -34,6 +34,17 @@ inline size_t availableRamBytes() {
     MEMORYSTATUSEX st{};
     st.dwLength = sizeof(st);
     if (GlobalMemoryStatusEx(&st)) return (size_t)st.ullAvailPhys;
+#elif defined(__linux__)
+    // Not sysconf(_SC_AVPHYS_PAGES): glibc answers MemFree, which leaves out the page cache.
+    if (FILE* file = std::fopen("/proc/meminfo", "r")) {
+        char line[128];
+        unsigned long long kb = 0;
+        bool found = false;
+        while (!found && std::fgets(line, sizeof line, file))
+            found = std::sscanf(line, "MemAvailable: %llu kB", &kb) == 1;
+        std::fclose(file);
+        if (found) return (size_t)kb * 1024;
+    }
 #elif defined(_SC_AVPHYS_PAGES) && defined(_SC_PAGESIZE)
     long pages = sysconf(_SC_AVPHYS_PAGES), page = sysconf(_SC_PAGESIZE);
     if (pages > 0 && page > 0) return (size_t)pages * (size_t)page;

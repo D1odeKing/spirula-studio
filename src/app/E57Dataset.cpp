@@ -73,9 +73,8 @@ uint64_t splitmix64(uint64_t x) {
 std::string file_stem(const e57::Image& im, size_t index, size_t count) {
     int width = 4;
     for (size_t n = count; n >= 10000; n /= 10) width++;
-    char head[32];
-    std::snprintf(head, sizeof head, "%0*zu", width, index);
-    std::string s = head;
+    std::string s = std::to_string(index);
+    if (s.size() < (size_t)width) s.insert(0, width - s.size(), '0');
     const std::string& name = im.name.empty() ? im.guid : im.name;
     if (!name.empty()) s += '_';
     for (char c : name) {

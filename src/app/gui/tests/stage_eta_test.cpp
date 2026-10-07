@@ -17,7 +17,7 @@ void expect(bool ok, const std::string& what) {
     if (!ok) g_failures++;
 }
 
-bool near(double a, double b) { return std::fabs(a - b) < 1e-6; }
+bool is_close(double a, double b) { return std::fabs(a - b) < 1e-6; }
 
 }  // namespace
 
@@ -28,12 +28,12 @@ int main() {
     eta.update(1.0, 1, 100);
     expect(eta.seconds() < 0, "unknown from two counts");
     eta.update(4.0, 4, 100);
-    expect(near(eta.seconds(), 96.0), "one item per second leaves 96 s");
+    expect(is_close(eta.seconds(), 96.0), "one item per second leaves 96 s");
 
     eta.update(5.0, 4, 100);
-    expect(near(eta.seconds(), 95.0), "time since the last count is subtracted");
+    expect(is_close(eta.seconds(), 95.0), "time since the last count is subtracted");
     eta.update(60.0, 4, 100);
-    expect(near(eta.seconds(), 95.0), "a stall subtracts at most one item, never reaching zero");
+    expect(is_close(eta.seconds(), 95.0), "a stall subtracts at most one item, never reaching zero");
 
     StageEta pace;
     for (int i = 0; i <= 50; ++i) pace.update(i * 0.1, i, 1000);        // cached pairs: 10 per second
@@ -43,13 +43,13 @@ int main() {
     pace.update(300.0, 3, 20);
     expect(pace.seconds() < 0, "a new total starts over");
     pace.update(301.0, 4, 20); pace.update(304.0, 7, 20);
-    expect(near(pace.seconds(), 13.0), "the new phase is estimated on its own");
+    expect(is_close(pace.seconds(), 13.0), "the new phase is estimated on its own");
     pace.update(305.0, 2, 20);
     expect(pace.seconds() < 0, "a count going back starts over");
 
     StageEta done;
     done.update(0.0, 0, 10); done.update(2.0, 5, 10); done.update(4.0, 10, 10);
-    expect(near(done.seconds(), 0.0), "finished reads zero");
+    expect(is_close(done.seconds(), 0.0), "finished reads zero");
 
     std::printf(g_failures ? "FAIL %d\n" : "PASS stage time-left estimate\n", g_failures);
     return g_failures ? 1 : 0;

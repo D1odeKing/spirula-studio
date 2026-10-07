@@ -1091,9 +1091,10 @@ public:
             sum = sum + (iy->second.xyz - ix->second.xyz);
             depth.push_back((ix->second.xyz - ca).norm());
         }
-        if (depth.size() < 5) return -1;
-        const double med = medianOf(depth);
-        return med > 0 ? (sum * (1.0 / (double)depth.size())).norm() / med : -1;
+        const size_t n = depth.size();
+        if (n < 5) return -1;
+        const double med = medianOf(std::move(depth));
+        return med > 0 ? (sum * (1.0 / (double)n)).norm() / med : -1;
     }
 
     // Fuse the points an open seam holds twice, then refine: the fused points are spared the
