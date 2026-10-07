@@ -80,7 +80,7 @@ inline Scene makeScene(int M, const std::vector<double>& roll_deg = {}, double b
             tv.image2 = j;
             tv.config = (int)TwoViewConfig::Uncalibrated;
             for (int p = 0; p < N; p++)
-                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
             if (tv.matches.size() >= 15) s.db.pairs.push_back(std::move(tv));
         }
     return s;

@@ -1057,6 +1057,57 @@ which now exists on both commands. And `auto` accepts every advanced flag
 tuned without decomposing it into three commands, and the GUI's editor has one
 command's worth of fields to show.
 
+## Memory on a large capture
+
+What grows with the capture, and what each costs, on a 4000-image
+dual-fisheye video (`--quality high`: 31.7M features, 225M verified matches,
+16M observations in the last bundle adjustment):
+
+- **Matching** reads descriptors where they lie: `loadFeatureDir` maps each
+  feature file (`FeatureSet::desc_map`) instead of copying 128 bytes a
+  feature into the heap, so they are page cache the OS can drop and read back
+  rather than 4 GB that has to fit; the matcher's device copy has its own
+  bound (`descriptor_budget_bytes`). Pair selection's shortlist pass scores a
+  block of rows at a time and keeps each image's best partners in a bounded
+  heap (`TopPartners`), `n x k` edges where it held all `n^2/2` pairs twice --
+  2 GB at 12k images, 8 GB at 24k. `matches.bin` comes out byte for byte the
+  same either way.
+- **Each verified match** costs 8 bytes in its pair's list (`FeatureMatch`
+  keeps no descriptor distance; only a matcher's own cap ever read one) and 8
+  in the correspondence graph (two one-word entries, `CorrespondenceGraph.h`),
+  where it cost 12 and 16. Past 256 MB each, both then leave the heap: the
+  pair lists and the graph are written to files in the workspace
+  (`.spirula-matches.spill`, `.spirula-graph-N.spill`) and mapped back
+  (`core/Spill.h`, `MatchList`, `CorrespondenceGraph::spill`). Neither is
+  written again, so while memory lasts the page cache holds them and nothing
+  slows down; when it does not, the OS reads pages back instead of the run
+  failing. On Linux the files are gone as soon as they are mapped; elsewhere
+  they go when the run ends.
+- **The mapper's undo snapshot** (`checkedRefine`) copies registered images
+  without their keypoints, and a model snapshot for output (`registeredCopy`)
+  never copies the unregistered images it would then drop.
+- **A device bundle adjustment** frees its ~55 bytes an observation of host
+  tables once they are uploaded; a fall to the host rebuilds them
+  (`ba/README.md`, "Watchdog").
+- **VRAM** is the bundle adjustment's: `ba/README.md`, "Buffers past 4 GB, and
+  compact Jacobians". Its Jacobians are split so no binding passes the
+  device's limit, which on NVIDIA used to corrupt every solve past a 4 GB
+  `Jc` silently, and are stored at fp32 when a solve would not otherwise fit.
+
+On that capture the mapping run's peak heap went from 11.4 GB to 5.1 GB
+(another 4 GB of mapped file pages are resident while memory is free) and VRAM
+stayed 7 GB; with the host-side changes alone, a 300-image subset of it writes
+a byte-identical model (`--ba-real cpu`, the deterministic path) in 1.07 GB
+where it took 1.27.
+
+Three times longer -- every frame of a 6290-frame Osmo 360 walk, 12580 images,
+757M verified matches, 54M observations in the last solves, RTX 5070 (12 GB),
+mapping in a 28 GB memory cgroup without swap -- the run before these changes
+was killed at 28 GB of heap 4566 images in. Now all 12580 register in one model
+(0.62 px), in 1 h 31 of mapping: the heap stays under 14 GB, solves past 29M
+observations take the fp32 Jacobians, and only the last, at 53.4M and up, go to
+the host, where it peaks at 22.7 GB.
+
 ## Tests
 
 Each `tests/*.cpp` builds to an executable of the same name that prints

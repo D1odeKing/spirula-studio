@@ -26,7 +26,7 @@ static void check(bool ok, const char* what) {
 
 static std::vector<FeatureMatch> matches(uint32_t n, uint32_t tag) {
     std::vector<FeatureMatch> m(n);
-    for (uint32_t i = 0; i < n; i++) m[i] = {tag + i, tag + 2 * i, 0.0f};
+    for (uint32_t i = 0; i < n; i++) m[i] = {tag + i, tag + 2 * i};
     return m;
 }
 

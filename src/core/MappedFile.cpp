@@ -29,6 +29,12 @@ std::string MappedFile::open(const std::string& path) {
     _mapping = CreateFileMappingA(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
     if (_mapping)
         _data = (const uint8_t*)MapViewOfFile((HANDLE)_mapping, FILE_MAP_READ, 0, 0, 0);
+    // The view keeps the file alive; the SfM matcher holds one per image.
+    if (_data) {
+        CloseHandle((HANDLE)_mapping);
+        CloseHandle((HANDLE)_file);
+        _mapping = _file = nullptr;
+    }
 #else
     _fd = ::open(path.c_str(), O_RDONLY);
     if (_fd < 0) return "cannot open the file";
@@ -39,7 +45,11 @@ std::string MappedFile::open(const std::string& path) {
     }
     _size = (size_t)st.st_size;
     void* p = mmap(nullptr, _size, PROT_READ, MAP_PRIVATE, _fd, 0);
-    if (p != MAP_FAILED) _data = (const uint8_t*)p;
+    if (p != MAP_FAILED) {
+        _data = (const uint8_t*)p;
+        ::close(_fd);  // the mapping keeps the file alive; the SfM matcher holds one per image
+        _fd = -1;
+    }
 #endif
     if (!_data) {
         _fallback.resize(_size);

@@ -76,6 +76,81 @@ static const uint kNoMember = 0xFFFFFFFFu;
 [[vk::binding(53)]] RWStructuredBuffer<AWord> u_gcam_a;
 [[vk::binding(54)]] RWStructuredBuffer<uint> u_gpt_max;     // (1) max |Bp| as float bits
 
+// Jc and Jp only through the accessors below. kJac32 (Solver.h) keeps them at fp32,
+// rounded where made so every kernel assembles one Jacobian's system; kJc/JpChunk
+// split them into <= 4 buffers, as NVIDIA wraps a binding past 4 GB silently.
+[[vk::constant_id(0)]] const bool kJac32 = false;
+[[vk::constant_id(1)]] const uint kJcChunk = 0;  // elements per chunk, 0 = one buffer
+[[vk::constant_id(2)]] const uint kJpChunk = 0;
+[[vk::binding(55)]] RWStructuredBuffer<float> u_Jc32;
+[[vk::binding(56)]] RWStructuredBuffer<float> u_Jp32;
+[[vk::binding(57)]] RWStructuredBuffer<Real> u_Jc1;
+[[vk::binding(58)]] RWStructuredBuffer<Real> u_Jc2;
+[[vk::binding(59)]] RWStructuredBuffer<Real> u_Jc3;
+[[vk::binding(60)]] RWStructuredBuffer<float> u_Jc32_1;
+[[vk::binding(61)]] RWStructuredBuffer<float> u_Jc32_2;
+[[vk::binding(62)]] RWStructuredBuffer<float> u_Jc32_3;
+[[vk::binding(63)]] RWStructuredBuffer<Real> u_Jp1;
+[[vk::binding(64)]] RWStructuredBuffer<Real> u_Jp2;
+[[vk::binding(65)]] RWStructuredBuffer<Real> u_Jp3;
+[[vk::binding(66)]] RWStructuredBuffer<float> u_Jp32_1;
+[[vk::binding(67)]] RWStructuredBuffer<float> u_Jp32_2;
+[[vk::binding(68)]] RWStructuredBuffer<float> u_Jp32_3;
+
+// Selects, not branches: measured faster past one chunk (cg_scatter 9.5 ms against 11.9).
+Real jcAt(uint i) {
+    if (kJcChunk == 0 || i < kJcChunk) return kJac32 ? Real(u_Jc32[i]) : u_Jc[i];
+    const uint c = i / kJcChunk, k = i - c * kJcChunk;
+    if (kJac32) return Real(c == 1 ? u_Jc32_1[k] : c == 2 ? u_Jc32_2[k] : u_Jc32_3[k]);
+    return c == 1 ? u_Jc1[k] : c == 2 ? u_Jc2[k] : u_Jc3[k];
+}
+void jcPut(uint i, Real v) {
+    const uint c = kJcChunk == 0 ? 0 : i / kJcChunk, k = i - c * kJcChunk;
+    if (kJac32) {
+        const float f = rToFloat(v);
+        if (c == 0) u_Jc32[k] = f; else if (c == 1) u_Jc32_1[k] = f;
+        else if (c == 2) u_Jc32_2[k] = f; else u_Jc32_3[k] = f;
+    } else {
+        if (c == 0) u_Jc[k] = v; else if (c == 1) u_Jc1[k] = v;
+        else if (c == 2) u_Jc2[k] = v; else u_Jc3[k] = v;
+    }
+}
+Real jpAt(uint i) {
+    if (kJpChunk == 0 || i < kJpChunk) return kJac32 ? Real(u_Jp32[i]) : u_Jp[i];
+    const uint c = i / kJpChunk, k = i - c * kJpChunk;
+    if (kJac32) return Real(c == 1 ? u_Jp32_1[k] : c == 2 ? u_Jp32_2[k] : u_Jp32_3[k]);
+    return c == 1 ? u_Jp1[k] : c == 2 ? u_Jp2[k] : u_Jp3[k];
+}
+void jpPut(uint i, Real v) {
+    const uint c = kJpChunk == 0 ? 0 : i / kJpChunk, k = i - c * kJpChunk;
+    if (kJac32) {
+        const float f = rToFloat(v);
+        if (c == 0) u_Jp32[k] = f; else if (c == 1) u_Jp32_1[k] = f;
+        else if (c == 2) u_Jp32_2[k] = f; else u_Jp32_3[k] = f;
+    } else {
+        if (c == 0) u_Jp[k] = v; else if (c == 1) u_Jp1[k] = v;
+        else if (c == 2) u_Jp2[k] = v; else u_Jp3[k] = v;
+    }
+}
+Real jRound(Real v) { if (kJac32) return Real(rToFloat(v)); return v; }
+// Three more one-time choices (Solver.h): the observations held as the fp32 they
+// were measured in, when every one is (exact); model_obs left out when it is the
+// identity; and under kJac32, the weighted residual at fp32 like the Jacobians.
+[[vk::constant_id(3)]] const bool kObs32 = false;
+[[vk::constant_id(4)]] const bool kObsIdentity = false;
+[[vk::binding(69)]] StructuredBuffer<float> u_obs32;
+[[vk::binding(70)]] RWStructuredBuffer<float> u_res32;
+RVec2 obsAt(uint o) {
+    if (kObs32) return rvec2(Real(u_obs32[2 * o]), Real(u_obs32[2 * o + 1]));
+    return rvec2(u_obs[2 * o], u_obs[2 * o + 1]);
+}
+uint modelObs(uint i) { return kObsIdentity ? i : u_model_obs[i]; }
+Real resAt(uint i) { if (kJac32) return Real(u_res32[i]); return u_res[i]; }
+void resPut(uint i, Real v) {
+    if (kJac32) u_res32[i] = rToFloat(v);
+    else u_res[i] = v;
+}
+
 // packed lower-triangular index, row >= col
 uint pidx(uint r, uint c) { return r * (r + 1) / 2 + c; }
 
@@ -109,7 +184,7 @@ groupshared Real g_sh[512];
 void cost_impl<M : ICameraModel, let RIG : int>(uint tid, uint lid) {
     Real c = Real(0.0);
     if (tid < u0) {
-        uint o = u_model_obs[u1 + tid];
+        uint o = modelObs(u1 + tid);
         uint img = u_obs_image[o];
         uint pt = u_obs_point[o];
         uint4 ii = u_image_info[img];
@@ -120,7 +195,7 @@ void cost_impl<M : ICameraModel, let RIG : int>(uint tid, uint lid) {
         Real intr[M.kNumIntr];
         for (int i = 0; i < M.kNumIntr; i++) intr[i] = u_intr[gi.x + i];
         RVec3 X = rvec3(u_points[3 * pt + 0], u_points[3 * pt + 1], u_points[3 * pt + 2]);
-        RVec2 obs = rvec2(u_obs[2 * o + 0], u_obs[2 * o + 1]);
+        RVec2 obs = obsAt(o);
 
         RVec2 r;
         if (RIG != 0) {
@@ -160,7 +235,7 @@ void cost_impl<M : ICameraModel, let RIG : int>(uint tid, uint lid) {
 // u0 = obs count for this model, u1 = offset into u_model_obs, f0 = loss param
 void jac_impl<M : ICameraModel, let RIG : int>(uint tid) {
     if (tid >= u0) return;
-    uint o = u_model_obs[u1 + tid];
+    uint o = modelObs(u1 + tid);
     uint img = u_obs_image[o];
     uint pt = u_obs_point[o];
     uint4 ii = u_image_info[img];
@@ -171,7 +246,7 @@ void jac_impl<M : ICameraModel, let RIG : int>(uint tid) {
     Real intr[M.kNumIntr];
     for (int i = 0; i < M.kNumIntr; i++) intr[i] = u_intr[gi.x + i];
     RVec3 X = rvec3(u_points[3 * pt + 0], u_points[3 * pt + 1], u_points[3 * pt + 2]);
-    RVec2 obs = rvec2(u_obs[2 * o + 0], u_obs[2 * o + 1]);
+    RVec2 obs = obsAt(o);
 
     // Evaluated over [frame 6 | member 6 if RIG | intrinsics kNumIntr]; stored
     // packed as [6 | mfree | gi.z], since a held parameter owns no column
@@ -214,15 +289,17 @@ void jac_impl<M : ICameraModel, let RIG : int>(uint tid) {
             } else {
                 bwd_diff(reproject<M>)(dp_pose, dp_intr, dp_X, obs, seed);
             }
-            for (int i = 0; i < 6; i++) Jc[row][i] = dp_pose.d[i] * sw;
+            for (int i = 0; i < 6; i++) Jc[row][i] = jRound(dp_pose.d[i] * sw);
             if (RIG != 0)
-                for (int i = 0; i < 6; i++) Jc[row][6 + i] = dp_ext.d[i] * sw;
-            for (int i = 0; i < M.kNumIntr; i++) Jc[row][6 + NE + i] = dp_intr.d[i] * sw;
-            Jp[row][0] = dp_X.d.x * sw; Jp[row][1] = dp_X.d.y * sw; Jp[row][2] = dp_X.d.z * sw;
+                for (int i = 0; i < 6; i++) Jc[row][6 + i] = jRound(dp_ext.d[i] * sw);
+            for (int i = 0; i < M.kNumIntr; i++) Jc[row][6 + NE + i] = jRound(dp_intr.d[i] * sw);
+            Jp[row][0] = jRound(dp_X.d.x * sw);
+            Jp[row][1] = jRound(dp_X.d.y * sw);
+            Jp[row][2] = jRound(dp_X.d.z * sw);
         }
     }
-    r.x = r.x * sw;
-    r.y = r.y * sw;
+    r.x = jRound(r.x * sw);
+    r.y = jRound(r.y * sw);
 
     uint jb = u_jc_off[o];
     [ForceUnroll]
@@ -243,16 +320,16 @@ void jac_impl<M : ICameraModel, let RIG : int>(uint tid) {
             write = i < gi.z;
         }
         if (write) {
-            u_Jc[jb + 2 * dst] = Jc[0][a];
-            u_Jc[jb + 2 * dst + 1] = Jc[1][a];
+            jcPut(jb + 2 * dst, Jc[0][a]);
+            jcPut(jb + 2 * dst + 1, Jc[1][a]);
         }
     }
     for (int j = 0; j < 3; j++) {
-        u_Jp[6 * o + 2 * j] = Jp[0][j];
-        u_Jp[6 * o + 2 * j + 1] = Jp[1][j];
+        jpPut(6 * o + 2 * j, Jp[0][j]);
+        jpPut(6 * o + 2 * j + 1, Jp[1][j]);
     }
-    u_res[2 * o] = r.x;
-    u_res[2 * o + 1] = r.y;
+    resPut(2 * o, r.x);
+    resPut(2 * o + 1, r.y);
 
     // App += Jp^T Jp (full 3x3), Bp += Jp^T r
     for (int i = 0; i < 3; i++) {
@@ -314,20 +391,20 @@ void schurObsImpl<let MD : int>(uint ti) {
     uint cols_i[MD];
     obsCamCols<MD>(ti, dof_i, jb_i, cols_i);
     Real Jci[2 * MD];
-    for (uint a = 0; a < 2 * dof_i; a++) Jci[a] = u_Jc[jb_i + a];
+    for (uint a = 0; a < 2 * dof_i; a++) Jci[a] = jcAt(jb_i + a);
 
     // Y = (Jp_i W)^T, 2x3 stored column-major like u_Jp
     Real Y[6];
     for (int j = 0; j < 3; j++)
         for (int row = 0; row < 2; row++)
-            Y[2 * j + row] = u_Jp[6 * ti + row] * W[j]
-                           + u_Jp[6 * ti + 2 + row] * W[3 + j]
-                           + u_Jp[6 * ti + 4 + row] * W[6 + j];
+            Y[2 * j + row] = jpAt(6 * ti + row) * W[j]
+                           + jpAt(6 * ti + 2 + row) * W[3 + j]
+                           + jpAt(6 * ti + 4 + row) * W[6 + j];
 
     // S += Jc^T Jc (damped diagonal), g += Jc^T r - Jc^T (Y Bp)
     Real yb0 = Y[0] * u_Bp[3 * p] + Y[2] * u_Bp[3 * p + 1] + Y[4] * u_Bp[3 * p + 2];
     Real yb1 = Y[1] * u_Bp[3 * p] + Y[3] * u_Bp[3 * p + 1] + Y[5] * u_Bp[3 * p + 2];
-    Real r0 = u_res[2 * ti], r1 = u_res[2 * ti + 1];
+    Real r0 = resAt(2 * ti), r1 = resAt(2 * ti + 1);
     for (uint a = 0; a < dof_i; a++) {
         for (uint b = 0; b <= a; b++) {
             Real v = Jci[2 * a] * Jci[2 * b] + Jci[2 * a + 1] * Jci[2 * b + 1];
@@ -351,7 +428,7 @@ void schurObsImpl<let MD : int>(uint ti) {
         // Q = Y Jp_j^T, 2x2
         Real q00 = Real(0.0), q01 = Real(0.0), q10 = Real(0.0), q11 = Real(0.0);
         for (int j = 0; j < 3; j++) {
-            Real b0 = u_Jp[6 * tj + 2 * j], b1 = u_Jp[6 * tj + 2 * j + 1];
+            Real b0 = jpAt(6 * tj + 2 * j), b1 = jpAt(6 * tj + 2 * j + 1);
             q00 = q00 + Y[2 * j] * b0;
             q01 = q01 + Y[2 * j] * b1;
             q10 = q10 + Y[2 * j + 1] * b0;
@@ -364,7 +441,7 @@ void schurObsImpl<let MD : int>(uint ti) {
             for (uint c = 0; c < dof_j; c++) {
                 uint col = cols_j[c];
                 if (row < col) continue;
-                Real v = z0 * u_Jc[jb_j + 2 * c] + z1 * u_Jc[jb_j + 2 * c + 1];
+                Real v = z0 * jcAt(jb_j + 2 * c) + z1 * jcAt(jb_j + 2 * c + 1);
                 if (isfinite(v))
                     atomicAccum(u_S_a, pidx(row, col), -v);
             }
@@ -399,7 +476,7 @@ void y_prep(uint3 t : SV_DispatchThreadID) {
     Real W[9];
     for (int i = 0; i < 9; i++) W[i] = u_W[9 * p + i];
     Real Jp[6];
-    for (int i = 0; i < 6; i++) Jp[i] = u_Jp[6 * o + i];
+    for (int i = 0; i < 6; i++) Jp[i] = jpAt(6 * o + i);
     for (int j = 0; j < 3; j++)
         for (int row = 0; row < 2; row++)
             u_Y[6 * o + 2 * j + row] =
@@ -476,9 +553,9 @@ void schurPairImpl<let MD : int>(uint wgx, uint gi) {
             Real v;
             if (m < 4) {  // Q[qr][qs] = sum_j Y_i[j][qr] Jp_j[j][qs]
                 uint qr = m >> 1, qs = m & 1;
-                v = u_Y[6 * e.x + qr] * u_Jp[6 * e.y + qs]
-                  + u_Y[6 * e.x + 2 + qr] * u_Jp[6 * e.y + 2 + qs]
-                  + u_Y[6 * e.x + 4 + qr] * u_Jp[6 * e.y + 4 + qs];
+                v = u_Y[6 * e.x + qr] * jpAt(6 * e.y + qs)
+                  + u_Y[6 * e.x + 2 + qr] * jpAt(6 * e.y + 2 + qs)
+                  + u_Y[6 * e.x + 4 + qr] * jpAt(6 * e.y + 4 + qs);
             } else if (diag) {  // (Y_i Bp)[row], only the gradient wants it
                 uint row = m - 4;
                 uint p = u_obs_point[e.x];
@@ -491,15 +568,15 @@ void schurPairImpl<let MD : int>(uint wgx, uint gi) {
         }
         for (uint i = gi; i < nb * 2 * dof_j; i += kPairWg) {
             uint b = i / (2 * dof_j), m = i - b * 2 * dof_j;
-            g_pair[kPrJ + kZs * b + m] = u_Jc[u_jc_off[u_pair_entries[off + t0 + b].y] + m];
+            g_pair[kPrJ + kZs * b + m] = jcAt(u_jc_off[u_pair_entries[off + t0 + b].y] + m);
         }
         GroupMemoryBarrierWithGroupSync();
         for (uint i = gi; i < nb * 2 * dof_i; i += kPairWg) {
             uint b = i / (2 * dof_i), m = i - b * 2 * dof_i;
             uint a = m >> 1, s = m & 1;
             uint bi = u_jc_off[u_pair_entries[off + t0 + b].x];
-            g_pair[kPrZ + kZs * b + m] = u_Jc[bi + 2 * a] * g_pair[kPrQ + 6 * b + s]
-                                       + u_Jc[bi + 2 * a + 1] * g_pair[kPrQ + 6 * b + 2 + s];
+            g_pair[kPrZ + kZs * b + m] = jcAt(bi + 2 * a) * g_pair[kPrQ + 6 * b + s]
+                                       + jcAt(bi + 2 * a + 1) * g_pair[kPrQ + 6 * b + 2 + s];
         }
         GroupMemoryBarrierWithGroupSync();
         for (uint b = 0; b < nb; b++) {
@@ -518,13 +595,13 @@ void schurPairImpl<let MD : int>(uint wgx, uint gi) {
                 acc[k] = acc[k] + g_pair[zb + 2 * r] * g_pair[jb + 2 * c]
                                 + g_pair[zb + 2 * r + 1] * g_pair[jb + 2 * c + 1];
                 if (diag)
-                    acc2[k] = acc2[k] + u_Jc[bi + 2 * r] * u_Jc[bi + 2 * c]
-                                      + u_Jc[bi + 2 * r + 1] * u_Jc[bi + 2 * c + 1];
+                    acc2[k] = acc2[k] + jcAt(bi + 2 * r) * jcAt(bi + 2 * c)
+                                      + jcAt(bi + 2 * r + 1) * jcAt(bi + 2 * c + 1);
             }
             if (diag && gi < dof_i) {
                 uint ox = u_pair_entries[off + t0 + b].x;
-                gacc = gacc + u_Jc[bi + 2 * gi] * (g_pair[kPrQ + 6 * b + 4] - u_res[2 * ox])
-                            + u_Jc[bi + 2 * gi + 1] * (g_pair[kPrQ + 6 * b + 5] - u_res[2 * ox + 1]);
+                gacc = gacc + jcAt(bi + 2 * gi) * (g_pair[kPrQ + 6 * b + 4] - resAt(2 * ox))
+                            + jcAt(bi + 2 * gi + 1) * (g_pair[kPrQ + 6 * b + 5] - resAt(2 * ox + 1));
             }
         }
     }
@@ -573,11 +650,11 @@ void dpAccumImpl<let MD : int>(uint o) {
     Real d0 = Real(0.0), d1 = Real(0.0);
     for (uint a = 0; a < dof; a++) {
         Real x = u_g[cols[a]];
-        d0 = d0 + u_Jc[base + 2 * a] * x;
-        d1 = d1 + u_Jc[base + 2 * a + 1] * x;
+        d0 = d0 + jcAt(base + 2 * a) * x;
+        d1 = d1 + jcAt(base + 2 * a + 1) * x;
     }
     for (int j = 0; j < 3; j++) {
-        Real v = u_Jp[6 * o + 2 * j] * d0 + u_Jp[6 * o + 2 * j + 1] * d1;
+        Real v = jpAt(6 * o + 2 * j) * d0 + jpAt(6 * o + 2 * j + 1) * d1;
         if (isfinite(v))
             atomicAccum(u_Bp_a, 3 * pt + j, -v);
     }
@@ -589,9 +666,9 @@ void gradCamImpl<let MD : int>(uint o) {
     uint dof, base;
     uint cols[MD];
     obsCamCols<MD>(o, dof, base, cols);
-    Real r0 = u_res[2 * o], r1 = u_res[2 * o + 1];
+    Real r0 = resAt(2 * o), r1 = resAt(2 * o + 1);
     for (uint a = 0; a < dof; a++) {
-        Real v = u_Jc[base + 2 * a] * r0 + u_Jc[base + 2 * a + 1] * r1;
+        Real v = jcAt(base + 2 * a) * r0 + jcAt(base + 2 * a + 1) * r1;
         if (isfinite(v))
             atomicAccum(u_gcam_a, cols[a], v);
     }

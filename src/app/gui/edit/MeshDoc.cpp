@@ -89,16 +89,16 @@ void mesh_drop_faces(const meshing::MeshData& m, const FaceCut& cut,
     // Same length means the same triangles in the same order, which is what
     // one meshing run writes into every format it was asked for.
     const bool by_index = cut.drop.size() == m.F.size();
-    std::unique_ptr<CentroidSet> near;
+    std::unique_ptr<CentroidSet> near_csets;
     if (!by_index && !cut.centroids.empty())
-        near = std::make_unique<CentroidSet>(cut.centroids, cut.tolerance);
+        near_csets = std::make_unique<CentroidSet>(cut.centroids, cut.tolerance);
     std::vector<int> remap(m.V.size(), -1);
     out.F.reserve(m.F.size());
     for (size_t fi = 0; fi < m.F.size(); fi++) {
         const auto& f = m.F[fi];
         const bool drop = by_index
             ? cut.drop[fi] != 0
-            : (near && near->holds(centroid_of(m.V.data(), f)));
+            : (near_csets && near_csets->holds(centroid_of(m.V.data(), f)));
         if (drop) continue;
         std::array<int, 3> g{};
         for (int k = 0; k < 3; k++) {

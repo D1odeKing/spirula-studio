@@ -101,7 +101,7 @@ int cmdMapSelftest(int argc, char** argv) {
             TwoViewMatches tv;
             tv.image1 = i; tv.image2 = j; tv.config = (int)TwoViewConfig::Uncalibrated;
             for (int p = 0; p < N; p++)
-                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
             if (tv.matches.size() >= 15) db.pairs.push_back(std::move(tv));
         }
 
@@ -300,7 +300,7 @@ int cmdMapSelftest(int argc, char** argv) {
                     tv.image2 = (uint32_t)(k * M + j);
                     tv.config = (int)TwoViewConfig::Uncalibrated;
                     for (int p = 0; p < N; p++)
-                        if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                        if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
                     if (tv.matches.size() >= 15) db2.pairs.push_back(std::move(tv));
                 }
         }
@@ -568,7 +568,7 @@ int cmdMapSelftest(int argc, char** argv) {
                 tv.image2 = j;
                 tv.config = (int)TwoViewConfig::Uncalibrated;
                 for (int p = 0; p < Nd; p++)
-                    if (vd[i][p] && vd[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                    if (vd[i][p] && vd[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
                 if (tv.matches.size() >= 15) dbd.pairs.push_back(std::move(tv));
             }
 
@@ -742,7 +742,7 @@ int cmdMapSelftest(int argc, char** argv) {
                 tv.image2 = j;
                 tv.config = (int)TwoViewConfig::Uncalibrated;
                 for (int p = 0; p < N; p++)
-                    if (vx[i][p] && vx[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                    if (vx[i][p] && vx[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
                 if (tv.matches.size() >= 15) dbx.pairs.push_back(std::move(tv));
             }
 
@@ -869,7 +869,7 @@ int cmdMapSelftest(int argc, char** argv) {
                 tv.image2 = j;
                 tv.config = (int)TwoViewConfig::Uncalibrated;
                 for (int p = 0; p < Ne; p++)
-                    if (ve[i][p] && ve[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                    if (ve[i][p] && ve[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
                 if (tv.matches.size() >= 15) dbe.pairs.push_back(std::move(tv));
             }
 

@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <filesystem>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -386,6 +387,9 @@ struct MapperOptions {
     // gyro predict is re-solved with the rotation fixed, or refused.
     bool use_priors = true;
     double prior_rot_tol_deg = 2.0;
+    // A directory the correspondence graph may be spilled to once built
+    // (CorrespondenceGraph::spill) when it passes 256 MB; "" keeps it in memory.
+    std::string spill_dir;
 };
 
 class Mapper {
@@ -2769,9 +2773,7 @@ private:
     // (~200 kB each at 8192 features), so an unpruned 2000-image model costs
     // ~400 MB whether it registered 2000 images or 20.
     Reconstruction snapshotModel() const {
-        Reconstruction m = rec_;
-        for (auto it = m.images.begin(); it != m.images.end();)
-            it = it->second.registered ? std::next(it) : m.images.erase(it);
+        Reconstruction m = rec_.registeredCopy();
         // Cameras that ended with no registered image (an unused resolution
         // bucket, or a group whose images were all rejected) would be written
         // to cameras.bin with their default-guess intrinsics -- drop them.
@@ -2993,25 +2995,14 @@ private:
         return registered_here;
     }
 
-    // Transactional global refinement (D36): one toxic registration reaching a
-    // trivial-loss global BA can bend a small model so far that the filters
-    // shred it, seed included. Snapshot first; if refinement collapses the
-    // model, restore the snapshot and de-register the images added since the
-    // last refinement -- the suspects -- instead of keeping the wreckage. This
-    // is the mapper "going back": the registrations are undone, the images
-    // keep their remaining trials, and growth continues from known-good state.
-    // Undo state for a transactional refine. Copying the whole Reconstruction
-    // is O(database), not O(model): `rec_` carries an entry for every image the
-    // database has (resetModel builds them all), each with a point3D_ids vector
-    // as long as that image's feature list, and refinement can only touch the
-    // registered ones. Unregistered images are all-invalid by invariant --
-    // deregisterImage clears them -- so they restore without being copied. On a
-    // 40-image cluster of a 5400-image capture that is 135x less per refine.
+    // Undo state for a transactional refine (D36): registered images only, and
+    // without keypoints -- unregistered ones are all-invalid by invariant, and
+    // only resetModel writes points2D. 135x less for 40 images of a 5400-image run.
     struct Snapshot {
         std::map<uint32_t, Camera> cameras;
         std::map<uint64_t, Point3D> points3D;
         uint64_t next_point3D_id = 1;
-        std::vector<std::pair<uint32_t, Image>> images;  // registered only
+        std::vector<std::pair<uint32_t, Image>> images;  // registered, no points2D
         std::set<uint32_t> focal_known;
         std::vector<RigCalib> rigs;
         std::set<uint32_t> rig_detached;
@@ -3026,7 +3017,7 @@ private:
         s.rigs = rec_.rigs;
         s.rig_detached = rec_.rig_detached;
         for (const auto& kv : rec_.images)
-            if (kv.second.registered) s.images.emplace_back(kv.first, kv.second);
+            if (kv.second.registered) s.images.emplace_back(kv.first, kv.second.withoutPoints2D());
         return s;
     }
 
@@ -3048,9 +3039,16 @@ private:
             std::fill(kv.second.point3D_ids.begin(), kv.second.point3D_ids.end(),
                       kInvalidPoint3D);
         }
-        for (auto& kv : s.images) rec_.images[kv.first] = std::move(kv.second);
+        for (auto& kv : s.images) {
+            Image& im = rec_.images[kv.first];
+            kv.second.points2D = std::move(im.points2D);
+            im = std::move(kv.second);
+        }
     }
 
+    // Transactional global refinement (D36): one toxic registration can bend a
+    // small model until the filters shred it. If refinement collapses the model,
+    // restore the snapshot and de-register the images added since the last one.
     void checkedRefine(bool final_pass) {
         uint32_t reg_before = rec_.numRegistered();
         Snapshot snap;
@@ -3301,6 +3299,15 @@ private:
             for (size_t i = 0; i < db_.images.size(); i++) nf[i] = feats_[i].count();
             return nf;
         }());
+        if (!opt_.spill_dir.empty()) {
+            size_t entries = 0;
+            for (const TwoViewMatches& p : db_.pairs) entries += 2 * p.matches.size();
+            static std::atomic<uint32_t> serial{0};
+            if (entries * 4 > (256ull << 20))
+                graph_.spill((std::filesystem::path(opt_.spill_dir) /
+                              (".spirula-graph-" + std::to_string(serial++) + ".spill"))
+                                 .string());
+        }
         reg_trials_.assign(db_.images.size(), 0);
         if (rigs_) initRigCalib(rec_);
         // Size the score bookkeeping now: attachObservation can run before the

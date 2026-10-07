@@ -19,6 +19,7 @@
 #include "app/gui/FilmReel.h"
 #include "app/gui/PrepProgress.h"
 
+#include <cstddef>
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
@@ -219,6 +220,17 @@ inline constexpr int kNumPhotoImports = 4;
 // photometric loss can tell from sensor noise.
 inline constexpr int kPhotoJpegQuality = 95;
 
+// A video the run extracted frames from, for the manifest's `captures`:
+// the stems carry the source frame index (fps 0, the file's own rate) or,
+// after the ffmpeg fallback, the kept-frame count at `fps`.
+struct PrepCapture {
+    std::string subdir;
+    std::string path;
+    double fps = 0;
+    // Every track kept the same instants, so the frames of one stem are a rig.
+    bool lockstep = false;
+};
+
 struct PrepJob {
     std::vector<PrepInput> inputs;   // in the order the user added them
     std::string workspace;           // output dataset dir (created)
@@ -268,6 +280,10 @@ struct PrepJob {
     bool  auto_rotate = true;
     bool  force_external_decode = false;
     std::string ffmpeg_exe = "ffmpeg";
+    // How the frames already on disk were cut from each video, from the
+    // workspace's record (DatasetPlan's recorded_captures). A run that keeps
+    // them reports these, not what its own settings would have made.
+    std::vector<PrepCapture> recorded_captures;
 
     // The photographs' colour space. Frames convert to sRGB before the
     // segmenter sees them, which is what it was trained on.
@@ -380,16 +396,8 @@ inline bool reads_photos_in_place(const std::vector<PrepInput>& inputs,
 std::string planned_image_dir(const std::vector<PrepInput>& inputs,
                               const std::string& workspace, PhotoImport mode);
 
-// A video the run extracted frames from, for the manifest's `captures`:
-// the stems carry the source frame index (fps 0, the file's own rate) or,
-// after the ffmpeg fallback, the kept-frame count at `fps`.
-struct PrepCapture {
-    std::string subdir;
-    std::string path;
-    double fps = 0;
-    // Every track kept the same instants, so the frames of one stem are a rig.
-    bool lockstep = false;
-};
+// What extracting `in` now would report, with the decoder this build would use.
+PrepCapture video_capture(const PrepJob& job, const PrepInput& in);
 
 struct PrepResult {
     std::vector<PrepCapture> captures;

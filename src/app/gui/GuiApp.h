@@ -40,6 +40,7 @@
 #include "app/gui/ViewportPanel.h"
 #include "data/PointCloudFile.h"
 
+#include <cstddef>
 #include <atomic>
 #include <cstdint>
 #include <deque>

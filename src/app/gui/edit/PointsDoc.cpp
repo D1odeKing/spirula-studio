@@ -5,6 +5,7 @@
 #include "i18n/catalog/Edit.h"
 #include "dense/Generation.h"
 
+#include <cstddef>
 #include <algorithm>
 #include <cmath>
 #include <filesystem>

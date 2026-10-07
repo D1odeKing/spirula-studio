@@ -57,6 +57,20 @@ struct Image {
             if (id != kInvalidPoint3D) n++;
         return n;
     }
+
+    // Every member but points2D, for an undo record of a model that never
+    // rewrites its keypoints. Names every member.
+    Image withoutPoints2D() const {
+        Image c;
+        c.id = id;
+        c.camera_id = camera_id;
+        c.name = name;
+        c.pose = pose;
+        c.registered = registered;
+        c.exif_orientation = exif_orientation;
+        c.point3D_ids = point3D_ids;
+        return c;
+    }
 };
 
 // COLMAP camera model ids come from sfm/core/Camera.h's kCamModelInfo table
@@ -79,6 +93,20 @@ struct Reconstruction {
         for (const auto& kv : images)
             if (kv.second.registered) n++;
         return n;
+    }
+
+    // A copy without the unregistered images, which never copies them: the
+    // mapper's model holds every image of the capture. Names every member.
+    Reconstruction registeredCopy() const {
+        Reconstruction m;
+        m.cameras = cameras;
+        for (const auto& kv : images)
+            if (kv.second.registered) m.images.emplace_hint(m.images.end(), kv);
+        m.points3D = points3D;
+        m.next_point3D_id = next_point3D_id;
+        m.rigs = rigs;
+        m.rig_detached = rig_detached;
+        return m;
     }
 
     uint64_t addPoint3D(const Vec3& xyz, const std::vector<TrackElement>& track) {

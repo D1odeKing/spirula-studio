@@ -46,13 +46,13 @@ static MatchesDatabase database() {
     verified.image1 = 0;
     verified.image2 = 1;
     verified.config = 3;
-    verified.matches = {{1, 0, 1.0f}, {3, 1, 2.0f}, {4, 2, 3.0f}};
+    verified.matches = {{1, 0}, {3, 1}, {4, 2}};
 
     TwoViewMatches raw;
     raw.image1 = 0;
     raw.image2 = 1;
     raw.config = 0;
-    raw.matches = {{1, 3, 4.0f}};
+    raw.matches = {{1, 3}};
     db.pairs = {verified, raw};
     return db;
 }
@@ -144,9 +144,8 @@ static int cmdFeatureCompactionTest(int, char**) {
         for (size_t k = 0; k < db.pairs[p].matches.size(); k++) {
             const FeatureMatch& old = original_db.pairs[p].matches[k];
             const FeatureMatch& now = db.pairs[p].matches[k];
-            check(now.distance == old.distance &&
-                      sameFeatureRow(original_features[db.pairs[p].image1], old.idx1,
-                                     compact[db.pairs[p].image1], now.idx1) &&
+            check(sameFeatureRow(original_features[db.pairs[p].image1], old.idx1,
+                                 compact[db.pairs[p].image1], now.idx1) &&
                       sameFeatureRow(original_features[db.pairs[p].image2], old.idx2,
                                      compact[db.pairs[p].image2], now.idx2),
                   "feature-row and endpoint identity", fails);
@@ -168,7 +167,7 @@ static int cmdFeatureCompactionTest(int, char**) {
         pair.image1 = 0;
         pair.image2 = 1;
         pair.config = 1;
-        pair.matches = {{0, 2, 0}, {1, 1, 0}, {2, 0, 0}};
+        pair.matches = {{0, 2}, {1, 1}, {2, 0}};
         all.pairs = {pair};
         FeatureCompactionPlan all_plan = buildFeatureCompactionPlan(all);
         FeatureSet before = features(3, 50);
@@ -187,7 +186,7 @@ static int cmdFeatureCompactionTest(int, char**) {
         TwoViewMatches pair;
         pair.image1 = 0;
         pair.image2 = 1;
-        pair.matches = {second ? FeatureMatch{0, 2, 0} : FeatureMatch{2, 0, 0}};
+        pair.matches = {second ? FeatureMatch{0, 2} : FeatureMatch{2, 0}};
         bad.pairs = {pair};
         return bad;
     };
@@ -202,7 +201,7 @@ static int cmdFeatureCompactionTest(int, char**) {
         TwoViewMatches pair;
         pair.image1 = second ? 0 : 2;
         pair.image2 = second ? 2 : 1;
-        pair.matches = {{0, 0, 0}};
+        pair.matches = {{0, 0}};
         bad.pairs = {pair};
         return bad;
     };

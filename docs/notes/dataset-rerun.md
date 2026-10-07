@@ -35,6 +35,16 @@ runs.
   value)` fields, plus an id for the output and the ids of the outputs it was
   made from. A step writes its section when it starts (`complete: false`) and
   marks it complete when it finishes.
+- **The videos the frames were cut from** (the frames step's `captures`: path,
+  folder, what a stem counts), written when that step finishes. They are not
+  fields -- they follow from the fields and decide no reuse -- but they are
+  what gives frames brought back their video's IMU and GPS: a run that keeps
+  the frames reports these rather than what its own decoder would have
+  numbered (an ffmpeg extraction counts candidates, not source frames), and a
+  photo input that is some dataset's `images/` takes that dataset's
+  (`captures_behind`). A record without them, or a workspace with only the
+  legacy stamp, has them derived from its frames fields
+  (`recorded_captures`).
 
 The fields are a step's *inputs*, normalized so that the same output gives the
 same fields however the panel was arranged:

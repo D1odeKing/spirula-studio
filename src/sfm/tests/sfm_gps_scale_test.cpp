@@ -101,7 +101,7 @@ static Scene makeScene() {
             tv.config = (int)TwoViewConfig::Uncalibrated;
             for (const auto& kv : feat_of[i]) {
                 auto it = feat_of[j].find(kv.first);
-                if (it != feat_of[j].end()) tv.matches.push_back({kv.second, it->second, 0});
+                if (it != feat_of[j].end()) tv.matches.push_back({kv.second, it->second});
             }
             if (tv.matches.size() >= 15) s.db.pairs.push_back(std::move(tv));
         }

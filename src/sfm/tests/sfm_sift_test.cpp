@@ -749,7 +749,7 @@ int cmdSelftest(int argc, char** argv) {
             if (b2 >= 0 && (double)b1 >= (double)mo.max_ratio * mo.max_ratio * (double)b2)
                 continue;
             if (bestB[bj] != i) continue;
-            ref.push_back({i, bj, (float)std::sqrt((double)b1)});
+            ref.push_back({i, bj});
         }
         bool ok = gm.size() == ref.size() && ref.size() > 200;
         for (size_t k = 0; k < ref.size() && ok; k++)
@@ -759,23 +759,18 @@ int cmdSelftest(int argc, char** argv) {
         if (!ok) fails++;
     }
 
-    // 7) brute-force matcher: self-match should be (near-)identity with dist 0
+    // 7) brute-force matcher: self-match should be (near-)identity
     {
         MatchOptions mo;
         mo.device = opt.device;
         BruteForceMatcher matcher(mo);
         std::vector<FeatureMatch> ms = matcher.match(a, a);
         size_t ident = 0;
-        bool distOk = true;
-        for (const FeatureMatch& m : ms) {
-            if (m.idx1 == m.idx2) {
-                ident++;
-                if (m.distance != 0.0f) distOk = false;
-            }
-        }
+        for (const FeatureMatch& m : ms)
+            if (m.idx1 == m.idx2) ident++;
         float frac = ms.empty() ? 0.0f : (float)ident / ms.size();
-        bool mok = ms.size() > 10 && frac > 0.9f && distOk;
-        printf("  matcher self-match: %zu matches, %.1f%% identity (dist 0) -> %s\n", ms.size(),
+        bool mok = ms.size() > 10 && frac > 0.9f;
+        printf("  matcher self-match: %zu matches, %.1f%% identity -> %s\n", ms.size(),
                100.0f * frac, mok ? "ok" : "BAD");
         if (!mok) fails++;
 

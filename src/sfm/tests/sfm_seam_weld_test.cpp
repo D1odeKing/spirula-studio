@@ -128,11 +128,11 @@ static Scene makeScene(const Spec& spec) {
                 both.resize(400);
                 std::vector<uint32_t> other = spare;
                 std::rotate(other.begin(), other.begin() + 1, other.end());
-                for (uint32_t p : both) tv.matches.push_back({p, p, 0});
+                for (uint32_t p : both) tv.matches.push_back({p, p});
                 for (size_t k = 0; k < spare.size() && k < 850; k++)
-                    tv.matches.push_back({spare[k], other[k], 0});
+                    tv.matches.push_back({spare[k], other[k]});
             } else {
-                for (uint32_t p : both) tv.matches.push_back({p, p, 0});
+                for (uint32_t p : both) tv.matches.push_back({p, p});
             }
             if (tv.matches.size() >= 15) s.db.pairs.push_back(std::move(tv));
         }

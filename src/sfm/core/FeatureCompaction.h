@@ -258,7 +258,7 @@ inline void remapMatches(MatchesDatabase& db, const FeatureCompactionPlan& plan,
         correspondences += pair.matches.size();
         const std::vector<StoredFeatureIndex>& a = plan.old_to_new[pair.image1];
         const std::vector<StoredFeatureIndex>& b = plan.old_to_new[pair.image2];
-        for (FeatureMatch& match : pair.matches) {
+        for (FeatureMatch& match : pair.matches.mut()) {
             if (match.idx1 >= a.size() || match.idx2 >= b.size())
                 throw compactionError("match index changed before remapping");
             const StoredFeatureIndex mapped1 = a[match.idx1];

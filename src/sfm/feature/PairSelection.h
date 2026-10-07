@@ -100,12 +100,26 @@ inline FeatureSet topScaleSubset(const FeatureSet& f, uint32_t K) {
     m.descriptors.resize((size_t)K * dsz);
     for (uint32_t k = 0; k < K; k++) {
         m.keypoints.push_back(f.keypoints[idx[k]]);
-        std::memcpy(&m.descriptors[(size_t)k * dsz], &f.descriptors[(size_t)idx[k] * dsz], dsz);
+        std::memcpy(&m.descriptors[(size_t)k * dsz], f.descData() + (size_t)idx[k] * dsz, dsz);
     }
     return m;
 }
 
 namespace detail {
+
+// Both passes' counting matcher. No cross-check: the ratio test against a full-size
+// train side is selective enough, and skipping it skips the column reduction and
+// the train-side readback (~33x less at K=256).
+inline MatchOptions countingOptions(const PairSelectionOptions& opt) {
+    MatchOptions mo;
+    mo.device = opt.device;
+    mo.device_selector = opt.device_selector;
+    mo.batch_pairs = opt.batch_pairs;
+    mo.max_num_matches = 0;
+    mo.max_ratio = opt.ratio;
+    mo.cross_check = false;
+    return mo;
+}
 
 // Count the ratio-test survivors of every ordered (query, train) pair on the
 // GPU. `sets` is the matcher's one index space: [0, n) query subsets,
@@ -113,23 +127,10 @@ namespace detail {
 // spot rather than building (and immediately discarding) half a million match
 // lists.
 inline std::vector<uint32_t> scoreOrderedPairs(
-    const std::vector<const FeatureSet*>& sets,
+    BruteForceMatcher& matcher, const std::vector<const FeatureSet*>& sets,
     const std::vector<std::pair<uint32_t, uint32_t>>& pairs, const PairSelectionOptions& opt,
     size_t progress_base, size_t progress_total,
     const std::function<void(size_t, size_t)>& progress) {
-    MatchOptions mo;
-    mo.device = opt.device;
-    mo.device_selector = opt.device_selector;
-    mo.batch_pairs = opt.batch_pairs;
-    mo.max_num_matches = 0;
-    mo.max_ratio = opt.ratio;
-    // No cross-check: the ratio test against a full-size train side is already
-    // selective, and skipping it means the matcher never dispatches the column
-    // reduction or downloads the train-side results -- at K=256 queries that
-    // cuts the readback per pair from (K + n_train) to K entries, ~33x here.
-    mo.cross_check = false;
-    BruteForceMatcher matcher(mo);
-
     std::vector<uint32_t> score(pairs.size(), 0);
     // How often progress is reported, and how much of the list the matcher sees
     // at once -- it chunks the range itself. A hundredth of the list, so a
@@ -146,36 +147,50 @@ inline std::vector<uint32_t> scoreOrderedPairs(
     return score;
 }
 
-// Union of each image's `k` best partners, from unordered (i<j, score) edges.
-inline std::vector<std::pair<uint32_t, uint32_t>> topPartners(
-    uint32_t n, const std::vector<std::pair<uint32_t, uint32_t>>& cand,
-    const std::vector<uint32_t>& edge_score, uint32_t k, uint32_t min_score) {
-    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> adj(n);  // (score, partner)
-    for (size_t e = 0; e < cand.size(); e++) {
-        const uint32_t s = edge_score[e];
-        if (s < min_score) continue;
-        adj[cand[e].first].push_back({s, cand[e].second});
-        adj[cand[e].second].push_back({s, cand[e].first});
+// Each image's `k` best partners by (score descending, partner ascending), kept
+// as unordered (i, j, score) edges arrive: a bounded heap per image, so the
+// shortlist pass over n^2/2 pairs holds n*k edges, not every one twice.
+class TopPartners {
+public:
+    TopPartners(uint32_t n, uint32_t k, uint32_t min_score)
+        : k_(k), min_score_(min_score), heaps_(n) {}
+
+    void add(uint32_t i, uint32_t j, uint32_t score) {
+        if (score < min_score_ || k_ == 0) return;
+        push(heaps_[i], {score, j});
+        push(heaps_[j], {score, i});
     }
-    std::vector<std::pair<uint32_t, uint32_t>> sel;
-    for (uint32_t i = 0; i < n; i++) {
-        auto& a = adj[i];
-        const size_t take = std::min<size_t>(k, a.size());
-        std::partial_sort(a.begin(), a.begin() + take, a.end(),
-                          [](const std::pair<uint32_t, uint32_t>& x,
-                             const std::pair<uint32_t, uint32_t>& y) {
-                              if (x.first != y.first) return x.first > y.first;
-                              return x.second < y.second;
-                          });
-        for (size_t t = 0; t < take; t++) {
-            const uint32_t j = a[t].second;
-            sel.emplace_back(std::min(i, j), std::max(i, j));
+
+    // Their union, in lexicographic pair order.
+    std::vector<std::pair<uint32_t, uint32_t>> pairs() const {
+        std::vector<std::pair<uint32_t, uint32_t>> sel;
+        for (uint32_t i = 0; i < heaps_.size(); i++)
+            for (const Edge& e : heaps_[i]) sel.emplace_back(std::min(i, e.second), std::max(i, e.second));
+        std::sort(sel.begin(), sel.end());
+        sel.erase(std::unique(sel.begin(), sel.end()), sel.end());
+        return sel;
+    }
+
+private:
+    using Edge = std::pair<uint32_t, uint32_t>;  // (score, partner)
+    // A strict total order (partners are distinct), so the k kept are the k a
+    // full sort would put first; the heap's front is the worst of them.
+    static bool better(const Edge& x, const Edge& y) {
+        return x.first != y.first ? x.first > y.first : x.second < y.second;
+    }
+    void push(std::vector<Edge>& h, Edge e) const {
+        if (h.size() < k_) {
+            h.push_back(e);
+            std::push_heap(h.begin(), h.end(), better);
+        } else if (better(e, h.front())) {
+            std::pop_heap(h.begin(), h.end(), better);
+            h.back() = e;
+            std::push_heap(h.begin(), h.end(), better);
         }
     }
-    std::sort(sel.begin(), sel.end());
-    sel.erase(std::unique(sel.begin(), sel.end()), sel.end());
-    return sel;
-}
+    uint32_t k_, min_score_;
+    std::vector<std::vector<Edge>> heaps_;
+};
 
 }  // namespace detail
 
@@ -202,20 +217,24 @@ inline std::vector<std::pair<uint32_t, uint32_t>> prefilterPairs(
             mini[i] = topScaleSubset(feats[i], opt.coarse_features);
             sets[i] = sets[(size_t)n + i] = &mini[i];
         }
-        // Both sides are a few tens of kilobytes, so the whole coarse train
-        // side is resident and the order is free; one direction per pair is
-        // enough to shortlist.
+        // Coarse sides are tens of KB, all resident; one direction per pair, a
+        // block of rows at a time (every pair at once was 2 GB at 12k images). No
+        // min_score: a shortlist applying it drops pairs not yet reliably scored.
+        BruteForceMatcher matcher(detail::countingOptions(opt));
+        detail::TopPartners top(n, opt.coarse_neighbors, 1);
+        const size_t block = std::max<size_t>(1u << 22, all_ordered / 200);
         std::vector<std::pair<uint32_t, uint32_t>> ordered;
-        ordered.reserve(all_ordered / 2);
-        for (uint32_t i = 0; i < n; i++)
-            for (uint32_t j = i + 1; j < n; j++) ordered.emplace_back(i, (uint32_t)(n + j));
-        std::vector<uint32_t> s =
-            detail::scoreOrderedPairs(sets, ordered, opt, 0, all_ordered, progress);
-        for (auto& p : ordered) p.second -= n;
-        // min_score belongs to the deciding pass; a shortlist that applies it
-        // would throw away pairs the reliable score has not seen yet.
-        cand = detail::topPartners(n, ordered, s, opt.coarse_neighbors, 1);
-        done_pairs = all_ordered / 2;
+        for (uint32_t i = 0; i < n;) {
+            ordered.clear();
+            for (; i < n && ordered.size() < block; i++)
+                for (uint32_t j = i + 1; j < n; j++) ordered.emplace_back(i, (uint32_t)(n + j));
+            const std::vector<uint32_t> s = detail::scoreOrderedPairs(
+                matcher, sets, ordered, opt, done_pairs, all_ordered, progress);
+            for (size_t k = 0; k < ordered.size(); k++)
+                top.add(ordered[k].first, ordered[k].second - n, s[k]);
+            done_pairs += ordered.size();
+        }
+        cand = top.pairs();
     } else {
         cand.reserve(all_ordered / 2);
         for (uint32_t i = 0; i < n; i++)
@@ -265,13 +284,16 @@ inline std::vector<std::pair<uint32_t, uint32_t>> prefilterPairs(
             }
     }
     const size_t total = coarse ? done_pairs + ordered.size() : ordered.size();
+    BruteForceMatcher matcher(detail::countingOptions(opt));
     std::vector<uint32_t> s =
-        detail::scoreOrderedPairs(sets, ordered, opt, done_pairs, total, progress);
+        detail::scoreOrderedPairs(matcher, sets, ordered, opt, done_pairs, total, progress);
 
     std::vector<uint32_t> edge_score(cand.size(), 0);
     for (size_t k = 0; k < s.size(); k++)
         edge_score[edge_of[k]] = std::max(edge_score[edge_of[k]], s[k]);
-    return detail::topPartners(n, cand, edge_score, opt.num_neighbors, opt.min_score);
+    detail::TopPartners top(n, opt.num_neighbors, opt.min_score);
+    for (size_t e = 0; e < cand.size(); e++) top.add(cand[e].first, cand[e].second, edge_score[e]);
+    return top.pairs();
 }
 
 }  // namespace sfm

@@ -383,6 +383,7 @@ private:
     std::vector<FeatureMatch> reduce(const uint32_t* rA, const uint32_t* rB, uint32_t na,
                                      uint32_t nb) const {
         std::vector<FeatureMatch> out;
+        std::vector<float> dist;
         const float r2 = opt_.max_ratio * opt_.max_ratio;
         for (uint32_t i = 0; i < na; i++) {
             uint32_t j = rA[4 * i + 0];
@@ -392,15 +393,10 @@ private:
             if (opt_.min_similarity > 0 && similarityFromD2(bestD2) < opt_.min_similarity)
                 continue;
             if (opt_.cross_check && rB[4 * j + 0] != i) continue;
-            out.push_back({i, j, std::sqrt((float)bestD2)});
+            out.push_back({i, j});
+            dist.push_back(std::sqrt((float)bestD2));
         }
-        if (opt_.max_num_matches > 0 && out.size() > opt_.max_num_matches) {
-            std::partial_sort(out.begin(), out.begin() + opt_.max_num_matches, out.end(),
-                              [](const FeatureMatch& x, const FeatureMatch& y) {
-                                  return x.distance < y.distance;
-                              });
-            out.resize(opt_.max_num_matches);
-        }
+        keepClosest(out, dist, opt_.max_num_matches);
         return out;
     }
 
@@ -532,12 +528,12 @@ private:
             if (!f.count()) continue;
             const size_t bytes = (size_t)f.count() * dsz;
             if (f.dtype == DType::U8) {
-                memcpy(blob + off, f.descriptors.data(), bytes);
+                memcpy(blob + off, f.descData(), bytes);
             } else {
                 // Float descriptors are L2-normalized on the way in. ALIKED's
                 // already are, so this is a no-op there; DeDoDe's are NOT, and
                 // both the quantization range and similarityFromD2 assume it.
-                const float* src = reinterpret_cast<const float*>(f.descriptors.data());
+                const float* src = reinterpret_cast<const float*>(f.descData());
                 for (uint32_t r = 0; r < f.count(); r++) {
                     const float* row = src + (size_t)r * dsz;
                     double sq = 0;

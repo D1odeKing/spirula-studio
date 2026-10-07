@@ -148,7 +148,7 @@ static Walk makeWalk() {
             tv.image2 = j;
             tv.config = (int)TwoViewConfig::Uncalibrated;
             for (int p = 0; p < NF; p++)
-                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
             if (tv.matches.size() >= 15) w.db.pairs.push_back(std::move(tv));
         }
     return w;

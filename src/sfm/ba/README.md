@@ -156,6 +156,63 @@ The pass also does *no* `S`/`g` accumulation on any path -- the Schur kernels
 own it (below), which is what lets a rejected step re-run the whole assembly
 from the stored Jacobians instead of restoring a snapshot of `S`.
 
+### Buffers past 4 GB, and compact Jacobians
+
+`Jc` is the solver's largest buffer by far -- `2 x dof` scalars an observation,
+44 at fp64 for a refined dual-fisheye rig with the thin-prism model, against
+~120 bytes for everything else per observation -- and on a large capture it
+outgrows what one descriptor can bind. `maxStorageBufferRange` is 4 GB on
+NVIDIA, and a buffer bound past it is not refused: the accesses beyond 4 GB
+wrap. A 4000-image dual-fisheye capture (16.3M observations, a 4727 MB `Jc`)
+assembled the system from those wrapped Jacobians, so LM rejected every step,
+drove the damping to 1e2-1e5 and stopped with the cost flat (5.9020e6 ->
+5.9017e6), where the host solver reached 5.75e6 in five iterations. The
+mapper's last bundle adjustments on that capture, the ones that refine the rig,
+were all of that kind.
+
+So `Jc` and `Jp` are split into up to four buffers of at most
+`min(maxStorageBufferRange, maxMemoryAllocationSize)` each, 16 GB of either
+(`planChunks`; RADV caps an allocation at 4 GB too); a solve needing more stores
+them at fp32 first (below). The kernels reach them only through
+`jcAt`/`jcPut`/`jpAt`/`jpPut`, which take the chunk size as a specialization
+constant: a problem that fits one buffer specializes to the plain indexed load
+and costs nothing (per-kernel GPU time on the 22042-image capture within 0.5% of
+before, where a runtime index test cost `cg_cam_diag` 27%). Split, the hot CG
+kernels pay for it -- forced into two chunks there, `cg_scatter` +30% and
+`cg_gather` +10% -- which is the price of an answer on a solve that used to
+return garbage. Any other buffer past the limit, or a fifth chunk, refuses the
+device instead of corrupting the solve, which sends it to the host
+(`solveBundle`). `SS_SFM_BA_CHUNKS=2..4` splits any problem that many ways,
+which is how the tests exercise the path.
+
+A solve that does not fit the VRAM budget in full precision stores `Jc`, `Jp`
+and the weighted residual at fp32 instead (`jac32_`, specialization constant 0),
+before falling to the host. Every consumer reads the same rounded values -- the
+point blocks are accumulated from the rounded `Jp` and residual too -- and
+every product of two of them is exact in fp64, so the system assembled is
+exactly that of the rounded Jacobian; the cost and all accumulation stay in
+fp64. Since the cost is
+stationary in the step, the rounding enters it at second order: on the
+4000-image capture both storages print identical costs to ten digits for the
+first four iterations and end 2e-6 apart (5.739352e6 against 5.739363e6). It
+takes VRAM from 6764 MB to 4027 MB there and the solve from 53 s to 69 s, since
+a GeForce converts each load to fp64 on its fp64 units, so it is a fallback
+and never the default. The host solver does the same against its own budget
+(half the machine's RAM): a solve too big for the device lands there, and in
+fp64 it would want as many gigabytes of RAM as the device lacked of VRAM.
+`SS_SFM_BA_JAC32=1` forces it on either, `0` forbids it. It does not meet the
+tighter of the parity tests' tolerances (`sfm_rig_test` at 1e-5,
+`sfm_map_test`'s run-to-run A/B at 1e-9), as `df` does not either.
+
+Two more per-observation savings are exact and always on: observations that are
+all floats -- every keypoint is -- are uploaded as the floats they are
+(`obs32_`, constant 3), and `model_obs` is not uploaded at all when it is the
+identity, one camera model behind every observation (`obsIdentity_`, constant
+4). With the fp32 residual that is 20 bytes an observation, 1 GB at the 50M of
+a 12580-image capture: on a 12 GB card its 51M-observation solves then stayed
+on the device (29 s, against 148 s on the host), and only the last, at 53.8M,
+still went to the host.
+
 ### Schur assembly (pair-aggregated)
 
 The Schur products `S -= A_up (App+l)^-1 A_up^T` are accumulated per unordered
@@ -520,7 +577,12 @@ converged CG loop is no longer recorded out to its iteration cap.
 A device solve also downloads its accepted parameters every 5 s
 (`SolverOptions::checkpoint`), so when a device does fail, the host solve that
 takes over (`solveBundle`) starts from that iterate and damping, not from the
-beginning.
+beginning. The problem's per-observation tables are not kept on the host for
+that: once uploaded they are freed (`releaseHostTables`, ~55 bytes an
+observation, 0.9 GB at 16M), and a host solve takes a copy `buildBundle` makes
+again from the untouched reconstruction, with the checkpointed parameters.
+`SS_SFM_BA_FAIL_AFTER=N` loses the device after N iterations of every solve;
+`sfm_map_test` and `sfm_seam_weld_test` pass through that path at 0 and 2.
 
 ## Results (RTX 4080 Super + i9 32 threads, 50 LM iterations cap)
 

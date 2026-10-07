@@ -97,17 +97,17 @@ void cgCamDiagImpl<let MD : int>(uint wgx, uint gi) {
         uint pt = u_obs_point[o];
         uint jb = u_jc_off[o];
         GroupMemoryBarrierWithGroupSync();  // previous obs done being read
-        for (uint i = gi; i < 2 * dof; i += kPairWg) g_sh[kShcJ + i] = u_Jc[jb + i];
-        if (gi < 6) g_sh[kShcP + gi] = u_Jp[6 * o + gi];
-        if (gi < 2) g_sh[kShcR + gi] = u_res[2 * o + gi];
+        for (uint i = gi; i < 2 * dof; i += kPairWg) g_sh[kShcJ + i] = jcAt(jb + i);
+        if (gi < 6) g_sh[kShcP + gi] = jpAt(6 * o + gi);
+        if (gi < 2) g_sh[kShcR + gi] = resAt(2 * o + gi);
         if (gi < 3) g_sh[kShcB + gi] = u_Bp[3 * pt + gi];
         // Y = (Jp W)^T, then Q = Jp W Jp^T -- one 2x2 middle matrix instead of
         // the dof x 3 block T = Acp W the materialized layout carried per obs
         if (gi < 6) {
             uint j = gi >> 1, row = gi & 1;
-            g_sh[kShcY + gi] = u_Jp[6 * o + row] * u_W[9 * pt + j]
-                             + u_Jp[6 * o + 2 + row] * u_W[9 * pt + 3 + j]
-                             + u_Jp[6 * o + 4 + row] * u_W[9 * pt + 6 + j];
+            g_sh[kShcY + gi] = jpAt(6 * o + row) * u_W[9 * pt + j]
+                             + jpAt(6 * o + 2 + row) * u_W[9 * pt + 3 + j]
+                             + jpAt(6 * o + 4 + row) * u_W[9 * pt + 6 + j];
         }
         GroupMemoryBarrierWithGroupSync();
         if (gi < 4) {
@@ -274,12 +274,12 @@ void cgGatherImpl<let MD : int>(uint p) {
         Real d0 = Real(0.0), d1 = Real(0.0);
         for (uint a = 0; a < dof; a++) {
             Real xa = u_cg_p[cols[a]];
-            d0 = d0 + u_Jc[base + 2 * a] * xa;
-            d1 = d1 + u_Jc[base + 2 * a + 1] * xa;
+            d0 = d0 + jcAt(base + 2 * a) * xa;
+            d1 = d1 + jcAt(base + 2 * a + 1) * xa;
         }
-        u0v = u0v + u_Jp[6 * oi] * d0 + u_Jp[6 * oi + 1] * d1;
-        u1v = u1v + u_Jp[6 * oi + 2] * d0 + u_Jp[6 * oi + 3] * d1;
-        u2v = u2v + u_Jp[6 * oi + 4] * d0 + u_Jp[6 * oi + 5] * d1;
+        u0v = u0v + jpAt(6 * oi) * d0 + jpAt(6 * oi + 1) * d1;
+        u1v = u1v + jpAt(6 * oi + 2) * d0 + jpAt(6 * oi + 3) * d1;
+        u2v = u2v + jpAt(6 * oi + 4) * d0 + jpAt(6 * oi + 5) * d1;
     }
     for (int i = 0; i < 3; i++)
         u_cg_v[3 * p + i] = u_W[9 * p + 3 * i] * u0v + u_W[9 * p + 3 * i + 1] * u1v
@@ -331,14 +331,14 @@ void cgScatterImpl<let MD : int>(uint wgx, uint gi) {
         uint o = u_cam_obs[t];
         uint pt = u_obs_point[o];
         uint base = u_jc_off[o];
-        Real d0 = u_Jp[6 * o] * u_cg_v[3 * pt] + u_Jp[6 * o + 2] * u_cg_v[3 * pt + 1]
-                + u_Jp[6 * o + 4] * u_cg_v[3 * pt + 2];
-        Real d1 = u_Jp[6 * o + 1] * u_cg_v[3 * pt] + u_Jp[6 * o + 3] * u_cg_v[3 * pt + 1]
-                + u_Jp[6 * o + 5] * u_cg_v[3 * pt + 2];
+        Real d0 = jpAt(6 * o) * u_cg_v[3 * pt] + jpAt(6 * o + 2) * u_cg_v[3 * pt + 1]
+                + jpAt(6 * o + 4) * u_cg_v[3 * pt + 2];
+        Real d1 = jpAt(6 * o + 1) * u_cg_v[3 * pt] + jpAt(6 * o + 3) * u_cg_v[3 * pt + 1]
+                + jpAt(6 * o + 5) * u_cg_v[3 * pt + 2];
         if (live)
-            pacc = pacc + u_Jc[base + gi] * (row == 0 ? d0 : d1);
+            pacc = pacc + jcAt(base + gi) * (row == 0 ? d0 : d1);
         if (live2)
-            pacc2 = pacc2 + u_Jc[base + gi2] * (row2 == 0 ? d0 : d1);
+            pacc2 = pacc2 + jcAt(base + gi2) * (row2 == 0 ? d0 : d1);
     }
     g_sh[gi] = pacc;
     g_sh[gi2] = pacc2;
@@ -560,11 +560,11 @@ void tcRunG(uint o, uint t1, out Real G[21]) {
         for (uint i = 0; i < 7; i++) {
             Real q0 = Real(0.0), q1 = Real(0.0);
             for (uint a = 0; a < 6; a++) {
-                q0 = q0 + u_S[pb + 7 * a + i] * u_Jc[jb + 2 * a];
-                q1 = q1 + u_S[pb + 7 * a + i] * u_Jc[jb + 2 * a + 1];
+                q0 = q0 + u_S[pb + 7 * a + i] * jcAt(jb + 2 * a);
+                q1 = q1 + u_S[pb + 7 * a + i] * jcAt(jb + 2 * a + 1);
             }
             for (uint j = 0; j < 3; j++)
-                G[3 * i + j] = G[3 * i + j] + q0 * u_Jp[6 * o + 2 * j] + q1 * u_Jp[6 * o + 2 * j + 1];
+                G[3 * i + j] = G[3 * i + j] + q0 * jpAt(6 * o + 2 * j) + q1 * jpAt(6 * o + 2 * j + 1);
         }
     }
 }
