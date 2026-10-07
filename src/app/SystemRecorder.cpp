@@ -370,6 +370,7 @@ private:
             const std::string name = utf8(wname);
             const size_t l = name.find("luid_"), ph = name.find("_phys"), et = name.find("engtype_");
             if (l == std::string::npos || ph == std::string::npos || et == std::string::npos || ph < l) return;
+            if (!(v >= 0.0 && v <= 100.5)) return;   // Windows glitches when an engine's history resets
             auto& b = busiest[{name.substr(l, ph - l), csv_safe(name.substr(et + 8))}];
             b = std::max(b, v);
         });

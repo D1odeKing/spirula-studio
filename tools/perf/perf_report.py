@@ -88,7 +88,8 @@ def load(session):
     eng_by_t = {}
     for r in engines:
         key = (r["unix_ms"], r["luid"])
-        eng_by_t[key] = max(eng_by_t.get(key, 0.0), r["util_pct"] if isinstance(r["util_pct"], float) else 0.0)
+        v = r["util_pct"] if isinstance(r["util_pct"], float) and 0.0 <= r["util_pct"] <= 100.5 else 0.0
+        eng_by_t[key] = max(eng_by_t.get(key, 0.0), v)   # Windows glitches when an engine's history resets
     luids = sorted({k[1] for k in eng_by_t})
     adapter_series = {l: sorted((t, v) for (t, ll), v in eng_by_t.items() if ll == l) for l in luids}
     return meta, train, system, nvidia, adapter_series
@@ -393,6 +394,29 @@ def main(argv):
             lines += ["Settings: " + ", ".join(f"{k} {cfg[k]}" for k in keys if cfg.get(k) not in (None, "")), ""]
         except (ValueError, OSError):
             pass
+    # A dense run's cloud is the generation published as it ended: its manifest says
+    # which settings ran and how many pairs came from the prediction cache.
+    if dense:
+        end_s = dense[-1]["unix_ms"] / 1000.0
+        found = []
+        for m in (session.parent.parent / "generations").glob("*/manifest.json"):
+            if abs(m.stat().st_mtime - end_s) < 120:
+                found.append(m)
+        for m in found[:1]:
+            try:
+                man = json.loads(m.read_text(encoding="utf-8-sig"))
+                s = man.get("settings", {})
+                pairs, cached = man.get("matched_pairs", 0), man.get("cached_pairs", 0)
+                lines += [f"Settings: preset {s.get('preset')}, {s.get('low_width')}x{s.get('low_height')}, "
+                          f"{s.get('matching_space')} matching, {man.get('inference_precision')} precision",
+                          f"Pairs: {pairs}, {cached} reused from the prediction cache; model inference "
+                          f"{fmt(man.get('inference_seconds'), 0)} s, loading {fmt(man.get('model_load_seconds'), 0)} s"]
+                if pairs and cached == pairs:
+                    lines.append("  Every pair came from the cache: matching here is reading and triangulating, "
+                                 "not the model, so its time is not comparable with a run that inferred.")
+                lines.append("")
+            except (ValueError, OSError):
+                pass
     if not train and not dense:
         lines.append("No train_perf.csv: tick Log performance stats in the GUI (or start Spirula through "
                      "record_run.ps1) to see where step time goes.")
