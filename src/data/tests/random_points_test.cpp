@@ -137,9 +137,9 @@ int main() {
 
     {
         // A tenth of the cameras far off: the median barely moves, the mean does.
-        std::vector<std::array<double, 3>> far = pos;
-        for (size_t i = 0; i < far.size() / 10; i++) far[i][0] += 1000.0;
-        const std::vector<float> c = cameras_at(far);
+        std::vector<std::array<double, 3>> shifted = pos;
+        for (size_t i = 0; i < shifted.size() / 10; i++) shifted[i][0] += 1000.0;
+        const std::vector<float> c = cameras_at(shifted);
         RandomPointsConfig cfg;
         cfg.count = 10;
         cfg.center = "camera-median";

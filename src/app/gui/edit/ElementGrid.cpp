@@ -324,8 +324,8 @@ void ElementGrid::knn_median(int k, const uint8_t* alive, std::vector<float>& ou
                 for (int dz = -ring; dz <= ring; dz++)
                 for (int dy = -ring; dy <= ring; dy++)
                 for (int dx = -ring; dx <= ring; dx++) {
-                    const int far = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
-                    if (ring > 1 && far != ring) continue;
+                    const int cheb = std::max({std::abs(dx), std::abs(dy), std::abs(dz)});
+                    if (ring > 1 && cheb != ring) continue;
                     const int32_t cc[3] = {c[0] + dx, c[1] + dy, c[2] + dz};
                     const int32_t cell = find_cell(cc);
                     if (cell < 0) continue;

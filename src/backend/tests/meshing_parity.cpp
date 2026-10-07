@@ -134,8 +134,8 @@ int main(int argc, char** argv) {
     std::vector<float> means(3 * N), quats(4 * N), logsc(3 * N), logit(N),
         fdc(3 * N);
     for (int i = 0; i < N; ++i) {
-        float far = (i % 97 == 0) ? 40.0f : 1.0f;   // occasional outlier
-        for (int a = 0; a < 3; ++a) means[3 * i + a] = uf(-1.f, 1.f) * far;
+        float spread = (i % 97 == 0) ? 40.0f : 1.0f;   // occasional outlier
+        for (int a = 0; a < 3; ++a) means[3 * i + a] = uf(-1.f, 1.f) * spread;
         for (int a = 0; a < 4; ++a) quats[4 * i + a] = uf(-1.f, 1.f);
         for (int a = 0; a < 3; ++a) logsc[3 * i + a] = uf(-3.5f, -1.5f);
         // straddle the keep threshold both ways

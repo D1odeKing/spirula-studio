@@ -333,12 +333,12 @@ static void merge_vertices(Mesh& mesh, float merge_factor, float max_flip_deg,
             }
         }
         const auto& au = adj[u]; const auto& av = adj[v];
-        const auto& small = (au.size() < av.size()) ? au : av;
-        const auto& big   = (au.size() < av.size()) ? av : au;
+        const auto& smaller = (au.size() < av.size()) ? au : av;
+        const auto& larger  = (au.size() < av.size()) ? av : au;
         int common = 0;
-        for (int w : small) {
+        for (int w : smaller) {
             if (w == u || w == v) continue;
-            if (big.find(w) != big.end()) {
+            if (larger.find(w) != larger.end()) {
                 ++common;
                 if (w != opp0 && w != opp1) return false;
             }

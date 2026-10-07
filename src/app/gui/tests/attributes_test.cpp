@@ -23,7 +23,7 @@ void check(bool ok, const std::string& what) {
     if (!ok) g_failures++;
 }
 
-bool near(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
+bool close_to(double a, double b, double tol) { return std::fabs(a - b) <= tol; }
 
 // The least a document can be: one layer of positions, and a mesh when the
 // test has one.
@@ -86,13 +86,13 @@ void test_mesh() {
 
     const auto lo = values(doc, gui::Attr::FaceAngleMin);
     const auto hi = values(doc, gui::Attr::FaceAngleMax);
-    check(near(lo[0], 60, 1e-3) && near(hi[0], 60, 1e-3), "tetrahedron corners are 60");
-    check(near(lo[5], 45, 1e-3) && near(hi[5], 90, 1e-3), "square corners are 45 and 90");
+    check(close_to(lo[0], 60, 1e-3) && close_to(hi[0], 60, 1e-3), "tetrahedron corners are 60");
+    check(close_to(lo[5], 45, 1e-3) && close_to(hi[5], 90, 1e-3), "square corners are 45 and 90");
 
     const auto fold = values(doc, gui::Attr::DihedralMax);
     const double tet = std::acos(-1.0 / 3.0) * 180.0 / 3.14159265358979;
-    check(near(fold[0], tet, 1e-2), "tetrahedron folds by 109.47");
-    check(near(fold[4], 0, 1e-3), "a flat diagonal folds by 0 whatever the winding");
+    check(close_to(fold[0], tet, 1e-2), "tetrahedron folds by 109.47");
+    check(close_to(fold[4], 0, 1e-3), "a flat diagonal folds by 0 whatever the winding");
 
     const auto val = values(doc, gui::Attr::Valence);
     check(val[0] == 3 && val[4] == 2 && val[5] == 1, "faces around a vertex");
@@ -106,9 +106,9 @@ void test_mesh() {
     check(piece[0] == 4 && piece[7] == 4, "piece sizes");
 
     const auto area = values(doc, gui::Attr::FaceArea);
-    check(near(area[5], 0.5, 1e-5), "mean face area at a vertex");
+    check(close_to(area[5], 0.5, 1e-5), "mean face area at a vertex");
     const auto edge = values(doc, gui::Attr::EdgeLength);
-    check(near(edge[0], std::sqrt(8.0), 1e-4), "mean edge length at a vertex");
+    check(close_to(edge[0], std::sqrt(8.0), 1e-4), "mean edge length at a vertex");
 }
 
 void test_seam() {
@@ -138,11 +138,11 @@ void test_spacing() {
 
     const auto k4 = values(doc, gui::Attr::Knn4);
     const auto k16 = values(doc, gui::Attr::Knn16);
-    check(near(k4[mid], h, 1e-5), "median of 4 nearest on a lattice");
-    check(near(k16[mid], h * std::sqrt(2.0), 1e-5), "median of 16 nearest on a lattice");
+    check(close_to(k4[mid], h, 1e-5), "median of 4 nearest on a lattice");
+    check(close_to(k16[mid], h * std::sqrt(2.0), 1e-5), "median of 16 nearest on a lattice");
 
-    const auto far = values(doc, gui::Attr::OriginDistance);
-    check(near(far[mid], 2.0 * std::sqrt(3.0), 1e-5), "distance to the origin");
+    const auto origin_dist = values(doc, gui::Attr::OriginDistance);
+    check(close_to(origin_dist[mid], 2.0 * std::sqrt(3.0), 1e-5), "distance to the origin");
 }
 
 void test_histogram() {
@@ -249,26 +249,26 @@ void test_pair_colour() {
     Rgb c = pair(Attr::Hue, 0.0, Attr::Saturation, 1.0);
     check(c.r > 0.9 && c.g < 0.05 && c.b < 0.05, "hue 0 at full saturation is red");
     c = pair(Attr::Hue, 0.0, Attr::Saturation, 0.0);
-    check(near(c.r, c.g, 0.01) && near(c.g, c.b, 0.01), "no saturation is grey at any hue");
+    check(close_to(c.r, c.g, 0.01) && close_to(c.g, c.b, 0.01), "no saturation is grey at any hue");
     const Rgb flipped = pair(Attr::Saturation, 1.0, Attr::Hue, 0.0);
     check(flipped.r > 0.9 && flipped.g < 0.05, "the axes may come either way round");
 
     c = pair(Attr::Hue, 240.0, Attr::ChromaU, 0.3);
     check(c.b > c.r + 0.4 && c.b > c.g + 0.4, "a blue hue leaning blue is vivid blue");
     c = pair(Attr::Hue, 60.0, Attr::ChromaU, 0.2);
-    check(near(c.r, c.g, 0.01) && near(c.g, c.b, 0.01),
+    check(close_to(c.r, c.g, 0.01) && close_to(c.g, c.b, 0.01),
           "a yellow hue cannot lean blue: grey");
     c = pair(Attr::Hue, 0.0, Attr::ChromaV, -0.2);
-    check(near(c.r, c.b, 0.01), "nor a red hue lean cyan");
+    check(close_to(c.r, c.b, 0.01), "nor a red hue lean cyan");
 
     c = pair(Attr::ChromaU, 0.1, Attr::ChromaV, -0.1);
-    check(near((c.b - luma(c)) / 1.8556, 0.1, 0.01) &&
-              near((c.r - luma(c)) / 1.5748, -0.1, 0.01),
+    check(close_to((c.b - luma(c)) / 1.8556, 0.1, 0.01) &&
+              close_to((c.r - luma(c)) / 1.5748, -0.1, 0.01),
           "two colour differences give the colour that has both");
     c = pair(Attr::Hue, 120.0, Attr::Luma, 0.3);
-    check(near(luma(c), 0.3, 0.01) && c.g > c.r && c.g > c.b, "a hue at a luma");
+    check(close_to(luma(c), 0.3, 0.01) && c.g > c.r && c.g > c.b, "a hue at a luma");
     c = pair(Attr::Hue, 240.0, Attr::Luma, 0.8);
-    check(near(luma(c), 0.8, 0.02) && c.b >= c.r, "a bright blue pales rather than clips");
+    check(close_to(luma(c), 0.8, 0.02) && c.b >= c.r, "a bright blue pales rather than clips");
     c = pair(Attr::Saturation, 1.0, Attr::ChromaV, 0.2);
     check(c.r > 0.9 && c.g < 0.1, "saturation leaning red is red");
 

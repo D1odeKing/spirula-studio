@@ -196,13 +196,13 @@ void sam_mask_decoder(const SamModel& m, vk::Arena& arena, const Tensor& image_e
     // ---- hypernetwork masks ----
     {
         vk::ArenaScope inner(arena);
-        Tensor hyper = nn::arena_tensor(arena, nn::DType::F32, NM, 32);
+        Tensor hyper_out = nn::arena_tensor(arena, nn::DType::F32, NM, 32);
         for (int64_t k = 0; k < NM; ++k) {
             char pfx[64];
             std::snprintf(pfx, sizeof pfx, "sam_dec.hyper.%d.layers", (int)k);
-            mlp_relu(arena, hyper.slice0(k, 1), out.mask_tokens.slice0(k, 1), m, pfx, 3);
+            mlp_relu(arena, hyper_out.slice0(k, 1), out.mask_tokens.slice0(k, 1), m, pfx, 3);
         }
-        nn::matmul_nt(out.masks, hyper, up2.view(S * S, 32));
+        nn::matmul_nt(out.masks, hyper_out, up2.view(S * S, 32));
     }
 
     mlp_relu(arena, out.iou.view(1, NM), iou_token, m, "sam_dec.iou_prediction_head.layers",

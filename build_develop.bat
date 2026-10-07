@@ -32,13 +32,14 @@ goto :comment_check
 echo python not found -- skipping codegen (using committed generated files)
 
 rem ---------------------------------------------------------------------------
-rem Comment-length gate (AGENTS.md). Also wired into CMake
-rem (cmake/SsChecks.cmake), which covers a bare cmake/ninja build; running it
-rem here fails before the configure step rather than after it.
+rem Comment-length gate (AGENTS.md), and no source naming a windows.h macro.
+rem Both are also wired into CMake (cmake/SsChecks.cmake), which covers a bare
+rem cmake/ninja build; running them here fails before the configure step.
 rem ---------------------------------------------------------------------------
 :comment_check
 where python >nul 2>&1 || goto :msvc_env
 python tools\check_comment_length.py || exit /b 1
+python tools\check_winmacro.py --quiet || exit /b 1
 
 rem ---------------------------------------------------------------------------
 rem MSVC environment. vcvars64 is called even when cl is already on PATH: a

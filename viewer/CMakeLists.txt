@@ -146,5 +146,5 @@ add_custom_command(TARGET ssv_telemetry POST_BUILD
   COMMENT "Copying telemetry WASM artifacts into js/"
 )
 
-# Last: makes both modules depend on the repo's comment-length lint (docs/build.md).
+# Last: makes both modules depend on the repo's source lints (docs/build.md).
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/SsChecks.cmake)
