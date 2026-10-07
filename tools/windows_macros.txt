@@ -1,0 +1,59 @@
+# Names <windows.h> defines as macros that portable code here could plausibly
+# spell for itself; tools/check_winmacro.py fails on each one it finds. NAME()
+# marks a function-like macro, which only bites when `(` follows or the name
+# is #defined. Every name was read off Windows SDK 10.0.26100 (`cl /EP /d1PP`
+# over windows.h, shobjidl.h, dbghelp.h and winsock2.h). min and max are
+# absent: cmake/SsOptions.cmake defines NOMINMAX.
+#
+# Names are whitespace-separated; #-comments are ignored.
+
+# --- Empty, or a keyword in disguise ---
+near far NEAR FAR pascal PASCAL cdecl CDECL IN OUT OPTIONAL CONST VOID CALLBACK
+WINAPI UNALIGNED FORCEINLINE
+
+# --- Plain words that become numbers ---
+TRUE FALSE ERROR NOERROR NO_ERROR DELETE STRICT IGNORE INFINITE MAX_PATH OPAQUE
+TRANSPARENT ABSOLUTE RELATIVE ALTERNATE WINDING DIFFERENCE FILE_BEGIN
+FILE_CURRENT FILE_END CREATE_NEW CREATE_ALWAYS OPEN_EXISTING OPEN_ALWAYS
+TRUNCATE_EXISTING WAIT_TIMEOUT WAIT_FAILED STATUS_TIMEOUT STATUS_PENDING
+MOD_ALT MOD_CONTROL MOD_SHIFT MAXINT MININT MAXUINT MAXLONG MINLONG MAXSHORT
+MINSHORT MAXCHAR MINCHAR MAXBYTE MAXWORD MAXDWORD
+
+# --- Function-like ---
+ARRAYSIZE() LOWORD() HIWORD() LOBYTE() HIBYTE() MAKEWORD() MAKELONG() RGB()
+CMYK() TEXT() SUCCEEDED() FAILED() DEPRECATED() Yield() GetCurrentTime()
+
+# --- Generic names aliased to an Rtl* or a FooA/FooW function ---
+CopyMemory MoveMemory FillMemory ZeroMemory SecureZeroMemory GetObject
+GetMessage SendMessage PostMessage PeekMessage DispatchMessage DrawText TextOut
+CreateFont LoadImage LoadIcon LoadCursor LoadBitmap LoadString LoadLibrary
+FindResource CreateWindow FindWindow GetWindowText SetWindowText RegisterClass
+UnregisterClass GetClassName CreateDialog DialogBox MessageBox GetMonitorInfo
+CreateFile CopyFile MoveFile DeleteFile ReplaceFile CreateDirectory
+RemoveDirectory GetCurrentDirectory SetCurrentDirectory GetTempPath
+GetTempFileName GetFullPathName SearchPath FindFirstFile FindNextFile
+GetFileAttributes SetFileAttributes GetDriveType CreateHardLink
+CreateSymbolicLink GetModuleFileName GetEnvironmentVariable
+SetEnvironmentVariable GetUserName GetComputerName GetCommandLine FormatMessage
+OutputDebugString CreateEvent CreateMutex CreateSemaphore CreateProcess
+ReportEvent GetProp SetProp RemoveProp StartDoc CharNext CharPrev CharUpper
+CharLower
+
+# --- Only without WIN32_LEAN_AND_MEAN, or from shobjidl.h or dbghelp.h ---
+small hyper uuid_t interface INTERFACE PURE THIS DUPLICATE REGISTERED ADDRESS
+LITTLEENDIAN BIGENDIAN GetJob SetJob AddJob GetForm SetForm AddForm DeleteForm
+GetPrinter SetPrinter PlaySound ShellExecute
+
+# --- dlgs.h control IDs, also only without WIN32_LEAN_AND_MEAN ---
+chx1 chx2 chx3 chx4 chx5 chx6 chx7 chx8 chx9 chx10 chx11 chx12 chx13 chx14
+chx15 chx16 cmb1 cmb2 cmb3 cmb4 cmb5 cmb6 cmb7 cmb8 cmb9 cmb10 cmb11 cmb12
+cmb13 cmb14 cmb15 cmb16 edt1 edt2 edt3 edt4 edt5 edt6 edt7 edt8 edt9 edt10
+edt11 edt12 edt13 edt14 edt15 edt16 lst1 lst2 lst3 lst4 lst5 lst6 lst7 lst8
+lst9 lst10 lst11 lst12 lst13 lst14 lst15 lst16 psh1 psh2 psh3 psh4 psh5 psh6
+psh7 psh8 psh9 psh10 psh11 psh12 psh13 psh14 psh15 psh16 rad1 rad2 rad3 rad4
+rad5 rad6 rad7 rad8 rad9 rad10 rad11 rad12 rad13 rad14 rad15 rad16 stc1 stc2
+stc3 stc4 stc5 stc6 stc7 stc8 stc9 stc10 stc11 stc12 stc13 stc14 stc15 stc16
+stc17 stc18 stc19 stc20 stc21 stc22 stc23 stc24 stc25 stc26 stc27 stc28 stc29
+stc30 stc31 stc32 scr1 scr2 scr3 scr4 scr5 scr6 scr7 scr8 rct1 rct2 rct3 rct4
+grp1 grp2 grp3 grp4 ico1 ico2 ico3 ico4 frm1 frm2 frm3 frm4 ctl1 ctlFirst
+ctlLast pshHelp

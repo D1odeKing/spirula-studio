@@ -30,6 +30,7 @@ jobs:
           bash tools/check_comments.sh
           bash tools/check_private_paths.sh
           python3 tools/check_font_coverage.py
+          python3 tools/check_winmacro.py
 
       - name: Generated files are current
         run: |

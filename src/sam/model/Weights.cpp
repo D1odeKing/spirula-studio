@@ -284,9 +284,9 @@ void WeightStore::load(const std::string& path) {
         NN_CHECK(r.file_bytes > 0, "tensor '%s' has unsupported dtype %d",
                    r.name.c_str(), dtype);
 
-        const bool small = n < kSmallTensorElems;
-        r.device_dtype = (n_dims == 1 || small || force_f32(r.name)) ? nn::DType::F32
-                                                                    : nn::DType::F16;
+        const bool is_small = n < kSmallTensorElems;
+        r.device_dtype = (n_dims == 1 || is_small || force_f32(r.name)) ? nn::DType::F32
+                                                                       : nn::DType::F16;
         const uint64_t bytes = ((uint64_t)n * nn::dtype_size(r.device_dtype) + 255) & ~255ull;
         if (chunk_cursor != 0 && chunk_cursor + bytes > kWeightChunkBytes) {
             chunk_sizes.push_back(chunk_cursor);

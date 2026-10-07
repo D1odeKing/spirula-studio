@@ -58,11 +58,12 @@ bash tools/check_sam_guard.sh >/dev/null || { bash tools/check_sam_guard.sh; exi
 bash tools/mask_editor_checks/survivors.sh >/dev/null ||
     { bash tools/mask_editor_checks/survivors.sh | command grep '^FAIL'; exit 1; }
 
-# Comment blocks in uncommitted work must fit the AGENTS.md budget. Also wired
-# into CMake (cmake/SsChecks.cmake), which covers a bare cmake/ninja build;
-# running it here fails before the configure step rather than after it.
+# Comment blocks in uncommitted work must fit the AGENTS.md budget, and no
+# source may name a <windows.h> macro. CMake (cmake/SsChecks.cmake) runs both
+# too; running them here fails before the configure step rather than after it.
 if command -v python3 >/dev/null 2>&1; then
     python3 tools/check_comment_length.py || exit 1
+    python3 tools/check_winmacro.py --quiet || exit 1
 fi
 
 # Homebrew's libomp is keg-only: nothing points at it, so CMake finds no
@@ -132,13 +133,6 @@ echo ""
 if ! cmake --build "$build_dir" --verbose -j"${JOBS}"; then
     echo "BUILD FAILED" >&2
     exit 1
-fi
-
-# <windows.h> defines near, far and small; a local of that name breaks only
-# Windows. After the build, because the check reuses its compile commands.
-if command -v python3 >/dev/null 2>&1; then
-    python3 tools/check_winmacro.py --build "$build_dir" >/dev/null ||
-        { python3 tools/check_winmacro.py --build "$build_dir" | command grep -v '^ok'; exit 1; }
 fi
 
 echo ""

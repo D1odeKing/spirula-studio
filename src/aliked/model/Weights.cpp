@@ -274,16 +274,16 @@ nn::Tensor AlikedWeights::get(const std::string& name) const {
 
     // Near misses: the failure is almost always a name that drifted, and
     // printing the neighbourhood turns a five-minute hunt into a glance.
-    std::vector<std::string> near;
+    std::vector<std::string> misses;
     for (const auto& kv : tensors_) {
         const std::string& k = kv.first;
         const size_t dot = name.find('.');
         if (dot != std::string::npos && k.compare(0, dot, name, 0, dot) == 0)
-            near.push_back(k);
+            misses.push_back(k);
     }
-    std::sort(near.begin(), near.end());
+    std::sort(misses.begin(), misses.end());
     std::string hint;
-    for (size_t i = 0; i < near.size() && i < 8; ++i) hint += "\n    " + near[i];
+    for (size_t i = 0; i < misses.size() && i < 8; ++i) hint += "\n    " + misses[i];
     nn::fail("no weight named '%s'%s%s", name.c_str(),
              hint.empty() ? "" : " (did you mean one of these?)", hint.c_str());
 }

@@ -59,7 +59,7 @@ double rotDeg(const Mat3& A, const Mat3& B) {
     return std::acos(c) * 180.0 / M_PI;
 }
 
-bool near(const Vec3& a, const Vec3& b) { return (a - b).norm() < 1e-9; }
+bool close_to(const Vec3& a, const Vec3& b) { return (a - b).norm() < 1e-9; }
 
 Vec3 column(const Mat3& M, int c) { return {M[c], M[3 + c], M[6 + c]}; }
 
@@ -176,13 +176,14 @@ static void check_convention() {
     };
     const Vec3 E{1, 0, 0}, N{0, 1, 0}, U{0, 0, 1};
     Mat3 R = W(0, 0, 0);
-    check(near(column(R, 2), N) && near(column(R, 0), E) && near(column(R, 1), U * -1.0),
+    check(close_to(column(R, 2), N) && close_to(column(R, 0), E) &&
+              close_to(column(R, 1), U * -1.0),
           "level and facing north: forward is north, right is east, down is down");
-    check(near(column(W(90, 0, 0), 2), E), "yaw 90 faces east");
+    check(close_to(column(W(90, 0, 0), 2), E), "yaw 90 faces east");
     R = W(0, -90, 0);
-    check(near(column(R, 2), U * -1.0) && near(column(R, 1), N * -1.0),
+    check(close_to(column(R, 2), U * -1.0) && close_to(column(R, 1), N * -1.0),
           "pitch -90 looks down, the top of the frame towards the heading");
-    check(near(column(W(0, 0, 90), 0), U * -1.0), "roll 90 drops the right side");
+    check(close_to(column(W(0, 0, 90), 0), U * -1.0), "roll 90 drops the right side");
     check(rotDeg(W(123, -55, 180), W(-57, -125, 0)) < 1e-5,
           "a gimbal rolled over is the same camera pitched past the nadir");
 }

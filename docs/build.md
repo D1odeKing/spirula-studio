@@ -111,7 +111,7 @@ shipping one built with it on.
 
 ## Lints
 
-Six checks guard the source. Each fails the build, and each skips itself when
+Seven checks guard the source. Each fails the build, and each skips itself when
 its interpreter is missing — none of them is a dependency of a fresh checkout.
 
 | check | what it refuses |
@@ -122,13 +122,14 @@ its interpreter is missing — none of them is a dependency of a fresh checkout.
 | `tools/check_comments.sh` | a comment citing a file that is not in the tree |
 | `tools/check_file_macro.sh` | a bare `__FILE__` where [`SS_FILE`](../src/core/SourcePath.h) belongs |
 | `tools/check_comment_length.py` | a comment block over the [budget](../AGENTS.md#budget) |
+| `tools/check_winmacro.py` | an identifier `<windows.h>` defines as a macro ([`tools/windows_macros.txt`](../tools/windows_macros.txt)) |
 
-The first five run from `build_develop.bash` only. The comment-length check
-also runs from CMake (`cmake/SsChecks.cmake`) as the `ss_check_comment_length`
-target, which every other target is made to depend on — so a bare `ninja`, a
-`make`, or `cmake --build build --target spirula` fails on it just as the dev
-scripts do. `build_develop.bat` runs it directly, and the standalone viewer
-build includes the same module.
+The first five run from `build_develop.bash` only. The last two also run from
+CMake (`cmake/SsChecks.cmake`) as the `ss_check_comment_length` and
+`ss_check_winmacro` targets, which every other target is made to depend on — so
+a bare `ninja`, a `make`, or `cmake --build build --target spirula` fails on
+them just as the dev scripts do. `build_develop.bat` runs them directly, and
+the standalone viewer build includes the same module.
 
 ### The comment-length check
 
@@ -147,6 +148,31 @@ cmake -B build_vulkan -DSS_CHECK_COMMENTS=OFF  # or for a whole build tree
 
 Neither escape hatch is a fix: the comment is still over budget, and the next
 person to touch that file inherits it.
+
+### The `<windows.h>` macro check
+
+`<windows.h>` turns plain words into macros: `near` and `far` expand to
+nothing, `small` to `char`, `ERROR` to `0`, `GetObject` to `GetObjectW`. A
+variable, enumerator or method by one of those names breaks only the Windows
+build, or silently changes it. The check lexes every C-like file in the
+checkout, tracked or not, apart from build trees, `outputs/`, `src/external/`
+and dot-directories, and flags each name in
+[`tools/windows_macros.txt`](../tools/windows_macros.txt) outside a comment or a
+literal. A function-like macro such as `RGB` counts only when `(` follows it or
+the name is `#define`d, so an enumerator `RGB` passes.
+
+Three things are exempt: a branch only Windows compiles (`#ifdef _WIN32`,
+`#ifdef _MSC_VER`), where Win32 code spells `TRUE` and `INFINITE` on purpose
+and the Windows compiler sees every line; a branch Windows never compiles
+(`#ifndef _WIN32`, `#ifdef __APPLE__`); and Slang and Objective-C++ files,
+which never meet the header. The check takes about half a second and has no
+skip switch: rename the identifier. A name added to the list should come from
+the SDK headers, as the list's header describes, not from memory.
+
+A `cannot lex` or `unbalanced` report means the lexer lost its place. Either
+the file has a syntax error, or `tools/check_winmacro.py` needs a fix. It keeps
+only the first branch of an `#if` when counting brackets, and evaluates nothing
+else of the preprocessor.
 
 ## Targets
 
