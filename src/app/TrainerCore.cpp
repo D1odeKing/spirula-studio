@@ -1243,10 +1243,6 @@ void TrainerSession::setup_engine() {
                  {(double)v_q, (long long)bs_old, (long long)train_bs}));
     }
     _batches_per_epoch = (int)std::max<int64_t>(1, (num_train + train_bs - 1) / train_bs);
-    int val_bs = 1;
-    if (num_val > 0)
-        val_bs = std::max(1, (int)std::ceil(n_batch * (double)num_val / (double)num_train));
-
     DataManagerConfig dm;
     dm.cache_mode  = (cfg.cache_images == "disk") ? CacheMode::DISK : CacheMode::CPU;
     // A split needs a mask even when none is on disk: the synthesized
@@ -1256,7 +1252,6 @@ void TrainerSession::setup_engine() {
     dm.load_depths      = has_depth;
     dm.load_normals     = has_normal;
     dm.train_batch_size = train_bs;
-    dm.val_batch_size   = val_bs;
     dm.flip_mask = cfg.flip_mask;
     set_alpha_config(dm, alpha_images);
     dm.mask_boundary_offset = cfg.mask_boundary_offset;
@@ -1279,7 +1274,9 @@ void TrainerSession::setup_engine() {
         post.any_warp ? post.face_axes : std::vector<float>{},
         post.input_intrins, post.input_dist_coeffs,
         post.redistort_models, post.redistort_params,
-        ds.train_indices, ds.val_indices);
+        // No val indices: validate() reads them through fetch_one, and a val
+        // queue nothing pops fills up and stalls the disk scheduler's train side.
+        ds.train_indices, {});
     engine_set_view_stats(dm.deficit_sampling);
 
     // ---- Bilagrid / PPISP init -----------------------------------------
