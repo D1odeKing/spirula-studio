@@ -131,6 +131,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, save_only_latest_checkpoint, true, "run", "advanced", "")        \
     X(bool, save_full_checkpoint, false, "run", "advanced", "")              \
     X(bool, save_eval_images, false, "run", "advanced", "")                  \
+    X(bool, log_performance, false, "run", "advanced", "")                   \
     X(int, viewer_port, 7007, "run", "advanced", "")                         \
     X(bool, disable_viewer, false, "run", "advanced", "")                    \
     X(bool, keep_viewer_alive, true, "run", "advanced", "")                  \
@@ -163,6 +164,12 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, roi_mask_pixels, true, "dataset", "advanced", "")                \
     X(float, train_resolution_divisor, 0.0f, "dataset", "basic", "")         \
     X(std::string, downscale_rounding_mode, "floor", "dataset", "advanced", "floor|ceil|round") \
+    X(bool, progressive_resolution, false, "dataset", "basic", "")           \
+    X(int, progressive_resolution_start, 4, "dataset", "advanced", "")       \
+    X(float, progressive_resolution_full_at, 0.3f, "dataset", "advanced", "") \
+    X(std::string, progressive_resolution_schedule, "", "dataset", "advanced", "none") \
+    X(bool, progressive_splat_budget, true, "dataset", "advanced", "")       \
+    X(std::string, progressive_splat_budget_schedule, "", "dataset", "advanced", "none") \
     X(std::string, eval_mode, "all", "dataset", "advanced", "fraction|filename|interval|all") \
     X(int, eval_interval, 8, "dataset", "advanced", "")                      \
     X(float, train_split_fraction, 0.9f, "dataset", "advanced", "")          \

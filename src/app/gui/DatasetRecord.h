@@ -16,8 +16,8 @@ namespace gui {
 // In the workspace root, dotted: no parser looks for it.
 inline constexpr const char* kDatasetRecordFile = ".spirula-dataset.json";
 
-enum class Step { Frames, Masks, Model, Geometry };
-inline constexpr int kNumSteps = 4;
+enum class Step { Frames, Masks, Model, Dense, Geometry };
+inline constexpr int kNumSteps = 5;
 
 // One setting a step's output depends on. `scope` is what it applies to -- an
 // input, a camera folder -- and empty for the whole dataset. `value` is

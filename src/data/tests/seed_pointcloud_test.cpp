@@ -1,4 +1,5 @@
 #include "data/DatasetParser.h"
+#include "data/SparseEdit.h"
 #include "config/TrainConfigJson.h"
 
 #include <cmath>
@@ -81,6 +82,17 @@ int main() {
         auto native = parse_colmap_dataset(root.string(), cfg);
         check(native.points.num() == 1 && native.points.xyz[0] == 1,
               "unset path retains native sparse points");
+        const double precise_xyz[] = {4000000.123456789, -3000000.987654321, 2000000.314159265};
+        const uint8_t precise_rgb[] = {17, 129, 241};
+        spirula::write_ply_points((root / "precise.ply").string(), precise_xyz, precise_rgb, 1, nullptr,
+                                   nullptr, spirula::PlyCoordinates::Float64);
+        const auto precise = read_ply_points((root / "precise.ply").string());
+        check(precise.xyz == std::vector<double>(precise_xyz, precise_xyz + 3) &&
+              precise.rgb == std::vector<uint8_t>(precise_rgb, precise_rgb + 3),
+              "shared double PLY writer preserves large-coordinate precision and RGB");
+        spirula::write_ply_points((root / "legacy.ply").string(), precise_xyz, precise_rgb, 1, nullptr);
+        const auto legacy = read_ply_points((root / "legacy.ply").string());
+        check(legacy.xyz[0] == (double)(float)precise_xyz[0], "shared PLY writer retains its default float format");
         for (bool binary : {false, true}) {
             write_ply(root / "lidar.ply", binary);
             cfg.seed_pointcloud = "lidar.ply";
@@ -118,6 +130,8 @@ int main() {
               "poses-only COLMAP accepts external cloud");
         write_nerfstudio(root);
         auto ns = parse_nerfstudio_dataset(root.string(), cfg);
+        check(ns.raw_to_file[0] == 1 && ns.raw_to_file[3] == 10 && ns.raw_to_file[7] == 20 && ns.raw_to_file[11] == 30,
+              "Nerfstudio exposes the forward source-file transform for exported seed clouds");
         check(ns.points.xyz[0] == 999990.25 && ns.points.xyz[1] == 1999980.5,
               "Nerfstudio applies the same applied_transform inverse");
         cfg.seed_pointcloud = "missing.ply";

@@ -15,6 +15,13 @@ Runtime knobs: `SS_NN_LOG=0..3`, `SS_VK_DEVICE=<index|name|auto|uuid:hex>`,
 `SS_PROFILE=1`, `SS_VK_VALIDATION=1`, `SS_NN_DEBUG_SYNC=1`, `SS_NN_COOPMAT=0`,
 `SS_SUBMIT_BUDGET_MS` (docs/notes/gpu-submit-budget.md).
 
+The context probes optional `VK_EXT_memory_budget`. `Context::memoryBudget`
+queries the selected device's current local-heap budgets and usage, or returns
+an empty report when unsupported. The query in `core/VulkanMemoryBudget.h`
+is shared with the trainer's memory reporting. `Allocator` exposes live bytes
+and allocation count so model-owned caches can adapt to device headroom and
+`maxMemoryAllocationCount` without a fixed cache size or device-name rule.
+
 ## The op layer
 
 An op runs when you call it, writing into a caller-provided output — usually an

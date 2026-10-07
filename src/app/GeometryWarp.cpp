@@ -83,6 +83,16 @@ camhost::Camera host_camera(const GeometryCamera& cam) {
     return c;
 }
 
+bool project_source(const GeometryCamera& cam, const double ray[3], double pixel[2]) {
+    if (cam.source_model >= 0)
+        return srccam::project(cam.source_model, cam.source_params, ray[0], ray[1], ray[2], &pixel[0], &pixel[1]);
+    double uv[2];
+    if (!camhost::project_ray(ray, cam.model, cam.distortion, cam.dist, uv)) return false;
+    pixel[0] = uv[0] * cam.fx + cam.cx;
+    pixel[1] = uv[1] * cam.fy + cam.cy;
+    return true;
+}
+
 // The frame looking along `az` whose image up is the camera's up (-y) as far
 // as the tilt allows -- the networks carry a gravity prior -- and `down`
 // where `az` is the camera's up itself.
@@ -288,7 +298,8 @@ std::vector<float> resize_area(const uint8_t* src, int sw, int sh, int channels,
 }
 
 void GeometryWarp::plan(const GeometryCamera& cam, int out_w, int out_h, bool split,
-                        int patch, int max_face, FaceRes res, int64_t min_face_px) {
+                        int patch, int max_face, FaceRes res, int64_t min_face_px, bool source_indices) {
+    camera_ = cam;
     out_w_ = out_w;
     out_h_ = out_h;
     faces_.clear();
@@ -378,22 +389,14 @@ void GeometryWarp::plan(const GeometryCamera& cam, int out_w, int out_h, bool sp
     // A camera the parser had to fit reads through its TRUE lens; only that
     // direction has a closed form, so the inverse below still goes through the
     // fit. The one approximate step here, and sub-pixel.
-    const bool from_source = cam.source_model >= 0;
-    auto ray_to_pixel = [&](const double r[3], double& px, double& py) -> bool {
-        double uv[2];
-        if (from_source) {
-            double u, v;
-            if (!srccam::project(cam.source_model, cam.source_params, r[0], r[1], r[2],
-                                 &u, &v))
-                return false;
-            px = u * gx;
-            py = v * gy;
-            return true;
-        }
-        if (!camhost::project_ray(r, cam.model, cam.distortion, cam.dist, uv))
-            return false;
-        px = (uv[0] * cam.fx + cam.cx) * gx;
-        py = (uv[1] * cam.fy + cam.cy) * gy;
+    auto ray_to_pixel = [&](const double r[3], double& px, double& py, int64_t* index = nullptr) -> bool {
+        double source[2];
+        if (!project_source(cam, r, source)) return false;
+        if (index && std::isfinite(source[0]) && std::isfinite(source[1]) && source[0] >= 0 && source[1] >= 0 &&
+            source[0] < cam.width && source[1] < cam.height)
+            *index = (int64_t)source[1] * cam.width + (int64_t)source[0];
+        px = source[0] * gx;
+        py = source[1] * gy;
         return true;
     };
 
@@ -403,6 +406,7 @@ void GeometryWarp::plan(const GeometryCamera& cam, int out_w, int out_h, bool sp
         Face& f = faces_[(size_t)k];
         f.to_src.assign((size_t)f.w * f.h * 2, kNaN);
         f.valid.assign((size_t)f.w * f.h, 0.0f);
+        if (source_indices) f.source_indices.assign((size_t)f.w * f.h, -1);
         nn::parallel_for(f.h, [&](int64_t y0, int64_t y1) {
             for (int64_t y = y0; y < y1; ++y)
                 for (int x = 0; x < f.w; ++x) {
@@ -420,8 +424,8 @@ void GeometryWarp::plan(const GeometryCamera& cam, int out_w, int out_h, bool sp
                             r[i] = a[6 + i] + u / ex * a[i] + v / ey * a[3 + i];
                     }
                     double px = 0, py = 0;
-                    if (!ray_to_pixel(r, px, py)) continue;
                     const size_t i = (size_t)y * f.w + x;
+                    if (!ray_to_pixel(r, px, py, source_indices ? &f.source_indices[i] : nullptr)) continue;
                     f.to_src[i * 2 + 0] = (float)px;
                     f.to_src[i * 2 + 1] = (float)py;
                     if (px >= 0 && py >= 0 && px <= sw_ && py <= sh_) f.valid[i] = 1.0f;
@@ -511,6 +515,14 @@ void GeometryWarp::plan(const GeometryCamera& cam, int out_w, int out_h, bool sp
     });
 }
 
+uint64_t GeometryWarp::bytes() const {
+    uint64_t bytes = axes_.capacity() * sizeof(double) + contrib_off_.capacity() * sizeof(int64_t) +
+        contrib_.capacity() * sizeof(Contrib);
+    for (const auto& face : faces_) bytes += (face.to_src.capacity() + face.valid.capacity()) * sizeof(float) +
+        face.source_indices.capacity() * sizeof(int64_t);
+    return bytes;
+}
+
 void GeometryWarp::sampleFace(int k, const float* src, std::vector<float>& dst) const {
     const Face& f = faces_[(size_t)k];
     dst.assign((size_t)f.w * f.h * 3, 0.5f);
@@ -523,6 +535,25 @@ void GeometryWarp::sampleFace(int k, const float* src, std::vector<float>& dst) 
                        &dst[i * 3]);
             }
     });
+}
+
+std::array<double, 3> GeometryWarp::faceRay(int k, double px, double py) const {
+    const Face& f = faces_.at((size_t)k);
+    const double u = (px - f.cx) / f.fx, v = (py - f.cy) / f.fy;
+    if (axes_.empty()) return {u, v, 1.0};
+    const double* a = axes_.data() + (size_t)k * 9;
+    const double ex = len3(a), ey = len3(a + 3);
+    std::array<double, 3> ray;
+    for (int i = 0; i < 3; ++i) ray[i] = a[6 + i] + u / ex * a[i] + v / ey * a[3 + i];
+    return ray;
+}
+
+bool GeometryWarp::faceToSource(int k, double px, double py, double source[2]) const {
+    const Face& f = faces_.at((size_t)k);
+    if (!std::isfinite(px) || !std::isfinite(py) || px < 0 || py < 0 || px > f.w || py > f.h) return false;
+    const auto ray = faceRay(k, px, py);
+    return project_source(camera_, ray.data(), source) && std::isfinite(source[0]) && std::isfinite(source[1]) &&
+        source[0] >= 0 && source[1] >= 0 && source[0] <= camera_.width && source[1] <= camera_.height;
 }
 
 // Per-face log offsets reconciling the median log depth ratio over every

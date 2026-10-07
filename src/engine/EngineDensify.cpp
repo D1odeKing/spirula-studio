@@ -360,7 +360,7 @@ int engine_densify_step(int step, int max_steps, const DensifyConfig& cfg) {
         );
 
         // Add more splats
-        int64_t n_target = densify_target(cfg, cur_num_splats, max_num_splats);
+        int64_t n_target = densify_target(cfg, cur_num_splats, densify_cap_at(cfg, step, max_num_splats));
         num_added = (int)std::max((int64_t)0, n_target - cur_num_splats);
         if (split_budget > 0)
             num_added = (int)std::max<int64_t>(0, std::min<int64_t>(num_added, split_budget - num_relocated));
@@ -428,7 +428,7 @@ int engine_densify_step(int step, int max_steps, const DensifyConfig& cfg) {
         , engine().region.weight);
 
         // MCMC sample add
-        int64_t n_target = densify_target(cfg, cur_num_splats, max_num_splats);
+        int64_t n_target = densify_target(cfg, cur_num_splats, densify_cap_at(cfg, step, max_num_splats));
         num_added = (int)std::max((int64_t)0, n_target - cur_num_splats);
         if (num_added > 0) {
             add_splats_mcmc_tensor(

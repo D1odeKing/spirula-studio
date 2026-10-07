@@ -8,6 +8,8 @@
 #include "app/EvalMetrics.h"
 #include "checkpoint/Adapt.h"
 #include "checkpoint/Resume.h"
+#include "data/ResolutionSchedule.h"
+#include "sfm/core/HostMemory.h"
 #include "checkpoint/SplatPly.h"
 #include "config/TrainConfigJson.h"
 #include "core/ColorSpace.h"
@@ -21,6 +23,7 @@
 #include "data/RegionProgram.h"
 #include "data/RoiDocument.h"
 #include "data/LabelField.h"
+#include "dense/Artifact.h"
 #include "data/Knn.h"
 #include "sfm/core/Exif.h"
 
@@ -31,6 +34,7 @@
 #include "external/stb_image_write.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
@@ -59,6 +63,14 @@ namespace lmsg = spirula::i18n::msg::log;
 static std::string lfmt(const spirula::i18n::Msg& m,
                         std::initializer_list<spirula::i18n::Arg> a) {
     return spirula::i18n::format(m, a);
+}
+
+// The step setpoints a progressive-resolution run follows; throws on a bad schedule.
+static progressive::Setpoints resolution_setpoints(const TrainConfig& c) {
+    return c.progressive_resolution_schedule.empty()
+        ? progressive::automatic_setpoints(c.progressive_resolution_start,
+                                           c.progressive_resolution_full_at, c.num_iterations)
+        : progressive::parse_setpoints(c.progressive_resolution_schedule);
 }
 
 namespace spirula {
@@ -585,6 +597,7 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
         ? (int)std::min(65535.0, std::max(1.0, std::round(
               (double)c.dead_after_epochs * (double)st.steps_per_epoch)))
         : 0;
+    cfg.densify.growth_caps = st.growth_caps;
 
     // ---- bilagrid LRs + TV ---------------------------------------------
     if (st.bilagrid_rgb_init) {
@@ -810,6 +823,10 @@ void TrainerSession::check_config() {
         find_splat_ply(cfg.init_ply);  // before the dataset is parsed, not after
     if (cfg.validation_fraction > 0)
         log(lmsg::warn_validation_unported.get());
+    if (cfg.progressive_resolution) resolution_setpoints(cfg);
+    if (cfg.progressive_resolution && cfg.progressive_splat_budget &&
+        !cfg.progressive_splat_budget_schedule.empty())
+        progressive::parse_budget(cfg.progressive_splat_budget_schedule, cfg.cap_max);
     if (cfg.orientation_method != "up" || cfg.center_method != "poses")
         log(lfmt(lmsg::warn_pose_normalization_approx,
                  {cfg.orientation_method, cfg.center_method}));
@@ -858,6 +875,7 @@ void TrainerSession::seed_at_random() {
 }
 
 void TrainerSession::load_dataset() {
+    cfg.seed_pointcloud = spirula::dense::verified_seed_path(cfg.data, cfg.seed_pointcloud);
     DatasetParserConfig pcfg;
     pcfg.recon_dir            = cfg.colmap_recon_dir;
     pcfg.seed_pointcloud      = cfg.seed_pointcloud;
@@ -941,10 +959,10 @@ void TrainerSession::load_dataset() {
                                            : lmsg::alpha_masks_with_files,
                  {n, (long long)ds.num_cameras}));
     }
-    // A cut-out's transparent pixels are empty space, not distractors. Mask
-    // files could be either, so with any of them the default stays "ignore".
+    // Dense seeds and alpha cut-outs treat excluded pixels as empty space.
     if (!cfg.apply_loss_for_mask.has_value()) {
-        cfg.apply_loss_for_mask = !alpha_images.empty() && ds.mask_filenames.empty();
+        cfg.apply_loss_for_mask = spirula::dense::is_dense_seed(cfg.data, cfg.seed_pointcloud) ||
+            (!alpha_images.empty() && ds.mask_filenames.empty());
         if (*cfg.apply_loss_for_mask) log(lmsg::alpha_masks_cut_out.get());
     }
     has_depth  = !ds.depth_filenames.empty()  && cfg.load_depths &&
@@ -1133,6 +1151,11 @@ void TrainerSession::setup_engine() {
         save_scene_transform_json(ds, cfg, out_dir);
     }
     log(lfmt(lmsg::output_directory, {fs::absolute(out_dir).string()}));
+    if (cfg.log_performance) {
+        const fs::path perf = fs::absolute(TrainPerfLog::perf_dir(out_dir));
+        if (_system.start(perf)) log(lfmt(lmsg::perf_log_started, {perf.string()}));
+        else log(lfmt(lmsg::perf_log_failed, {perf.string()}));
+    }
 
     // ---- Engine setup -------------------------------------------------
     engine_reset();
@@ -1262,6 +1285,25 @@ void TrainerSession::setup_engine() {
     dm.deficit_sampling  = cfg.view_sampling == "deficit";
     dm.deficit_power     = cfg.view_deficit_power;
     dm.deficit_max_ratio = cfg.view_deficit_max_ratio;
+    progressive::Setpoints stage_steps;   // the stages' real first steps, for the splat budget
+    if (cfg.progressive_resolution) {
+        dm.resolution_stages = progressive::to_epochs(resolution_setpoints(cfg), _batches_per_epoch);
+        for (const auto& [epoch, divisor] : dm.resolution_stages)
+            stage_steps.emplace_back(epoch * _batches_per_epoch, divisor);
+        // A resumed run picks the schedule up at the epoch its checkpoint was in.
+        if (!cfg.resume.empty()) {
+            try {
+                const JsonValue state = ckpt::read_state_json(ckpt::resolve_checkpoint(cfg.resume).ckpt_dir);
+                if (const JsonValue* saved = state.find("step"))
+                    dm.first_epoch = saved->as_int() / std::max(1, _batches_per_epoch);
+            } catch (const std::exception&) {}   // restore_checkpoint reports it
+        }
+        for (const auto& [epoch, divisor] : dm.resolution_stages) {
+            const long long from = (long long)epoch * _batches_per_epoch;
+            log(divisor > 1 ? lfmt(lmsg::progressive_stage, {(long long)divisor, from})
+                            : lfmt(lmsg::progressive_stage_full, {from}));
+        }
+    }
     engine_setup_data_manager(
         dm, ds.camera_models, ds.camera_distortions,
         ds.image_filenames,
@@ -1286,6 +1328,20 @@ void TrainerSession::setup_engine() {
     st = RunState{};
     st.train_frame_scale = ds.train_frame_scale;
     st.steps_per_epoch   = _batches_per_epoch;
+    if (cfg.progressive_resolution && cfg.progressive_splat_budget) {
+        const progressive::Budget budget = cfg.progressive_splat_budget_schedule.empty()
+            ? progressive::automatic_budget(stage_steps, cfg.cap_max)
+            : progressive::parse_budget(cfg.progressive_splat_budget_schedule, cfg.cap_max);
+        const int stop = std::max(cfg.refine_stop_iter, cfg.num_iterations - cfg.refine_stop_num_iter);
+        int64_t before = 0;
+        for (const auto& [from, splats] : budget) {
+            st.growth_caps.emplace_back((int)std::min<int64_t>(from, INT_MAX), splats);
+            log(lfmt(lmsg::splat_budget_stage, {(long long)splats, (long long)from}));
+            if (from >= stop && splats > before)
+                log(lfmt(lmsg::splat_budget_late, {(long long)splats, (long long)from, (long long)stop}));
+            before = splats;
+        }
+    }
     st.splat_linear      = color.splat_linear;
     st.input_depth_is_ray_depth = resolve_ray_depth(cfg, ds);
     if (has_depth && !cfg.input_depth_is_ray_depth.has_value())
@@ -1424,12 +1480,12 @@ void TrainerSession::restore_checkpoint() {
     log(lfmt(lmsg::resumed_from, {r.ckpt_dir.string(), (long long)start_step}));
 }
 
-void TrainerSession::save_checkpoint(int step) {
+void TrainerSession::save_checkpoint(int step, bool full) {
     char name[32];
     std::snprintf(name, sizeof name, "step-%09d.ckpt", step);
     fs::path ckpt = out_dir / name;
     fs::create_directories(ckpt);
-    engine_save_checkpoint(ckpt.string(), cfg.save_full_checkpoint, step);
+    engine_save_checkpoint(ckpt.string(), full, step);
     if (cfg.save_only_latest_checkpoint) {
         std::vector<fs::path> stale;
         for (const auto& e : fs::directory_iterator(out_dir)) {
@@ -1450,6 +1506,15 @@ std::map<std::string, float> TrainerSession::train_step(int step) {
     auto losses = engine_train_step_managed(
         step, cfg.num_iterations, cfg.primitive, sh_degree_to_use,
         cfg.packed || cfg.use_bvh, sc);
+    if (cfg.progressive_resolution) {
+        // Streamed steps can cross an epoch boundary out of order; the schedule
+        // only gets finer, so a switch is the first divisor below every one before.
+        const int divisor = engine_train_resolution_divisor();
+        if (_resolution_divisor && divisor < _resolution_divisor)
+            log(divisor > 1 ? lfmt(lmsg::progressive_now, {(long long)divisor, (long long)step})
+                            : lfmt(lmsg::progressive_now_full, {(long long)step}));
+        if (!_resolution_divisor || divisor < _resolution_divisor) _resolution_divisor = divisor;
+    }
 
     // Sticky and returns-and-clears, and nothing else on the training thread
     // reads it: a failed dispatch or copy would otherwise leave a buffer
@@ -1578,6 +1643,7 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
         _warned_risk = OomRisk::Low;
     }
 
+    _perf.open(out_dir, cfg.log_performance);
     int step = start_step;
     for (; step < cfg.num_iterations; step++) {
         // Pause gate + render-fairness yield: give viewer render workers an
@@ -1598,7 +1664,7 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
 
         std::map<std::string, float> losses;
         std::string data_error;
-        double save_s = 0.0, splat_gpu_s = -1.0;
+        double save_s = 0.0, splat_gpu_s = -1.0, data_wait_s = 0.0;
         int64_t splats_ran = 0;
         // One step in ten: on Vulkan each bracket is a queue submission.
         const bool timed = step % 10 == 0;
@@ -1606,7 +1672,7 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             std::lock_guard<std::mutex> lk(engine_mutex);
             if (step > 0 && cfg.steps_per_save > 0 && step % cfg.steps_per_save == 0) {
                 const auto t0 = std::chrono::steady_clock::now();
-                save_checkpoint(step);
+                save_checkpoint(step, cfg.save_full_checkpoint);
                 save_s = std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - t0).count();
             }
@@ -1619,6 +1685,7 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             }
             if (timed) splat_gpu_s = engine_step_timing_read();
             _live_splats = engine_get_cur_num_splats();
+            data_wait_s = engine_take_data_wait_seconds();
         }
         // Asking outside the lock: the front end may sit on this for minutes
         // while the user puts the dataset back, and the viewport still wants
@@ -1645,6 +1712,15 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             if (_step_latencies.size() > 100) _step_latencies.pop_front();
         }
         _forecast.add_step(step, latency - save_s, splats_ran, splat_gpu_s);
+        if (_perf.enabled()) {
+            _perf.add_step(latency, data_wait_s, splat_gpu_s, save_s);
+            _perf.tick(step + 1, engine_train_resolution_divisor(), _live_splats.load(), paused.load(), [this] {
+                std::lock_guard<std::mutex> lk(engine_mutex);
+                size_t bytes = engine_get_scratch_bytes();
+                for (const auto& e : engine_get_pool_breakdown()) bytes += std::get<2>(e);
+                return bytes;
+            }, [] { return sfm::processRamBytes(); });
+        }
         if (save_s > 0.0) _forecast.add_save(save_s, splats_ran);
         observe_memory(step, splats_ran);
         // SS_FORECAST_LOG=1: the forecast's state every 100 steps, English,
@@ -1690,7 +1766,8 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
 
     if (cfg.steps_per_save != 0 && save_on_stop.load()) {
         std::lock_guard<std::mutex> lk(engine_mutex);
-        save_checkpoint(step);
+        // A run stopped short is one to continue later, so its save must be resumable.
+        save_checkpoint(step, cfg.save_full_checkpoint || step < cfg.num_iterations);
         log(lfmt(lmsg::checkpoint_saved, {fs::absolute(out_dir).string()}));
     }
 
@@ -1698,6 +1775,10 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
     // a count that included the checkpoint's steps would not match the time.
     log(lfmt(lmsg::train_finished, {cur_step.load() - start_step,
                                     format_duration(training_time_s)}));
+    if (_system.running()) {
+        _system.stop();
+        log(lfmt(lmsg::perf_log_report, {fs::absolute(TrainPerfLog::perf_dir(out_dir)).string()}));
+    }
 }
 
 std::string TrainerSession::progress_json() {

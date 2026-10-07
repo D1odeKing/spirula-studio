@@ -10,6 +10,7 @@
 #include "app/gui/ColmapRunner.h"
 #include "app/gui/CommandRunner.h"
 #include "app/gui/CompareView.h"
+#include "app/gui/DenseMemoryView.h"
 #include "app/gui/Fonts.h"
 #include "app/gui/ConfigUI.h"
 #include "app/gui/FileDialog.h"
@@ -32,6 +33,7 @@
 #include "app/gui/SfmRunner.h"
 #include "app/gui/SourceList.h"
 #include "app/gui/SourceProbe.h"
+#include "app/gui/StageEta.h"
 #include "app/gui/TelemetryProbe.h"
 #include "app/gui/TrainPreset.h"
 #include "app/gui/TrainRunner.h"
@@ -121,7 +123,7 @@ private:
         MeshSource, MeshPhotos, MeshOutput, AddSplatFile, SplatFolder,
         EditSaveFile, EditSaveFolder, RenderProjectSave, RenderProjectOpen,
         RenderOutput, RenderAddModel, StencilFile, SeedPointcloud,
-        ConfigPath, LidarSource
+        ConfigPath, LidarSource, ResumeRun
     };
     // Which reconstruction back end the New Dataset screen runs.
     enum class Engine { BuiltIn, Colmap };
@@ -402,6 +404,7 @@ private:
     void draw_dataset_preview(float height);
     bool preview_has_content() const;
     void poll_sfm_progress();
+    void poll_dense_progress();
     // Which of the three the running step implies, or -1 for none.
     int preview_for_stage();
     // Release everything the preview holds -- GL buffers, the watcher thread,
@@ -576,6 +579,9 @@ private:
     // The splitter and then the panel. Call after the body child has ended.
     void draw_log_panel(float height);
     void draw_confirm_modal();
+    // A stopped run, continued: its own config.json, as `spirula train --resume` builds it.
+    void open_resume(const std::string& path);
+    void draw_resume_error();
     void draw_data_error_modal();
     void handle_dialog_result(const std::vector<std::string>& paths);
     // Take paths onto the input list; `replace` clears a fresh pick's inputs.
@@ -781,6 +787,26 @@ private:
     // Snapshot files already read, by their write time; 0 means "not yet".
     int64_t _model_mtime = 0, _pairs_mtime = 0, _matches_mtime = 0;
     double _sfm_polled_at = -1.0;
+    // The dense step's own model.bin (dense::progress_dir), shown in the same view.
+    int64_t _dense_model_mtime = 0;
+    double _dense_polled_at = -1.0;
+    double _dense_refresh_seconds = 0.5;
+    struct DenseLiveRead {
+        LiveModel model;
+        int64_t stamp = 0;
+        double seconds = 0;
+        bool updated = false, during_run = false;
+        std::string error;
+    };
+    std::future<DenseLiveRead> _dense_model_read;
+    std::string _dense_preview_error;
+    bool _dense_live = false;
+    DenseMemoryView _dense_memory;
+    bool _dense_memory_active = false;
+    StageEta _dense_eta;
+    std::string _resume_error;
+    bool _open_resume_error = false;
+    double _dense_started_at = 0.0;
     bool _show_preview = true;
     // Which view the panel shows: -1 follows the running step, otherwise the
     // one the user picked and wants to keep.
@@ -873,6 +899,14 @@ private:
     // One job for both engines (SfmJob / ColmapJob carry a copy), the panel
     // that tries it on one frame, and the checkpoint fetch.
     GeometryJob _geometry;
+    DenseJob _dense;
+    FileDownload _dense_download;
+    std::string _dense_selected_seed;
+    std::string _dense_config_text, _dense_config_error;
+    void draw_dense_options();
+    void draw_train_mask_mode(float width);
+    void request_dense_download();
+    bool dense_model_missing() const;
     GeometryPanel _geometry_panel;
     PartitionPanel _partition_panel;
     void open_partition_panel(const DatasetFolders& f);

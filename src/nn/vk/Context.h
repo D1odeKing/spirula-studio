@@ -31,6 +31,7 @@
 
 #include "core/SourcePath.h"
 #include "core/VulkanDeviceSelection.h"
+#include "core/VulkanMemoryBudget.h"
 
 namespace nn {
 namespace vk {
@@ -104,6 +105,7 @@ public:
 
     const VkPhysicalDeviceMemoryProperties& memoryProps() const { return mem_props_; }
     const VkPhysicalDeviceLimits&           limits()      const { return limits_; }
+    spirula::vkmemory::Budget memoryBudget() const;
 
     // Feature flags resolved at device creation.
     bool     hasSubgroupSizeControl() const { return subgroup_size_control_; }
@@ -188,6 +190,7 @@ private:
     bool     subgroup_size_control_ = false;
     uint32_t preferred_subgroup_ = 32;
     bool     profiling_ = false;
+    bool     memory_budget_ = false;
 
     bool        int64_ = false;
     bool        coopmat_ = false;

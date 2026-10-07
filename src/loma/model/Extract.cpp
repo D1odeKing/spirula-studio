@@ -9,6 +9,7 @@
 #include "loma/model/Model.h"
 #include "nn/Ops.h"
 #include "nn/Tensor.h"
+#include "nn/io/Resize.h"
 #include "nn/vk/EmbeddedSpirv.h"
 #include "nn/vk/Memory.h"
 #include "nn/vk/Stream.h"
@@ -28,54 +29,6 @@ namespace {
 using nn::DType;
 using nn::Tensor;
 
-// PIL's `Image.resize(..., BICUBIC)`, which is what LoMa's own read_image runs
-// to reach the descriptor's fixed square: a = -0.5, and the support is SCALED
-// when downsampling, so a 2x reduction averages rather than point-samples.
-float pil_cubic(float t) {
-    const float a = -0.5f;
-    t = std::fabs(t);
-    if (t <= 1.0f) return ((a + 2.0f) * t - (a + 3.0f)) * t * t + 1.0f;
-    if (t < 2.0f) return ((a * t - 5.0f * a) * t + 8.0f * a) * t - 4.0f * a;
-    return 0.0f;
-}
-
-// One separable pass over interleaved RGB. `other` walks the axis that is not
-// being resampled; `step` walks the one that is.
-void resample_axis(const float* src, float* dst, int64_t n_other, int64_t n_in,
-                   int64_t n_out, int64_t src_other, int64_t dst_other, int64_t src_step,
-                   int64_t dst_step) {
-    const double scale = (double)n_in / (double)n_out;
-    const double filter_scale = std::max(scale, 1.0);
-    const double support = 2.0 * filter_scale;
-    const double inv = 1.0 / filter_scale;
-    nn::parallel_for(n_out, [&](int64_t o0, int64_t o1) {
-        std::vector<float> wbuf;
-        for (int64_t o = o0; o < o1; ++o) {
-            const double centre = ((double)o + 0.5) * scale;
-            const int64_t lo = std::max<int64_t>((int64_t)(centre - support + 0.5), 0);
-            const int64_t hi = std::min<int64_t>((int64_t)(centre + support + 0.5), n_in);
-            wbuf.assign((size_t)std::max<int64_t>(hi - lo, 1), 0.0f);
-            float wsum = 0;
-            for (int64_t i = lo; i < hi; ++i) {
-                const float w = pil_cubic((float)((((double)i + 0.5) - centre) * inv));
-                wbuf[(size_t)(i - lo)] = w;
-                wsum += w;
-            }
-            if (wsum == 0.0f) wsum = 1.0f;
-            for (int64_t k = 0; k < n_other; ++k) {
-                const float* sp = src + k * src_other;
-                float* d = dst + k * dst_other + o * dst_step;
-                for (int c = 0; c < 3; ++c) {
-                    float acc = 0;
-                    for (int64_t i = lo; i < hi; ++i)
-                        acc += wbuf[(size_t)(i - lo)] * sp[i * src_step + c];
-                    d[c] = acc / wsum;
-                }
-            }
-        }
-    });
-}
-
 // rgb bytes -> [ho, wo, 3] floats, scaled by 1/255 and then by (x - mean) / sd.
 std::vector<float> prepare(const uint8_t* rgb, int wi, int hi, int64_t wo, int64_t ho,
                            const float* mean, const float* sd) {
@@ -84,16 +37,7 @@ std::vector<float> prepare(const uint8_t* rgb, int wi, int hi, int64_t wo, int64
         for (int64_t i = i0; i < i1; ++i) a[(size_t)i] = rgb[i] * (1.0f / 255.0f);
     });
 
-    if (wo != wi) {
-        std::vector<float> b((size_t)hi * wo * 3);
-        resample_axis(a.data(), b.data(), hi, wi, wo, (int64_t)wi * 3, wo * 3, 3, 3);
-        a.swap(b);
-    }
-    if (ho != hi) {
-        std::vector<float> b((size_t)ho * wo * 3);
-        resample_axis(a.data(), b.data(), wo, hi, ho, 3, 3, wo * 3, wo * 3);
-        a.swap(b);
-    }
+    a = nn::resize_rgb_bicubic(a.data(), wi, hi, (int)wo, (int)ho);
 
     nn::parallel_for((int64_t)a.size(), [&](int64_t i0, int64_t i1) {
         for (int64_t i = i0; i < i1; ++i)

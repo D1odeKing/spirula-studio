@@ -1894,7 +1894,8 @@ SS_MSG(opt_mask_mode_help,
        "captures. Don't use masks: the mask folder is not read at all. Has no "
        "effect on a dataset without masks. Transparent pixels in the images "
        "count as masked out; with no mask files beside them, the default is "
-       "Cut out background."),
+       "Cut out background. "
+       "Dense point-cloud seeds also default to cut out."),
     JA("マスクがある場合の意味です。「邪魔物を無視」ではマスクされた画素を損"
        "失から外します。通行人、車、撮影者の影、魚眼の円外といったものに向き"
        "ます。「背景を切り抜く」ではマスクされた画素を空として学習するので、"
@@ -1902,24 +1903,28 @@ SS_MSG(opt_mask_mode_help,
        "向けです。「マスクを使わない」ではマスクを一切読み込みません。マスク"
        "のないデータセットでは効果はありません。画像の透明な画素もマスクされ"
        "たものとして扱います。マスクファイルがなければ、既定は「背景を切り抜"
-       "く」です。"),
+       "く」です。 "
+       "密な点群を初期値に使う場合も、既定は切り抜きです。"),
     ZH_HANS("有蒙版时蒙版的含义。“忽略干扰物”：被遮住的像素不计入损失——用于行"
             "人、汽车、摄影者的影子、鱼眼圆之外的区域。“裁掉背景”：被遮住的像"
             "素按空白训练，于是背景被裁掉，只重建被蒙版选中的主体——用于物体拍"
             "摄。“不使用蒙版”：完全不读取蒙版。数据集没有蒙版时不起作用。图像"
-            "中的透明像素也算作被遮住；没有蒙版文件时，默认为“裁掉背景”。"),
+            "中的透明像素也算作被遮住；没有蒙版文件时，默认为“裁掉背景”。 "
+       "使用稠密点云初始化时也默认裁掉背景。"),
     ZH_HANT("有遮罩時遮罩的含意。「忽略干擾物」：被遮住的像素不計入損失——用於"
             "行人、汽車、攝影者的影子、魚眼圓之外的區域。「裁掉背景」：被遮住"
             "的像素按空白訓練，於是背景被裁掉，只重建被遮罩選中的主體——用於物"
             "體拍攝。「不使用遮罩」：完全不讀取遮罩。資料集沒有遮罩時不起作用。"
-            "影像中的透明像素也算作被遮住；沒有遮罩檔案時，預設為「裁掉背景」。"),
+            "影像中的透明像素也算作被遮住；沒有遮罩檔案時，預設為「裁掉背景」。 "
+       "使用稠密點雲初始化時也預設裁掉背景。"),
     KO("마스크가 있을 때 마스크의 의미입니다. 방해물 무시: 가려진 픽셀을 손실"
        "에서 뺍니다 — 지나가는 사람, 차, 촬영자의 그림자, 어안 원 바깥에 씁니"
        "다. 배경 잘라내기: 가려진 픽셀을 빈 곳으로 학습해 배경을 잘라내고 마"
        "스크된 피사체만 재구성합니다 — 물체 촬영용입니다. 마스크 사용 안 함: "
        "마스크를 전혀 읽지 않습니다. 마스크가 없는 데이터셋에서는 아무 효과가"
        " 없습니다. 이미지의 투명한 픽셀도 가려진 것으로 봅니다. 마스크 파일이"
-       " 없으면 기본값은 배경 잘라내기입니다."),
+       " 없으면 기본값은 배경 잘라내기입니다. "
+       "밀집 포인트 클라우드로 초기화할 때도 기본값은 배경 잘라내기입니다."),
     DE("Was eine Maske bedeutet, wo eine vorliegt. Störendes ignorieren: "
        "maskierte Pixel bleiben aus der Verlustfunktion heraus -- für "
        "Passanten, Autos, den eigenen Schatten oder den Bereich außerhalb des "
@@ -1928,7 +1933,8 @@ SS_MSG(opt_mask_mode_help,
        "wird rekonstruiert -- für Objektaufnahmen. Masken nicht verwenden: die "
        "Masken werden gar nicht erst gelesen. Ohne Masken im Datensatz ohne "
        "Wirkung. Transparente Pixel der Bilder gelten ebenfalls als maskiert; "
-       "ohne Maskendateien daneben ist Hintergrund freistellen voreingestellt."),
+       "ohne Maskendateien daneben ist Hintergrund freistellen voreingestellt. "
+       "Bei einer dichten Startpunktwolke ist Ausschneiden ebenfalls die Vorgabe."),
     FR("Ce que signifie un masque, là où il y en a un. Ignorer les gêneurs : "
        "les pixels masqués sont retirés de la fonction de coût -- pour les "
        "passants, les voitures, votre propre ombre ou la zone hors du cercle "
@@ -1938,7 +1944,8 @@ SS_MSG(opt_mask_mode_help,
        "les masques ne sont pas lus du tout. Sans effet sur un jeu de données "
        "sans masques. Les pixels transparents des images comptent aussi comme "
        "masqués ; sans fichiers de masque à côté, Détourer l'arrière-plan est "
-       "le réglage par défaut."),
+       "le réglage par défaut. "
+       "Les nuages denses utilisés pour initialiser choisissent aussi le détourage par défaut."),
     ES("Qué significa una máscara, donde la hay. Ignorar los elementos "
        "molestos: los píxeles enmascarados quedan fuera de la función de "
        "pérdida -- para transeúntes, coches, la sombra del fotógrafo o la zona "
@@ -1948,7 +1955,8 @@ SS_MSG(opt_mask_mode_help,
        "máscaras: las máscaras no se leen en absoluto. Sin efecto en un "
        "conjunto sin máscaras. Los píxeles transparentes de las imágenes "
        "también cuentan como enmascarados; sin archivos de máscara junto a "
-       "ellas, lo predeterminado es Recortar el fondo."),
+       "ellas, lo predeterminado es Recortar el fondo. "
+       "La inicialización con nube densa también recorta por defecto."),
     PT("O que uma máscara significa, onde houver uma. Ignorar o que atrapalha: "
        "os pixels mascarados ficam de fora da função de perda -- para pessoas "
        "passando, carros, a sombra do fotógrafo ou a área fora do círculo olho "
@@ -1957,7 +1965,8 @@ SS_MSG(opt_mask_mode_help,
        "para capturas de objetos. Não usar máscaras: as máscaras não são lidas "
        "de todo. Sem efeito num conjunto sem máscaras. Os pixels transparentes "
        "das imagens também contam como mascarados; sem arquivos de máscara ao "
-       "lado, o padrão é Recortar o fundo."),
+       "lado, o padrão é Recortar o fundo. "
+       "A inicialização com nuvem densa também recorta por padrão."),
     IT("Che cosa significa una maschera, dove ce n'è una. Ignorare i disturbi: "
        "i pixel mascherati restano fuori dalla funzione di perdita -- per "
        "passanti, automobili, l'ombra del fotografo o l'area fuori dal cerchio "
@@ -1967,7 +1976,8 @@ SS_MSG(opt_mask_mode_help,
        "maschere non vengono lette affatto. Senza effetto su un set di dati "
        "senza maschere. Anche i pixel trasparenti delle immagini contano come "
        "mascherati; senza file di maschera accanto, l'impostazione predefinita "
-       "è Ritagliare lo sfondo."),
+       "è Ritagliare lo sfondo. "
+       "Anche l’inizializzazione con nuvola densa usa il ritaglio come predefinito."),
     NL("Wat een masker betekent, waar er een is. Storende dingen negeren: "
        "gemaskeerde pixels tellen niet mee in het verlies -- voor "
        "voorbijgangers, auto's, de schaduw van de fotograaf of het gebied "
@@ -1977,7 +1987,8 @@ SS_MSG(opt_mask_mode_help,
        "object. Maskers niet gebruiken: de maskers worden helemaal niet "
        "gelezen. Zonder maskers in de dataset zonder effect. Transparante "
        "pixels in de beelden tellen ook als gemaskeerd; zonder maskerbestanden "
-       "ernaast is Achtergrond uitsnijden de standaard."),
+       "ernaast is Achtergrond uitsnijden de standaard. "
+       "Initialisatie met een dichte puntenwolk kiest standaard ook uitsnijden."),
     RU("Что означает маска там, где она есть. Игнорировать помехи: закрытые "
        "маской пиксели не входят в функцию потерь -- для прохожих, машин, тени "
        "фотографа или области вне круга «рыбьего глаза». Вырезать фон: "
@@ -1986,7 +1997,8 @@ SS_MSG(opt_mask_mode_help,
        "использовать маски: маски вообще не читаются. Без масок в наборе ни на "
        "что не влияет. Прозрачные пиксели изображений тоже считаются закрытыми "
        "маской; если файлов масок рядом нет, по умолчанию выбрано «Вырезать "
-       "фон»."),
+       "фон». "
+       "При инициализации плотным облаком по умолчанию также вырезается фон."),
     TR("Maske varsa maskenin ne anlama geldiği. Rahatsız edicileri yok say: "
        "maskelenen pikseller yitim işlevine girmez -- yoldan geçenler, "
        "arabalar, fotoğrafçının gölgesi ya da balıkgözü dairesinin dışı için. "
@@ -1995,7 +2007,8 @@ SS_MSG(opt_mask_mode_help,
        "çekimleri için. Maskeleri kullanma: maskeler hiç okunmaz. Maskesiz bir "
        "veri kümesinde etkisi yoktur. Görüntülerdeki saydam pikseller de "
        "maskelenmiş sayılır; yanlarında maske dosyası yoksa varsayılan Arka "
-       "planı ayır olur."));
+       "planı ayır olur. "
+       "Yoğun nokta bulutuyla başlatmada da varsayılan arka planı kesmektir."));
 
 SS_MSG(opt_sh_degree,
     EN("Color detail (SH)"),
@@ -2410,32 +2423,19 @@ SS_MSG(stopping,
     NL("Bezig met stoppen…"), RU("Останавливается…"), TR("Durduruluyor…"));
 
 SS_MSG(stop_and_save_help,
-    EN("Finish the current step, save a checkpoint, and keep the result "
-       "loaded for viewing."),
-    JA("いまのステップを終えてチェックポイントを保存し、結果は表示用に"
-       "読み込んだままにします。"),
-    ZH_HANS("完成当前这一步，保存一个检查点，并把结果留在内存中以便查看。"),
-    ZH_HANT("完成目前這一步，儲存一個檢查點，並把結果留在記憶體中以便檢視。"),
-    KO("현재 단계를 마치고 체크포인트를 저장한 뒤, 결과는 볼 수 있도록 그대로 "
-       "둡니다."),
-    DE("Den laufenden Schritt zu Ende bringen, einen Prüfpunkt speichern und "
-       "das Ergebnis zum Betrachten geladen lassen."),
-    FR("Terminer l'étape en cours, enregistrer un point de sauvegarde et "
-       "garder le résultat chargé pour le consulter."),
-    ES("Terminar el paso actual, guardar un punto de control y dejar el "
-       "resultado cargado para verlo."),
-    PT("Terminar o passo atual, salvar um ponto de verificação e deixar o "
-       "resultado carregado para visualização."),
-    IT("Terminare il passo in corso, salvare un punto di controllo e lasciare "
-       "il risultato caricato per poterlo osservare."),
-    NL("De huidige stap afmaken, een controlepunt opslaan en het resultaat "
-       "geladen laten om te bekijken."),
-    RU("Завершить текущий шаг, сохранить контрольную точку и оставить "
-       "результат загруженным для просмотра."),
-    TR("Şu anki adımı bitir, bir denetim noktası kaydet ve sonucu görmek için "
-       "yüklü bırak."));
-
-// ---- status strip ----
+    EN("Finish the current step, save a checkpoint, and keep the result loaded for viewing. A run stopped before its last step saves everything needed to continue it later with File > Resume Training."),
+    JA("いまのステップを終えてチェックポイントを保存し、結果は表示用に読み込んだままにします。最後のステップ前に停止した学習は、後で「ファイル > 学習を再開」で続けるのに必要なものをすべて保存します。"),
+    ZH_HANS("完成当前这一步，保存一个检查点，并把结果留在内存中以便查看。在最后一步之前停止的运行会保存日后通过“文件 > 继续训练”继续所需的全部内容。"),
+    ZH_HANT("完成目前這一步，儲存一個檢查點，並把結果留在記憶體中以便檢視。在最後一步之前停止的執行會儲存日後透過「檔案 > 繼續訓練」繼續所需的全部內容。"),
+    KO("현재 단계를 마치고 체크포인트를 저장한 뒤, 결과는 볼 수 있도록 그대로 둡니다. 마지막 단계 전에 중지한 실행은 나중에 '파일 > 학습 재개'로 이어 가는 데 필요한 모든 것을 저장합니다."),
+    DE("Den laufenden Schritt zu Ende bringen, einen Prüfpunkt speichern und das Ergebnis zum Betrachten geladen lassen. Ein vor dem letzten Schritt gestopptes Training speichert alles, um es später mit Datei > Training fortsetzen weiterzuführen."),
+    FR("Terminer l'étape en cours, enregistrer un point de sauvegarde et garder le résultat chargé pour le consulter. Un entraînement arrêté avant sa dernière étape enregistre tout le nécessaire pour le reprendre plus tard avec Fichier > Reprendre l'entraînement."),
+    ES("Terminar el paso actual, guardar un punto de control y dejar el resultado cargado para verlo. Un entrenamiento detenido antes de su último paso guarda todo lo necesario para continuarlo después con Archivo > Reanudar entrenamiento."),
+    PT("Terminar o passo atual, salvar um ponto de verificação e deixar o resultado carregado para visualização. Um treinamento parado antes do último passo salva tudo o que é preciso para continuá-lo depois com Arquivo > Retomar treinamento."),
+    IT("Terminare il passo in corso, salvare un punto di controllo e lasciare il risultato caricato per la visualizzazione. Un addestramento fermato prima dell'ultimo passo salva tutto il necessario per riprenderlo poi con File > Riprendi addestramento."),
+    NL("De huidige stap afmaken, een checkpoint opslaan en het resultaat geladen houden om te bekijken. Een training die vóór de laatste stap stopt, bewaart alles om later verder te gaan met Bestand > Training hervatten."),
+    RU("Завершить текущий шаг, сохранить контрольную точку и оставить результат загруженным для просмотра. Обучение, остановленное до последнего шага, сохраняет всё нужное, чтобы позже продолжить его через «Файл > Продолжить обучение»."),
+    TR("Geçerli adımı bitir, bir denetim noktası kaydet ve sonucu görüntülemek için yüklü tut. Son adımından önce durdurulan bir eğitim, daha sonra Dosya > Eğitime devam et ile sürdürmek için gereken her şeyi kaydeder."));
 
 SS_MSG(status_step,
     EN("step {0} / {1}  ({2}%)"), JA("ステップ {0} / {1}  ({2}%)"),
@@ -9985,6 +9985,77 @@ SS_MSG(seed_cloud_unused,
     IT("La nuvola esterna selezionata non viene usata per questa inizializzazione."),
     NL("De geselecteerde externe puntenwolk wordt niet voor deze initialisatie gebruikt."),
     RU("Выбранное внешнее облако не используется для этой инициализации."), TR("Seçilen harici bulut bu başlatmada kullanılmaz."));
+
+SS_MSG(resume_training,
+    EN("Resume Training..."),
+    JA("学習を再開…"),
+    ZH_HANS("继续训练…"),
+    ZH_HANT("繼續訓練…"),
+    KO("학습 재개…"),
+    DE("Training fortsetzen …"),
+    FR("Reprendre l'entraînement…"),
+    ES("Reanudar entrenamiento…"),
+    PT("Retomar treinamento…"),
+    IT("Riprendi addestramento…"),
+    NL("Training hervatten…"),
+    RU("Продолжить обучение…"),
+    TR("Eğitime devam et…"));
+SS_MSG(resume_training_help,
+    EN("Pick a training run folder saved by Stop and Save, or one of its step checkpoint folders. The run's dataset and settings are restored, and Start continues from the saved step toward its original step count. A run stopped before its last step can always be continued."),
+    JA("「停止して保存」で保存した学習フォルダー、またはそのステップのチェックポイントフォルダーを選びます。データセットと設定が復元され、開始すると保存したステップから元のステップ数まで続けます。最後のステップ前に停止した学習はいつでも続けられます。"),
+    ZH_HANS("选择通过“停止并保存”保存的训练运行文件夹，或其中某一步的检查点文件夹。会恢复该运行的数据集和设置，点击开始后从保存的步数继续，直到原定步数。在最后一步之前停止的运行总是可以继续。"),
+    ZH_HANT("選擇透過「停止並儲存」儲存的訓練執行資料夾，或其中某一步的檢查點資料夾。會恢復該執行的資料集和設定，按下開始後從儲存的步數繼續，直到原定步數。在最後一步之前停止的執行總是可以繼續。"),
+    KO("'멈추고 저장'으로 저장한 학습 실행 폴더나 그 안의 단계 체크포인트 폴더를 고릅니다. 데이터셋과 설정이 복원되고, 시작을 누르면 저장된 단계부터 원래 단계 수까지 이어 갑니다. 마지막 단계 전에 중지한 실행은 언제든 이어서 할 수 있습니다."),
+    DE("Einen mit „Anhalten und speichern“ gesicherten Trainingsordner oder einen seiner Schritt-Prüfpunktordner wählen. Datensatz und Einstellungen werden wiederhergestellt, und Start setzt ab dem gespeicherten Schritt bis zur ursprünglichen Schrittzahl fort. Ein vor dem letzten Schritt gestopptes Training lässt sich immer fortsetzen."),
+    FR("Choisir un dossier d'entraînement enregistré par Arrêter et enregistrer, ou l'un de ses dossiers de point de sauvegarde. Le jeu de données et les réglages sont restaurés, et Démarrer reprend à l'étape enregistrée jusqu'au nombre d'étapes prévu. Un entraînement arrêté avant sa dernière étape peut toujours être repris."),
+    ES("Elija una carpeta de entrenamiento guardada con Detener y guardar, o una de sus carpetas de punto de control. Se restauran el conjunto de datos y los ajustes, e Iniciar continúa desde el paso guardado hasta el número de pasos original. Un entrenamiento detenido antes de su último paso siempre puede continuarse."),
+    PT("Escolha uma pasta de treinamento salva com Parar e salvar, ou uma de suas pastas de ponto de verificação. O conjunto de dados e as configurações são restaurados, e Iniciar continua a partir do passo salvo até o número de passos original. Um treinamento parado antes do último passo sempre pode ser continuado."),
+    IT("Scegli una cartella di addestramento salvata con Ferma e salva, o una delle sue cartelle di punto di controllo. Set di dati e impostazioni vengono ripristinati, e Avvia riprende dal passo salvato fino al numero di passi originale. Un addestramento fermato prima dell'ultimo passo si può sempre riprendere."),
+    NL("Kies een trainingsmap die met Stoppen en opslaan is bewaard, of een van de checkpointmappen daarin. Dataset en instellingen worden hersteld, en Start gaat verder vanaf de opgeslagen stap tot het oorspronkelijke aantal stappen. Een training die vóór de laatste stap is gestopt, kan altijd worden hervat."),
+    RU("Выберите папку обучения, сохранённую кнопкой «Остановить и сохранить», или одну из её папок контрольных точек. Набор данных и настройки восстанавливаются, и «Старт» продолжает с сохранённого шага до исходного числа шагов. Обучение, остановленное до последнего шага, всегда можно продолжить."),
+    TR("Durdur ve kaydet ile kaydedilmiş bir eğitim klasörünü veya içindeki adım denetim noktası klasörlerinden birini seçin. Veri kümesi ve ayarlar geri yüklenir; Başlat kaydedilen adımdan özgün adım sayısına kadar devam eder. Son adımından önce durdurulan bir eğitime her zaman devam edilebilir."));
+SS_MSG(resume_failed_title,
+    EN("Cannot resume training"),
+    JA("学習を再開できません"),
+    ZH_HANS("无法继续训练"),
+    ZH_HANT("無法繼續訓練"),
+    KO("학습을 재개할 수 없습니다"),
+    DE("Training kann nicht fortgesetzt werden"),
+    FR("Impossible de reprendre l'entraînement"),
+    ES("No se puede reanudar el entrenamiento"),
+    PT("Não é possível retomar o treinamento"),
+    IT("Impossibile riprendere l'addestramento"),
+    NL("Training kan niet worden hervat"),
+    RU("Не удаётся продолжить обучение"),
+    TR("Eğitime devam edilemiyor"));
+SS_MSG(resume_failed,
+    EN("This folder cannot be resumed: {0}"),
+    JA("このフォルダーは再開できません: {0}"),
+    ZH_HANS("无法从此文件夹继续：{0}"),
+    ZH_HANT("無法從此資料夾繼續：{0}"),
+    KO("이 폴더에서 재개할 수 없습니다: {0}"),
+    DE("Dieser Ordner kann nicht fortgesetzt werden: {0}"),
+    FR("Ce dossier ne peut pas être repris : {0}"),
+    ES("No se puede reanudar desde esta carpeta: {0}"),
+    PT("Não é possível retomar a partir desta pasta: {0}"),
+    IT("Impossibile riprendere da questa cartella: {0}"),
+    NL("Deze map kan niet worden hervat: {0}"),
+    RU("Невозможно продолжить из этой папки: {0}"),
+    TR("Bu klasörden devam edilemiyor: {0}"));
+SS_MSG(resume_failed_close,
+    EN("OK"),
+    JA("OK"),
+    ZH_HANS("确定"),
+    ZH_HANT("確定"),
+    KO("확인"),
+    DE("OK"),
+    FR("OK"),
+    ES("Aceptar"),
+    PT("OK"),
+    IT("OK"),
+    NL("OK"),
+    RU("ОК"),
+    TR("Tamam"));
 
 }  // namespace gui
 }  // namespace msg

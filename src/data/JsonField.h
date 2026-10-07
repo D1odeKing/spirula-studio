@@ -23,6 +23,8 @@ namespace json_field {
 
 inline std::string emit(bool v) { return v ? "true" : "false"; }
 inline std::string emit(int v)  { return std::to_string(v); }
+inline std::string emit(uint64_t v) { return std::to_string(v); }
+inline std::string emit(double v) { return json_number_exact(v); }
 inline std::string emit(float v) {
     if (std::isinf(v)) return v > 0 ? "Infinity" : "-Infinity";
     char buf[32];
@@ -48,6 +50,14 @@ template <typename T, size_t N> std::string emit(const std::array<T, N>& v) {
 inline void assign(int& out, const JsonValue& v)   { if (!v.is_null()) out = (int)v.as_int(); }
 inline void assign(float& out, const JsonValue& v) { if (!v.is_null()) out = (float)v.as_double(); }
 inline void assign(bool& out, const JsonValue& v)  { if (!v.is_null()) out = v.as_bool(); }
+inline void assign(double& out, const JsonValue& v) { if (!v.is_null()) out = v.as_double(); }
+inline void assign(uint64_t& out, const JsonValue& v) {
+    if (v.is_null()) return;
+    const double n = v.as_double(-1);
+    if (!std::isfinite(n) || n < 0 || n > 9007199254740991.0 || std::floor(n) != n)
+        throw std::runtime_error("config JSON: expected a nonnegative exact integer");
+    out = (uint64_t)n;
+}
 
 inline void assign(std::string& out, const JsonValue& v) {
     out = v.is_null() ? std::string() : v.as_string();

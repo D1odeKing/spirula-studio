@@ -1,4 +1,7 @@
 #include "app/gui/DatasetPlan.h"
+#include "dense/ConfigFields.h"
+#include "dense/Artifact.h"
+#include "i18n/catalog/Dense.h"
 
 #include "app/FrameMask.h"
 #include "app/gui/ColmapRunner.h"
@@ -757,6 +760,27 @@ StepFields geometry_fields(const GeometryJob& g) {
     return f;
 }
 
+void verify_dense_reuse(DatasetPlan& plan, const std::string& dataset, const std::atomic<bool>& cancel) {
+    auto& step = plan[Step::Dense];
+    if (step.act != Act::Reuse) return;
+    auto check = [&] { if (cancel.load()) throw std::runtime_error("dense verification cancelled"); };
+    if (!spirula::dense::artifact_inputs_verified(dataset,check)) {
+        step.act = Act::Redo; step.why = Why::Stale; step.ask = false;
+    }
+}
+
+StepFields dense_fields(const DenseJob& job) {
+    StepFields fields;
+    const auto object = json_parse(spirula::dense::config_json(job.config));
+    for (const auto& [key, value] : object.obj) {
+        if (key == "preset" || key == "device" || key == "memory_budget_bytes" || key == "image_cache_bytes" ||
+            key == "cpu_workers" || key == "resume" || key == "rebuild" || key == "keep_cache") continue;
+        JsonWriter writer; json_write(writer, value);
+        fields.push_back({key, "", writer.str()});
+    }
+    return fields;
+}
+
 std::vector<std::string> geometry_kinds(const GeometryJob& g) {
     std::vector<std::string> k;
     if (g.want_normal) k.push_back("normal");
@@ -776,6 +800,7 @@ PlanJob plan_job(const SfmJob& job) {
     p.staged = true;
     p.lidar_clouds = job.lidar.clouds;
     p.lidar_in_frame = job.lidar.in_frame;
+    p.dense = job.dense;
     return p;
 }
 
@@ -785,6 +810,7 @@ PlanJob plan_job(const ColmapJob& job, const PrepJob& prep) {
     p.model = model_fields(job, prep);
     p.mask_features = job.mask_features;
     p.geometry = job.geometry;
+    p.dense = job.dense;
     return p;
 }
 
@@ -909,6 +935,21 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
         std::copy(std::begin(done->parts), std::end(done->parts), std::begin(p.parts));
     else
         plan_parts(p, job, ws, rec, req, masks_feed);
+
+    StepPlan& dense = p[Step::Dense];
+    const auto& rd = rec.step(Step::Dense);
+    const auto& dc = job.dense.config;
+    const bool dense_masks = dc.use_masks && (dc.training_masks || dc.alpha_masks || dc.feature_masks);
+    if (fixed(Step::Dense)) dense = (*done)[Step::Dense];
+    else if (!job.dense.enable) {}
+    else if (makes(fr.act) && ws.dense) set(dense, Act::Redo, Why::Frames);
+    else if (makes(md.act) && ws.dense) set(dense, Act::Redo, Why::Model);
+    else if (dense_masks && makes(mk.act) && ws.dense) set(dense, Act::Redo, Why::Stale);
+    else if (!ws.dense) set(dense, Act::Run);
+    else if (req.redo_dense || dc.rebuild) set(dense, Act::Redo, Why::Requested);
+    else if (!rd.present) set(dense, Act::Run, Why::Unrecorded);
+    else if (rd.frames_id != rf.id || rd.model_id != rr.id || (dense_masks && rd.masks_id != rm.id)) set(dense, Act::Redo, Why::Stale);
+    else compare(dense, rd, diff(rd.fields, dense_fields(job.dense)));
 
     StepPlan& g = p[Step::Geometry];
     if (fixed(Step::Geometry)) {
@@ -1149,6 +1190,8 @@ std::vector<std::string> plan_log_lines(Step step, const StepPlan& s,
                                        s.why == Why::Stale))
                 return {L::plan_geometry_stale.get()};
             break;
+        case Step::Dense:
+            return {spirula::i18n::msg::dense::title.get()};
     }
     return {};
 }
@@ -1171,6 +1214,7 @@ void StepRecorder::begin(Step s, StepFields fields, std::vector<std::string> mad
     if (s != Step::Frames) r.frames_id = _ids[(int)Step::Frames];
     if (s == Step::Model) r.masks_id = _ids[(int)Step::Masks];
     if (s == Step::Geometry) r.model_id = _ids[(int)Step::Model];
+    if (s == Step::Dense) { r.model_id = _ids[(int)Step::Model]; r.masks_id = _ids[(int)Step::Masks]; }
     _ids[(int)s] = r.id;
     _open[(int)s] = r;
     write_step_record(_ws, s, r);

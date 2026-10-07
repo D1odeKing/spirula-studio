@@ -10,6 +10,7 @@
 #include "app/gui/DatasetPreset.h"
 #include "app/gui/MeshPreset.h"
 #include "core/SourcePath.h"
+#include "dense/ConfigFields.h"
 
 #include <cstdio>
 #include <filesystem>
@@ -94,6 +95,20 @@ static void test_dataset_preset() {
     s.sfm.prep.mask_memory_frames = 5;
 
     s.sfm.geometry.enable = true;
+    s.sfm.dense.enable = true;
+    s.sfm.dense.use_for_training = false;
+    s.sfm.dense.config.apply_preset("fast");
+    s.sfm.dense.config.geometry.min_source_images = 2;
+    s.sfm.dense.config.min_overlap = 0.73;
+    s.sfm.dense.config.match.memory_budget_bytes = 3456789012ull;
+    s.sfm.dense.config.match.precision = spirula::roma::InferencePrecision::Mixed;
+    s.sfm.dense.config.use_masks = false;
+    s.sfm.dense.config.sparse_face_pairs = false;
+    s.sfm.dense.config.matching_space = "source";
+    s.sfm.dense.config.reference_fraction = 0.63;
+    s.sfm.dense.config.samples_per_reference = 12345;
+    s.sfm.dense.config.sampling_seed = 72;
+    s.sfm.dense.config.source_reprojection_error = 0.075;
     s.sfm.geometry.model = "moge2-vitl";
     s.sfm.geometry.max_size = 800;
     s.sfm.geometry.num_tokens = 2400;
@@ -212,6 +227,10 @@ static void test_dataset_preset() {
     CHECK_EQ(b.sfm.prep.mask_memory_frames, s.sfm.prep.mask_memory_frames);
 
     CHECK_EQ(b.sfm.geometry.enable, s.sfm.geometry.enable);
+    CHECK_EQ(b.sfm.dense.enable, s.sfm.dense.enable);
+    CHECK_EQ(b.sfm.dense.use_for_training, s.sfm.dense.use_for_training);
+    CHECK_EQ(spirula::dense::config_json(b.sfm.dense.config), spirula::dense::config_json(s.sfm.dense.config));
+    CHECK_EQ(spirula::dense::config_json(b.colmap.dense.config), spirula::dense::config_json(s.sfm.dense.config));
     CHECK_EQ(b.sfm.geometry.model, s.sfm.geometry.model);
     CHECK_EQ(b.sfm.geometry.max_size, s.sfm.geometry.max_size);
     CHECK_EQ(b.sfm.geometry.num_tokens, s.sfm.geometry.num_tokens);
@@ -417,11 +436,45 @@ static void test_kinds_do_not_cross() {
     CHECK(threw);
 }
 
+static void test_dense_draft_restore() {
+    gui::DatasetPreset saved;
+    saved.name = "Dense draft";
+    saved.s.sfm.dense.enable = true;
+    auto& config = saved.s.sfm.dense.config;
+    config.apply_preset("fast");
+    config.pairs.neighbors = 1;
+    config.geometry.min_source_images = 3;
+    config.stride = 2;
+    config.use_masks = true;
+    const auto expected = spirula::dense::config_json(config);
+    try {
+        gui::DatasetSettings restored;
+        gui::read_dataset_settings_json(json_parse(gui::dataset_settings_json(saved.s)), restored);
+        CHECK_EQ(spirula::dense::config_json(restored.sfm.dense.config), expected);
+        CHECK_EQ(spirula::dense::config_json(restored.colmap.dense.config), expected);
+        CHECK(restored.sfm.dense.enable);
+        const auto path = (scratch() / "dense_draft.json").string();
+        gui::save_dataset_preset(saved, path);
+        const auto loaded = gui::load_dataset_preset(path);
+        CHECK_EQ(spirula::dense::config_json(loaded.s.sfm.dense.config), expected);
+        bool rejected = false;
+        try { loaded.s.sfm.dense.config.validate_run(); }
+        catch (const std::exception&) { rejected = true; }
+        CHECK(rejected);
+        restored.sfm.dense.config.pairs.neighbors = 2;
+        restored.sfm.dense.config.validate_run();
+    } catch (const std::exception& e) {
+        std::printf("FAIL dense draft restore: %s\n", e.what());
+        failures++;
+    }
+}
+
 int main() {
     test_dataset_preset();
     test_mesh_preset();
     test_sanitize();
     test_unknown_key_ignored();
+    test_dense_draft_restore();
     test_kinds_do_not_cross();
     if (failures) {
         std::printf("preset_roundtrip_test: %d failure(s)\n", failures);

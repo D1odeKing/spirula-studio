@@ -171,6 +171,7 @@ struct ColmapJob {
     // produced. Shared with the built-in path (SfmJob), which runs the same
     // child over the same folder.
     GeometryJob geometry;
+    DenseJob dense;
 };
 
 class ColmapRunner {
@@ -201,6 +202,7 @@ private:
     void take_reconstruction(ColmapJob& job);
     void take_masking(PrepJob& prep);
     void take_geometry(ColmapJob& job);
+    void take_dense(ColmapJob& job);
     void log(const std::string& line, bool detail = true);
     int  exec(const std::vector<std::string>& argv);
     void set_stage(Stage st, const std::string& s);

@@ -37,9 +37,11 @@ src/engine/*.cpp
 src/checkpoint/*.cpp
 src/data/*.cpp
 src/data/parsers/*.cpp
+src/dense/*.cpp
 src/app/webviewer/*.cpp
 src/app/TrainerCore.cpp
 src/app/TrainForecast.cpp
+src/app/SystemRecorder.cpp
 src/app/EvalMetrics.cpp
 src/external/*.cpp
 src/external/*.c
@@ -54,9 +56,11 @@ src/engine/*.cpp
 src/checkpoint/*.cpp
 src/data/*.cpp
 src/data/parsers/*.cpp
+src/dense/*.cpp
 src/app/webviewer/*.cpp
 src/app/TrainerCore.cpp
 src/app/TrainForecast.cpp
+src/app/SystemRecorder.cpp
 src/app/EvalMetrics.cpp
 src/external/*.cpp
 src/external/*.c

@@ -67,6 +67,8 @@ public:
         std::function<std::vector<std::string>(const std::string&)> f) {
         _siblings_of = std::move(f);
     }
+    // Told the file an edit was just saved to.
+    void set_on_model_saved(std::function<void(const std::string&)> f) { _on_model_saved = std::move(f); }
 
     // ---- editing (docs/notes/gui-editing-plan.md) ----
     // Open the pane's model for editing, or give it back. One pane at a time:
@@ -235,6 +237,7 @@ private:
     std::vector<std::string> _log;
     std::function<void()> _pick_file;
     std::function<std::vector<std::string>(const std::string&)> _siblings_of;
+    std::function<void(const std::string&)> _on_model_saved;
 };
 
 }  // namespace gui

@@ -25,14 +25,10 @@ struct RopeParams {
     uint   batch;
     uint   row_stride;      // elements between tokens
     uint   groups_per_row;
+    uint   split_half;
 };
 
-// Pairs consecutive dimensions into a complex number and rotates:
-//   out[2i]   = x[2i]*cos - x[2i+1]*sin
-//   out[2i+1] = x[2i]*sin + x[2i+1]*cos
-// which is view_as_real(view_as_complex(x) * freqs_cis) from the reference.
-// The frequency table is shared by every head and every batch element, exactly
-// as in SAM 3's ViT (all 16 heads see the same axial grid).
+// Split-half and consecutive layouts share the same frequency table.
 [shader("compute")]
 [numthreads(WG, 1, 1)]
 void rope_apply(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
@@ -50,14 +46,16 @@ void rope_apply(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
     uint h = r2 / half_d;
     uint pair = r2 % half_d;
 
-    uint base = b * p.n * p.row_stride + tok * p.row_stride + h * p.head_dim + pair * 2u;
+    uint base = b * p.n * p.row_stride + tok * p.row_stride + h * p.head_dim;
+    uint first = base + (p.split_half != 0u ? pair : pair * 2u);
+    uint second = first + (p.split_half != 0u ? half_d : 1u);
     uint foff = (tok * half_d + pair) * 2u;
-    float c = asfloat(p.freqs[foff + 0u]);
-    float s = asfloat(p.freqs[foff + 1u]);
-    float re = asfloat(p.x[base + 0u]);
-    float im = asfloat(p.x[base + 1u]);
-    p.x[base + 0u] = asuint(re * c - im * s);
-    p.x[base + 1u] = asuint(re * s + im * c);
+    float c = load_at(p.freqs, foff, false);
+    float s = load_at(p.freqs, foff + 1u, false);
+    float re = load_at(p.x, first, false);
+    float im = load_at(p.x, second, false);
+    store_at((float*)p.x, first, re * c - im * s);
+    store_at((float*)p.x, second, re * s + im * c);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,40 +191,36 @@ void window_unpartition(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
 }
 
 // ---------------------------------------------------------------------------
-// Transposed convolution, stride 2, kernel 2 -- the scatter half
+// Non-overlapping transposed convolution scatter
 // ---------------------------------------------------------------------------
 
 struct ConvTScatterParams {
-    float* out;     // [2*Hi, 2*Wi, Co]
-    uint*  packed;  // [Hi, Wi, Co*4] -- the GEMM's output
+    float* out;
+    uint*  packed;
     uint*  bias;    // [Co] f32 (never null)
     uint   Hi;
     uint   Wi;
     uint   Co;
     uint   groups_per_row;
-    uint   _pad0;
+    uint   patch;
 };
 
-// ConvTranspose2d(k=2, s=2) is a GEMM followed by a shuffle: each input pixel
-// produces one 2x2 output block, and the four kernel taps are just four output
-// channel groups. OpConv.cpp repacks the [Cin, Cout, 2, 2] weight into a
-// [Cout*4, Cin] matrix at load time, runs the tuned GEMM, and this kernel
-// scatters. That is worth more than a bespoke deconv: the neck's two deconvs
-// are 22 GFLOP, and they get the same tiling as everything else.
+// A GEMM packs each output patch; the scatter restores its spatial layout.
 [shader("compute")]
 [numthreads(WG, 1, 1)]
 void convt_scatter(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
                    uniform ConvTScatterParams p) {
     uint i = fold_index(gid, tid, p.groups_per_row, uint(WG));
-    uint Ho = p.Hi * 2u, Wo = p.Wi * 2u;
+    uint Ho = p.Hi * p.patch, Wo = p.Wi * p.patch;
     if (i >= Ho * Wo * p.Co) return;
     uint co = i % p.Co;
     uint rest = i / p.Co;
     uint xo = rest % Wo;
     uint yo = rest / Wo;
-    uint y = yo >> 1, sy = yo & 1u;
-    uint x = xo >> 1, sx = xo & 1u;
-    uint src = (y * p.Wi + x) * (p.Co * 4u) + co * 4u + sy * 2u + sx;
+    uint y = yo / p.patch, sy = yo % p.patch;
+    uint x = xo / p.patch, sx = xo % p.patch;
+    uint taps = p.patch * p.patch;
+    uint src = (y * p.Wi + x) * (p.Co * taps) + co * taps + sy * p.patch + sx;
     float v = load_at(p.packed, src, kInputF16 != 0) + asfloat(p.bias[co]);
     store_at(p.out, i, apply_act(v, kAct));
 }

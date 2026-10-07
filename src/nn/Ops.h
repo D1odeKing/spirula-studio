@@ -102,6 +102,7 @@ void group_norm(vk::Arena& arena, const Tensor& out, const Tensor& x, const Tens
 // ================
 
 struct AttnOpts {
+    bool allow_coop = true;
     int   n_heads = 1;
     int   head_dim = 0;
     float scale = 0.0f;          // 0 -> 1/sqrt(head_dim)
@@ -132,10 +133,10 @@ struct AttnOpts {
 void attention(const Tensor& out, const Tensor& q, const Tensor& k, const Tensor& v,
                int64_t nq, int64_t nk, const AttnOpts& opts);
 
-// In-place 2-D axial RoPE on a [batch, n, n_heads*head_dim] tensor.
-// `freqs` is [n, head_dim/2, 2] holding (cos, sin) per complex pair.
+// In-place axial RoPE; freqs[n, head_dim/2, 2] holds (cos, sin).
+// split_half pairs dimensions i and i+head_dim/2 instead of 2i and 2i+1.
 void rope(const Tensor& x, const Tensor& freqs, int n_heads, int head_dim,
-          int64_t n, int batch = 1, int64_t row_stride = 0);
+          int64_t n, int batch = 1, int64_t row_stride = 0, bool split_half = false);
 
 // ================
 // Elementwise
@@ -148,6 +149,7 @@ void copy(const Tensor& dst, const Tensor& src);  // dtype conversion allowed
 void add(const Tensor& out, const Tensor& a, const Tensor& b, float alpha = 1.0f,
          float beta = 1.0f, Act act = Act::None);
 void mul(const Tensor& out, const Tensor& a, const Tensor& b, Act act = Act::None);
+void div(const Tensor& out, const Tensor& a, const Tensor& b);
 // out[r, c] = act(a[r, c] * b[r]): one scalar per row, e.g. a [H*W, 1] gate
 // over a channel-last map.
 void mul_rows(const Tensor& out, const Tensor& a, const Tensor& b, Act act = Act::None);
@@ -211,6 +213,11 @@ void patch_gather(const Tensor& out, const Tensor& in, const Tensor& centers, in
 void conv_transpose2x2(vk::Arena& arena, const Tensor& out, const Tensor& in,
                        const Tensor& w_packed, const Tensor& bias, Act act = Act::None);
 
+// Non-overlapping ConvTranspose2d(kernel=stride=patch), packed [Cout*patch², Cin].
+void conv_transpose_patch(vk::Arena& arena, const Tensor& out, const Tensor& in,
+                          const Tensor& w_packed, const Tensor& bias, int patch,
+                          Act act = Act::None);
+
 // Non-overlapping patch extraction for a ViT stem:
 // out[(H/p)*(W/p), p*p*C] with column order c*p*p + ky*p + kx.
 void patchify(const Tensor& out, const Tensor& in, int patch);
@@ -244,6 +251,11 @@ void avgpool(const Tensor& out, const Tensor& in, int kernel, int stride = 0, in
 // padding_mode='zeros'. See the shader for why align_corners matters.
 void grid_sample_points(const Tensor& out, const Tensor& in, const Tensor& pos,
                         bool align_corners = true);
+
+// Warp-centered bilinear correlation, zero padding, channel dot scaled by 1/sqrt(C).
+// out[H,W,(2r+1)^2], window order (dy,dx); warp[H,W,2] uses align_corners=false.
+void local_correlation(const Tensor& out, const Tensor& a, const Tensor& b,
+                       const Tensor& warp, int radius);
 
 // F.normalize(x, p=2, dim=-1). `out` may alias `x`.
 void l2_normalize_rows(const Tensor& out, const Tensor& x, float eps = 1e-12f);

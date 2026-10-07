@@ -3,8 +3,8 @@
 // The reader for what a running reconstruction writes about itself.
 //
 // The other half of sfm/core/Progress.h: the GUI passes `--progress-dir` to its
-// own child and polls the three files that appear there. Each is written whole
-// and renamed, so a read either gets the previous snapshot or this one.
+// own child and polls atomic snapshots. Dense versions 5/6 reference a flushed,
+// immutable prefix of an append-only point file.
 //
 // Polling rather than watching on purpose -- two files at 2 Hz is a pair of
 // stats, and an inotify/ReadDirectoryChangesW pair is a portability problem for
@@ -28,6 +28,8 @@ struct LiveModel {
     uint32_t n_images = 0;      // in the capture
     uint32_t n_registered = 0;  // ... and in the model
     uint64_t n_points = 0;      // before subsampling
+    bool provisional = false;
+    bool filtered = false;
     bool empty() const { return n_registered == 0 && ds.points.num() == 0; }
 };
 
@@ -95,7 +97,8 @@ float mapping_fraction(int64_t done, int64_t total);
 // `dir` is the --progress-dir the child was given. All return false when the
 // file is absent, unfinished or not newer than `mtime` -- which the caller
 // keeps, so a poll that finds nothing new costs one stat.
-bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out);
+bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out,
+                     uint64_t point_memory_budget = 0);
 
 // The similarity (row-major 3x4 [sR | t]) taking `from`'s normalized frame onto
 // `to`'s, fitted to the cameras both hold. False when too few are shared or they

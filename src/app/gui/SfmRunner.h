@@ -114,6 +114,7 @@ struct SfmJob {
     GeometryJob geometry;
     // Laser scans the model is aligned with; they replace the geometry step.
     LidarJob lidar;
+    DenseJob dense;
 
     // ---- reconstruction ----
     // What the user asked to redo or keep; the plan (DatasetPlan.h) decides
@@ -296,6 +297,7 @@ private:
     void take_reconstruction(SfmJob& job);
     void take_masking(PrepJob& prep);
     void take_geometry(SfmJob& job);
+    void take_dense(SfmJob& job);
     void log(const std::string& line, bool detail = true);
     void set_stage(Stage st, const std::string& s);
     // Stage changes driven by the child's output, which repeats a

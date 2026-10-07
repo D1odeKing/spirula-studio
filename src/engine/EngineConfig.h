@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 
 // Bundles the scalars engine_compute_loss_backward takes, for the call path
@@ -249,6 +251,9 @@ struct DensifyConfig {
     bool  split_weight_by_renders       = false;
     // A splat unrendered for this many steps is relocated as dead; 0 = off.
     int   dead_after_steps              = 0;
+    // (first step, splats), ascending: growth ceilings below the allocation,
+    // the progressive splat budget. Empty grows to the allocation throughout.
+    std::vector<std::pair<int, int64_t>> growth_caps;
 };
 
 // The schedule engine_densify_step grows the model on; the trainer's ETA and
@@ -260,6 +265,15 @@ inline bool densify_grows_at(const DensifyConfig& c, int step, int max_steps) {
 }
 inline int64_t densify_target(const DensifyConfig& c, int64_t cur, int64_t cap) {
     return std::max(cur, std::min(cap, (int64_t)(c.growth_factor * (float)cur)));
+}
+// The ceiling growth may reach at `step`: `cap` lowered by growth_caps.
+inline int64_t densify_cap_at(const DensifyConfig& c, int step, int64_t cap) {
+    int64_t at = cap;
+    for (const auto& [first, n] : c.growth_caps) {
+        if (first > step) break;
+        at = n;
+    }
+    return std::min(at, cap);
 }
 
 

@@ -122,6 +122,10 @@ src/
 ├── loma/                   LoMa: DaD keypoints + DeDoDe descriptors + the LoMa
 │                             matcher, on top of nn/. The other learned SfM
 │                             frontend -- READ src/loma/README.md
+├── roma/                   native RoMa v2 dense correspondence inference on nn/
+│                             -- READ src/roma/README.md
+├── dense/                  fixed-camera reconstruction, disk-backed observations,
+│                             fusion and source-frame PLY -- READ src/dense/README.md
 ├── metric3d/               Metric3D v2 depth + normals, on top of nn/
 │                             -- READ src/metric3d/README.md
 ├── moge/                   MoGe-2 point maps + normals + a sky mask, on top of
@@ -149,6 +153,7 @@ src/
 │   ├── cli/                main.cpp (`spirula train`), mesh_main.cpp (mesh),
 │   │                         sfm_main.cpp (sfm), sam_main.cpp (sam),
 │   │                         geometry_main.cpp (depth + normals)
+│   │                         dense_main.cpp (RoMa point cloud; docs/dense.md)
 │   ├── FrameExtract.{h,cpp}  video -> sharp frames (`spirula sam extract` also
 │   │                         masks them in the same pass; the GUI masks after),
 │   │                         decoded by Vulkan Video or ffmpeg (FrameDecode.h)

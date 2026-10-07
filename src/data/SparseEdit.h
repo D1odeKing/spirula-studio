@@ -12,6 +12,7 @@
 #include "data/DatasetParser.h"
 
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -84,9 +85,23 @@ struct SparseStats {
 SparseStats read_sparse_stats(const std::string& dataset_dir);
 
 // A plain point cloud, for anything that has no reconstruction behind it.
-// `double_xyz` keeps a cloud far from its origin to the millimetre.
+enum class PlyCoordinates { Float32, Float64 };
+class PointCloudWriter {
+public:
+    PointCloudWriter(const std::string& path, PlyCoordinates coordinates = PlyCoordinates::Float32);
+    void append(const double xyz[3], const uint8_t rgb[3]);
+    void finish();
+    uint64_t count() const { return count_; }
+private:
+    std::fstream file_;
+    std::string path_;
+    PlyCoordinates coordinates_;
+    std::streampos count_position_;
+    uint64_t count_ = 0;
+    bool finished_ = false;
+};
 void write_ply_points(const std::string& path, const double* xyz,
                       const uint8_t* rgb, int64_t n, const uint8_t* keep,
-                      const Sim3* moved = nullptr, bool double_xyz = false);
+                      const Sim3* moved = nullptr, PlyCoordinates coordinates = PlyCoordinates::Float32);
 
 }  // namespace spirula

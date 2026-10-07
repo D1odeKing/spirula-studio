@@ -7,6 +7,7 @@
 
 #include "app/gui/DatasetRecord.h"
 #include "app/gui/GeometryRunner.h"
+#include "app/gui/DenseRunner.h"
 
 #include <string>
 #include <vector>
@@ -30,6 +31,7 @@ enum class PartChoice { Auto, Keep, Run };
 struct PlanRequest {
     bool redo_frames = false, redo_masks = false, redo_model = false;
     bool redo_geometry = false;
+    bool redo_dense = false;
     // Keep frames and a reconstruction whose settings differ from the panel's.
     bool keep_built = false;
     PartChoice parts[kNumModelParts] = {};
@@ -41,6 +43,7 @@ StepFields masks_fields(const PrepJob& job);
 StepFields model_fields(const SfmJob& job);
 StepFields model_fields(const ColmapJob& job, const PrepJob& prep);
 StepFields geometry_fields(const GeometryJob& job);
+StepFields dense_fields(const DenseJob& job);
 std::vector<std::string> geometry_kinds(const GeometryJob& job);
 
 // Every input's images are already the dataset's own (a finished dataset's
@@ -60,6 +63,7 @@ struct PlanJob {
     bool staged = false;
     std::vector<std::string> lidar_clouds;
     bool lidar_in_frame = false;
+    DenseJob dense;
 };
 PlanJob plan_job(const SfmJob& job);
 PlanJob plan_job(const ColmapJob& job, const PrepJob& prep);
@@ -128,6 +132,8 @@ struct DatasetPlan {
     const StepPlan& operator[](ModelPart s) const { return parts[(int)s]; }
     bool ask() const;
 };
+
+void verify_dense_reuse(DatasetPlan& plan, const std::string& dataset, const std::atomic<bool>& cancel);
 
 inline bool makes(Act a) { return a == Act::Run || a == Act::Redo; }
 

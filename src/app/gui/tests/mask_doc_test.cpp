@@ -65,6 +65,9 @@ void check(bool ok, const std::string& what) {
     }
 }
 
+// A '/'-written expected path in this platform's separators.
+std::string native(const char* p) { return fs::path(p).make_preferred().string(); }
+
 // A chmod can inject a read or write failure only for a non-root POSIX user.
 bool chmod_injects() {
 #ifndef _WIN32
@@ -241,16 +244,16 @@ void test_keys_and_paths() {
               "cam0/00023",
           "key with dot segment in root");
     check(mk::frame_key(root, "/elsewhere/y.jpg") == "y", "key outside root is the stem");
-    check(mk::normalize_dir("/a/b/") == "/a/b", "normalize_dir strips the slash");
-    check(mk::normalize_dir("/a/./b/../c") == "/a/c", "normalize_dir is lexical");
-    check(mk::mask_file("/data/set/masks", "cam0/00023") == "/data/set/masks/cam0/00023.png",
+    check(mk::normalize_dir("/a/b/") == native("/a/b"), "normalize_dir strips the slash");
+    check(mk::normalize_dir("/a/./b/../c") == native("/a/c"), "normalize_dir is lexical");
+    check(mk::mask_file("/data/set/masks", "cam0/00023") == native("/data/set/masks/cam0/00023.png"),
           "mask_file");
     check(mk::layer_file("/data/set/mask_edits", "cam0/00023", mk::Layer::Base) ==
-              "/data/set/mask_edits/cam0/00023.base.png", "layer_file base");
+              native("/data/set/mask_edits/cam0/00023.base.png"), "layer_file base");
     check(mk::layer_file("/data/set/mask_edits", "00023", mk::Layer::Drop) ==
-              "/data/set/mask_edits/00023.drop.png", "layer_file drop");
+              native("/data/set/mask_edits/00023.drop.png"), "layer_file drop");
     check(mk::layer_file("/data/set/mask_edits", "00023", mk::Layer::Keep) ==
-              "/data/set/mask_edits/00023.keep.png", "layer_file keep");
+              native("/data/set/mask_edits/00023.keep.png"), "layer_file keep");
 }
 
 // ---------------------------------------------------------------------------

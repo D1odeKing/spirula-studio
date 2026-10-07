@@ -347,8 +347,8 @@ wrong as a constraint. So `kind: dual-fisheye` starts the rotation there and
 refines it. The translation is the other way round: the baseline lies on the
 optical axis to under a millimetre on both cameras measured against something
 metric, so it could be one parameter, `t.z` in the second lens's frame (`refine:
-axial`, `BAProblem::Member::mask` 0x27). `kind: dual-fisheye` does not impose
-that: it refines all 6 DOF, and `refine: axial` on the second member opts in.
+axial`, `BAProblem::Member::mask` 0x27). `kind: dual-fisheye` imposes that on
+the second member.
 
 The Insta360 is the open case. Refined freely, its lateral component comes
 out at 30-50% of the axial one on both captures (`t_y` 0.0019 against
@@ -356,8 +356,8 @@ out at 30-50% of the axial one on both captures (`t_y` 0.0019 against
 and lower error: 194103 points at 0.914 px against 178478 at 0.966 px on a
 470-image walk. A physical offset would do the opposite, so the lateral term
 is more likely absorbing something that is not a rigid offset (the two
-sensors read out in different directions); `refine: axial` is the option for
-a capture where that shows up.
+sensors read out in different directions), which is why the axis is the
+default.
 
 A GoPro `.360`'s views are cut from one canvas at rotations the extraction
 chose (`app/Pano360.h`), and the five of one lens share its centre. The rig

@@ -459,6 +459,35 @@ SS_MSG(save_eval_images_help,
        "yazar. Kaliteyi değerlendirmek için işe yarar, karşılığında biraz disk "
        "yeri harcar."));
 
+SS_MSG(log_performance,
+    EN("Log performance stats"),
+    JA("性能の統計を記録"),
+    ZH_HANS("记录性能统计"),
+    ZH_HANT("記錄效能統計"),
+    KO("성능 통계 기록"),
+    DE("Leistungsdaten protokollieren"),
+    FR("Journaliser les statistiques de performance"),
+    ES("Registrar estadísticas de rendimiento"),
+    PT("Registrar estatísticas de desempenho"),
+    IT("Registra le statistiche delle prestazioni"),
+    NL("Prestatiestatistieken vastleggen"),
+    RU("Записывать статистику производительности"),
+    TR("Performans istatistiklerini kaydet"));
+SS_MSG(log_performance_help,
+    EN("Records the computer and the run once a second while it trains: CPU use per core, memory, disk, GPU use, clocks and temperature, and how long each step waited for images versus ran on the GPU. The files go to the run's perf folder; python tools/perf/perf_report.py with that folder turns them into a report of what limited each stage. Costs a small fraction of one CPU core."),
+    JA("学習中、1 秒ごとにコンピューターと実行の状態を記録します。コアごとの CPU 使用率、メモリ、ディスク、GPU 使用率、クロック、温度、そして各ステップが画像を待った時間と GPU で動いた時間です。ファイルは実行フォルダーの perf に保存されます。そのフォルダーを指定して python tools/perf/perf_report.py を実行すると、各段階の制約要因をまとめたレポートになります。CPU コア 1 つのごく一部しか使いません。"),
+    ZH_HANS("训练时每秒记录一次计算机和本次运行的状态：每个核心的 CPU 占用、内存、磁盘、GPU 占用、频率和温度，以及每一步等待图像与在 GPU 上运行各花了多长时间。文件保存在运行文件夹的 perf 中；用该文件夹运行 python tools/perf/perf_report.py，可生成说明每个阶段受什么限制的报告。只占用一个 CPU 核心的很小一部分。"),
+    ZH_HANT("訓練時每秒記錄一次電腦與本次執行的狀態：每個核心的 CPU 使用率、記憶體、磁碟、GPU 使用率、時脈與溫度，以及每一步等待影像與在 GPU 上執行各花了多久。檔案存放在執行資料夾的 perf 中；以該資料夾執行 python tools/perf/perf_report.py，可產生說明每個階段受什麼限制的報告。只佔用一個 CPU 核心的很小一部分。"),
+    KO("학습하는 동안 1초마다 컴퓨터와 실행 상태를 기록합니다. 코어별 CPU 사용률, 메모리, 디스크, GPU 사용률, 클럭과 온도, 그리고 각 스텝이 이미지를 기다린 시간과 GPU에서 실행된 시간입니다. 파일은 실행 폴더의 perf에 저장됩니다. 그 폴더로 python tools/perf/perf_report.py를 실행하면 각 단계를 무엇이 제한했는지 보여 주는 보고서가 됩니다. CPU 코어 하나의 아주 작은 일부만 씁니다."),
+    DE("Zeichnet während des Trainings einmal pro Sekunde Rechner und Lauf auf: CPU-Last je Kern, Arbeitsspeicher, Datenträger, GPU-Last, Takt und Temperatur sowie, wie lange jeder Schritt auf Bilder gewartet und wie lange er auf der GPU gerechnet hat. Die Dateien landen im Ordner perf des Laufs; python tools/perf/perf_report.py mit diesem Ordner macht daraus einen Bericht, was jede Stufe gebremst hat. Kostet einen kleinen Bruchteil eines CPU-Kerns."),
+    FR("Enregistre l'ordinateur et l'exécution une fois par seconde pendant l'entraînement : charge CPU par cœur, mémoire, disque, charge GPU, fréquences et température, et le temps que chaque étape a passé à attendre les images ou à calculer sur le GPU. Les fichiers vont dans le dossier perf de l'exécution ; python tools/perf/perf_report.py avec ce dossier en fait un rapport sur ce qui a limité chaque étape. Coûte une petite fraction d'un cœur CPU."),
+    ES("Registra el equipo y la ejecución una vez por segundo mientras entrena: uso de CPU por núcleo, memoria, disco, uso de GPU, frecuencias y temperatura, y cuánto tiempo cada paso esperó imágenes frente a cuánto se ejecutó en la GPU. Los archivos van a la carpeta perf de la ejecución; python tools/perf/perf_report.py con esa carpeta los convierte en un informe de qué limitó cada etapa. Cuesta una pequeña fracción de un núcleo de CPU."),
+    PT("Registra o computador e a execução uma vez por segundo durante o treinamento: uso de CPU por núcleo, memória, disco, uso de GPU, frequências e temperatura, e quanto tempo cada passo esperou por imagens e quanto rodou na GPU. Os arquivos vão para a pasta perf da execução; python tools/perf/perf_report.py com essa pasta gera um relatório do que limitou cada etapa. Custa uma pequena fração de um núcleo de CPU."),
+    IT("Registra il computer e l'esecuzione una volta al secondo durante l'addestramento: uso della CPU per core, memoria, disco, uso della GPU, frequenze e temperatura, e quanto tempo ogni passo ha atteso le immagini rispetto a quanto ha lavorato sulla GPU. I file vanno nella cartella perf dell'esecuzione; python tools/perf/perf_report.py con quella cartella li trasforma in un rapporto su cosa ha limitato ogni fase. Costa una piccola frazione di un core della CPU."),
+    NL("Legt tijdens de training elke seconde de computer en de run vast: CPU-gebruik per kern, geheugen, schijf, GPU-gebruik, kloksnelheden en temperatuur, en hoe lang elke stap op beelden wachtte tegenover hoe lang hij op de GPU rekende. De bestanden komen in de map perf van de run; python tools/perf/perf_report.py met die map maakt er een rapport van over wat elke fase beperkte. Kost een klein deel van één CPU-kern."),
+    RU("Во время обучения раз в секунду записывает состояние компьютера и запуска: загрузку CPU по ядрам, память, диск, загрузку GPU, частоты и температуру, а также сколько времени каждый шаг ждал изображений и сколько работал на GPU. Файлы сохраняются в папку perf запуска; python tools/perf/perf_report.py с этой папкой превращает их в отчёт о том, что ограничивало каждый этап. Занимает малую долю одного ядра CPU."),
+    TR("Eğitim sürerken bilgisayarı ve çalıştırmayı saniyede bir kaydeder: çekirdek başına CPU kullanımı, bellek, disk, GPU kullanımı, saat hızları ve sıcaklık, ayrıca her adımın görüntü beklediği süre ile GPU'da çalıştığı süre. Dosyalar çalıştırmanın perf klasörüne yazılır; o klasörle python tools/perf/perf_report.py çalıştırıldığında her aşamayı neyin sınırladığını gösteren bir rapor çıkar. Tek bir CPU çekirdeğinin küçük bir kısmını harcar."));
+
 SS_MSG(viewer_port,
     EN("Web viewer port"), JA("Web ビューアのポート"),
     ZH_HANS("网页查看器端口"), ZH_HANT("網頁檢視器連接埠"),
@@ -753,74 +782,87 @@ SS_MSG(apply_loss_for_mask_help,
        "or the black area outside a fisheye circle. On trains them as empty, "
        "which removes the background and leaves just the subject. Left unset, "
        "it is on when the only masks are the images' own alpha channel, and "
-       "off otherwise."),
+       "off otherwise. "
+       "Dense point-cloud seeds also default to cut out."),
     JA("マスクされた画素を無視するか、空として学習するかを決めます。オフなら"
        "無視され、通行人や車、魚眼の円外の黒い部分といった邪魔物を隠すのに使"
        "えます。オンなら空として学習され、背景が取り除かれて被写体だけが残り"
        "ます。未設定なら、マスクが画像自身のアルファチャンネルだけのときにオ"
-       "ン、それ以外はオフになります。"),
+       "ン、それ以外はオフになります。 "
+       "密な点群を初期値に使う場合も、既定は切り抜きです。"),
     ZH_HANS("被遮住的像素是忽略还是按空白训练。关闭时忽略它们，可用来隐藏行人、"
             "汽车、鱼眼圆外的黑边等干扰物。开启时按空白训练，会去掉背景，只留"
             "下主体。未设置时，若蒙版只有图像自身的 Alpha 通道则开启，否则关"
-            "闭。"),
+            "闭。 "
+       "使用稠密点云初始化时也默认裁掉背景。"),
     ZH_HANT("被遮住的像素是忽略還是按空白訓練。關閉時忽略它們，可用來隱藏行人、"
             "汽車、魚眼圓外的黑邊等干擾物。開啟時按空白訓練，會去掉背景，只留"
             "下主體。未設定時，若遮罩只有影像自身的 Alpha 通道則開啟，否則關"
-            "閉。"),
+            "閉。 "
+       "使用稠密點雲初始化時也預設裁掉背景。"),
     KO("가려진 픽셀을 무시할지, 빈 공간으로 학습할지 정합니다. 끄면 무시하므"
        "로 사람, 자동차, 어안 원 바깥의 검은 영역 같은 방해물을 가리는 데 쓸 "
        "수 있습니다. 켜면 빈 곳으로 학습해 배경이 사라지고 피사체만 남습니다."
        " 설정하지 않으면 마스크가 이미지 자체의 알파 채널뿐일 때 켜지고, 그 "
-       "밖에는 꺼집니다."),
+       "밖에는 꺼집니다. "
+       "밀집 포인트 클라우드로 초기화할 때도 기본값은 배경 잘라내기입니다."),
     DE("Ob maskierte Pixel ignoriert oder als leerer Raum trainiert werden. "
        "Aus ignoriert sie, womit sich Störendes wie Passanten, Autos oder der "
        "schwarze Bereich außerhalb des Fischaugenkreises ausblenden lässt. An "
        "trainiert sie als leer, was den Hintergrund entfernt und nur das Motiv "
        "übrig lässt. Ungesetzt ist es an, wenn die einzigen Masken der "
-       "Alphakanal der Bilder selbst sind, sonst aus."),
+       "Alphakanal der Bilder selbst sind, sonst aus. "
+       "Bei einer dichten Startpunktwolke ist Ausschneiden ebenfalls die Vorgabe."),
     FR("Les pixels masqués sont-ils ignorés ou entraînés comme du vide. "
        "Décoché, ils sont ignorés, ce qui permet de cacher les gêneurs : "
        "passants, voitures, ou la zone noire hors du cercle fisheye. Coché, "
        "ils sont entraînés comme vides, ce qui supprime l'arrière-plan et ne "
        "laisse que le sujet. Non défini, il est coché quand les seuls masques "
-       "sont le canal alpha des images elles-mêmes, décoché sinon."),
+       "sont le canal alpha des images elles-mêmes, décoché sinon. "
+       "Les nuages denses utilisés pour initialiser choisissent aussi le détourage par défaut."),
     ES("Si los píxeles enmascarados se ignoran o se entrenan como espacio "
        "vacío. Desactivado los ignora, que es como se ocultan elementos "
        "molestos: transeúntes, coches o la zona negra fuera del círculo de ojo "
        "de pez. Activado los entrena como vacíos, lo que elimina el fondo y "
        "deja solo el sujeto. Sin definir, se activa cuando las únicas máscaras "
-       "son el canal alfa de las propias imágenes, y se desactiva en otro caso."),
+       "son el canal alfa de las propias imágenes, y se desactiva en otro caso. "
+       "La inicialización con nube densa también recorta por defecto."),
     PT("Se os pixels mascarados são ignorados ou treinados como espaço vazio. "
        "Desligado os ignora, que é como se escondem elementos indesejados: "
        "pessoas, carros ou a área preta fora do círculo olho de peixe. Ligado "
        "os treina como vazios, o que remove o fundo e deixa só o sujeito. Sem "
        "valor definido, fica ligado quando as únicas máscaras são o canal alfa "
-       "das próprias imagens, e desligado caso contrário."),
+       "das próprias imagens, e desligado caso contrário. "
+       "A inicialização com nuvem densa também recorta por padrão."),
     IT("Se i pixel mascherati vengono ignorati o addestrati come spazio vuoto. "
        "Disattivato li ignora, ed è così che si nascondono gli elementi di "
        "disturbo: passanti, automobili o l'area nera fuori dal cerchio "
        "fisheye. Attivato li addestra come vuoti, il che rimuove lo sfondo e "
        "lascia solo il soggetto. Se non impostato, è attivo quando le uniche "
        "maschere sono il canale alfa delle immagini stesse, altrimenti è "
-       "disattivato."),
+       "disattivato. "
+       "Anche l’inizializzazione con nuvola densa usa il ritaglio come predefinito."),
     NL("Of gemaskeerde pixels worden genegeerd of als lege ruimte getraind. "
        "Uit negeert ze, waarmee je stoorelementen verbergt: voorbijgangers, "
        "auto's of het zwarte gebied buiten de fisheye-cirkel. Aan traint ze "
        "als leeg, waardoor de achtergrond verdwijnt en alleen het onderwerp "
        "overblijft. Niet ingesteld staat het aan als de enige maskers het "
-       "alfakanaal van de beelden zelf zijn, en anders uit."),
+       "alfakanaal van de beelden zelf zijn, en anders uit. "
+       "Initialisatie met een dichte puntenwolk kiest standaard ook uitsnijden."),
     RU("Игнорировать закрытые маской пиксели или обучать их как пустоту. "
        "Выключено — игнорирует; так скрывают помехи: прохожих, машины, чёрную "
        "область вне круга фишая. Включено — обучает как пустоту, что убирает "
        "фон и оставляет только объект. Если не задано, включено, когда "
        "единственные маски — альфа-канал самих изображений, и выключено в "
-       "остальных случаях."),
+       "остальных случаях. "
+       "При инициализации плотным облаком по умолчанию также вырезается фон."),
     TR("Maskelenen piksellerin yok sayılması mı yoksa boş alan olarak "
        "eğitilmesi mi. Kapalıyken yok sayılır; geçen insanlar, arabalar ya da "
        "balıkgözü dairesinin dışındaki siyah alan gibi istenmeyenler böyle "
        "gizlenir. Açıkken boş olarak eğitilir; arka plan kalkar ve yalnızca "
        "özne kalır. Ayarlanmazsa, tek maske görüntülerin kendi alfa kanalı "
-       "olduğunda açık, aksi hâlde kapalıdır."));
+       "olduğunda açık, aksi hâlde kapalıdır. "
+       "Yoğun nokta bulutuyla başlatmada da varsayılan arka planı kesmektir."));
 
 SS_MSG(flip_mask,
     EN("Flip masks"), JA("マスクを反転"),
@@ -1346,6 +1388,174 @@ SS_MSG(train_resolution_divisor_help,
        "eğitir. Kameralar her zaman görüntü dosyalarını izler, bu yüzden "
        "önceden küçültülmüş bir görüntü klasörü burada çarpan istemez."));
 
+SS_MSG(progressive_resolution,
+    EN("Progressive resolution"),
+    JA("段階的な解像度"),
+    ZH_HANS("渐进分辨率"),
+    ZH_HANT("漸進解析度"),
+    KO("점진적 해상도"),
+    DE("Schrittweise Auflösung"),
+    FR("Résolution progressive"),
+    ES("Resolución progresiva"),
+    PT("Resolução progressiva"),
+    IT("Risoluzione progressiva"),
+    NL("Oplopende resolutie"),
+    RU("Постепенное разрешение"),
+    TR("Kademeli çözünürlük"));
+SS_MSG(progressive_resolution_help,
+    EN("Start training on smaller images and step up to full resolution as the run goes on, which settles the coarse shape sooner and with cheaper steps. Resolution only changes between full passes over the dataset, so every image is trained the same number of times at each size. Off trains at full resolution throughout."),
+    JA("小さい画像で学習を始め、進むにつれて元の解像度まで上げます。安いステップで大まかな形を早く固められます。解像度はデータセットを一巡するごとの区切りでのみ変わるため、どの画像も各解像度で同じ回数だけ学習されます。オフなら最初から最後まで元の解像度で学習します。"),
+    ZH_HANS("先用较小的图像开始训练，随着进行逐步提高到完整分辨率，以更低的单步成本更早确定大致形状。分辨率只在完整遍历一次数据集后才改变，因此每张图像在每种尺寸下训练的次数相同。关闭时全程以完整分辨率训练。"),
+    ZH_HANT("先用較小的影像開始訓練，隨著進行逐步提高到完整解析度，以更低的單步成本更早確定大致形狀。解析度只在完整走過一次資料集後才改變，因此每張影像在每種尺寸下訓練的次數相同。關閉時全程以完整解析度訓練。"),
+    KO("작은 이미지로 학습을 시작해 진행에 따라 원래 해상도까지 올립니다. 저렴한 스텝으로 대략적인 형태를 더 빨리 잡습니다. 해상도는 데이터셋을 한 바퀴 다 돈 뒤에만 바뀌므로 모든 이미지가 각 크기에서 같은 횟수만큼 학습됩니다. 끄면 처음부터 끝까지 원래 해상도로 학습합니다."),
+    DE("Das Training mit kleineren Bildern beginnen und im Verlauf bis zur vollen Auflösung steigern; so steht die grobe Form früher und mit günstigeren Schritten. Die Auflösung wechselt nur zwischen vollständigen Durchläufen des Datensatzes, daher wird jedes Bild in jeder Größe gleich oft trainiert. Aus trainiert durchgehend in voller Auflösung."),
+    FR("Commencer l'entraînement sur des images plus petites et monter jusqu'à la pleine résolution au fil du run, ce qui fixe plus tôt la forme générale avec des étapes moins coûteuses. La résolution ne change qu'entre deux passages complets sur le jeu de données, donc chaque image est entraînée autant de fois à chaque taille. Désactivé, tout se fait en pleine résolution."),
+    ES("Empezar el entrenamiento con imágenes más pequeñas y subir a la resolución completa a medida que avanza, lo que fija antes la forma general con pasos más baratos. La resolución solo cambia entre pasadas completas por el conjunto de datos, así que cada imagen se entrena las mismas veces en cada tamaño. Desactivado, se entrena siempre a resolución completa."),
+    PT("Começar o treinamento com imagens menores e subir até a resolução completa ao longo do processo, o que define antes a forma geral com passos mais baratos. A resolução só muda entre passagens completas pelo conjunto de dados, então cada imagem é treinada o mesmo número de vezes em cada tamanho. Desligado, treina sempre em resolução completa."),
+    IT("Iniziare l'addestramento su immagini più piccole e salire fino alla risoluzione piena man mano che procede, così la forma generale si assesta prima e con passi più economici. La risoluzione cambia solo tra un passaggio completo e l'altro sul set di dati, quindi ogni immagine viene addestrata lo stesso numero di volte a ogni dimensione. Disattivato, si addestra sempre a risoluzione piena."),
+    NL("De training met kleinere beelden beginnen en gaandeweg opschalen naar volle resolutie, zodat de grove vorm eerder en met goedkopere stappen vastligt. De resolutie verandert alleen tussen volledige rondes door de dataset, dus elk beeld wordt op elke grootte even vaak getraind. Uit traint de hele tijd op volle resolutie."),
+    RU("Начинать обучение на уменьшенных изображениях и по ходу повышать разрешение до полного: грубая форма устанавливается раньше и более дешёвыми шагами. Разрешение меняется только между полными проходами по набору данных, поэтому каждое изображение обучается одинаковое число раз на каждом размере. Если выключено, всё обучение идёт в полном разрешении."),
+    TR("Eğitime daha küçük görüntülerle başlar ve ilerledikçe tam çözünürlüğe çıkar; kaba biçim daha ucuz adımlarla daha erken oturur. Çözünürlük yalnızca veri kümesi üzerinden tam bir geçiş bittiğinde değişir, böylece her görüntü her boyutta aynı sayıda eğitilir. Kapalıyken baştan sona tam çözünürlükte eğitir."));
+SS_MSG(progressive_resolution_start,
+    EN("Starting resolution divisor"),
+    JA("開始時の解像度の分母"),
+    ZH_HANS("起始分辨率缩小倍数"),
+    ZH_HANT("起始解析度縮小倍數"),
+    KO("시작 해상도 축소 배수"),
+    DE("Anfänglicher Auflösungsteiler"),
+    FR("Diviseur de résolution de départ"),
+    ES("Divisor de resolución inicial"),
+    PT("Divisor de resolução inicial"),
+    IT("Divisore di risoluzione iniziale"),
+    NL("Begindeler van de resolutie"),
+    RU("Начальный делитель разрешения"),
+    TR("Başlangıç çözünürlük böleni"));
+SS_MSG(progressive_resolution_start_help,
+    EN("How much smaller the first stage trains: 4 starts at a quarter of each side, then the divisor halves stage by stage (4, 2, full). A power of two, at least 2. It applies on top of the training resolution divisor."),
+    JA("最初の段階をどれだけ小さくするかです。4 なら各辺 4 分の 1 から始め、段階ごとに分母が半分になります（4、2、元の解像度）。2 以上の 2 のべき乗です。学習解像度の分母に重ねて掛かります。"),
+    ZH_HANS("第一阶段缩小多少：4 表示每边从四分之一开始，之后每个阶段倍数减半（4、2、完整）。须为不小于 2 的 2 的幂。在训练分辨率缩小倍数之上再叠加。"),
+    ZH_HANT("第一階段縮小多少：4 表示每邊從四分之一開始，之後每個階段倍數減半（4、2、完整）。須為不小於 2 的 2 的冪。在訓練解析度縮小倍數之上再疊加。"),
+    KO("첫 단계를 얼마나 작게 학습할지입니다. 4면 각 변의 4분의 1에서 시작하고 단계마다 배수가 절반이 됩니다(4, 2, 원래 크기). 2 이상인 2의 거듭제곱입니다. 학습 해상도 축소 배수에 겹쳐 적용됩니다."),
+    DE("Wie viel kleiner die erste Stufe trainiert: 4 beginnt mit einem Viertel jeder Seite, danach halbiert sich der Teiler von Stufe zu Stufe (4, 2, voll). Eine Zweierpotenz ab 2. Wirkt zusätzlich zum Teiler der Trainingsauflösung."),
+    FR("De combien la première étape est réduite : 4 commence au quart de chaque côté, puis le diviseur est divisé par deux à chaque étape (4, 2, pleine). Une puissance de deux, au moins 2. S'ajoute au diviseur de la résolution d'entraînement."),
+    ES("Cuánto más pequeña entrena la primera etapa: 4 empieza en un cuarto de cada lado y el divisor se reduce a la mitad en cada etapa (4, 2, completa). Una potencia de dos, al menos 2. Se aplica además del divisor de la resolución de entrenamiento."),
+    PT("Quanto menor é a primeira etapa: 4 começa com um quarto de cada lado e o divisor cai pela metade a cada etapa (4, 2, completa). Uma potência de dois, no mínimo 2. Aplica-se além do divisor da resolução de treino."),
+    IT("Quanto più piccola addestra la prima fase: 4 parte da un quarto di ogni lato, poi il divisore si dimezza a ogni fase (4, 2, piena). Una potenza di due, almeno 2. Si somma al divisore della risoluzione di addestramento."),
+    NL("Hoeveel kleiner de eerste fase traint: 4 begint op een kwart van elke zijde, daarna halveert de deler per fase (4, 2, vol). Een macht van twee, minstens 2. Komt bovenop de deler van de trainingsresolutie."),
+    RU("Насколько меньше первый этап: 4 начинает с четверти каждой стороны, затем делитель уменьшается вдвое на каждом этапе (4, 2, полное). Степень двойки, не меньше 2. Применяется поверх делителя разрешения обучения."),
+    TR("İlk aşamanın ne kadar küçük eğitileceği: 4 her kenarın dörtte birinden başlar, sonra bölen her aşamada yarıya iner (4, 2, tam). En az 2 olan bir ikinin kuvveti. Eğitim çözünürlüğü böleninin üstüne uygulanır."));
+SS_MSG(progressive_resolution_full_at,
+    EN("Full resolution from"),
+    JA("元の解像度に達する時点"),
+    ZH_HANS("达到完整分辨率的时机"),
+    ZH_HANT("達到完整解析度的時機"),
+    KO("원래 해상도 도달 시점"),
+    DE("Volle Auflösung ab"),
+    FR("Pleine résolution à partir de"),
+    ES("Resolución completa desde"),
+    PT("Resolução completa a partir de"),
+    IT("Risoluzione piena da"),
+    NL("Volle resolutie vanaf"),
+    RU("Полное разрешение с"),
+    TR("Tam çözünürlük başlangıcı"));
+SS_MSG(progressive_resolution_full_at_help,
+    EN("The fraction of the run by which training reaches full resolution: 0.3 is after 30% of the steps. Each earlier stage is half as long as the one after it, since a finer step costs about four times as much. Switches snap to the nearest full pass over the dataset."),
+    JA("学習が元の解像度に達するまでの割合です。0.3 ならステップの 30% の後です。細かいステップは約 4 倍のコストがかかるため、前の段階ほど後の段階の半分の長さになります。切り替えはデータセットの一巡の区切りに最も近い位置に合わせます。"),
+    ZH_HANS("训练达到完整分辨率时所占的进度比例：0.3 表示 30% 的步数之后。由于更精细的一步成本约为四倍，每个较早阶段的长度是其后一阶段的一半。切换会对齐到最近的一次完整遍历数据集。"),
+    ZH_HANT("訓練達到完整解析度時所占的進度比例：0.3 表示 30% 的步數之後。由於更精細的一步成本約為四倍，每個較早階段的長度是其後一階段的一半。切換會對齊到最近的一次完整走過資料集。"),
+    KO("학습이 원래 해상도에 도달하는 진행 비율입니다. 0.3이면 스텝의 30% 이후입니다. 더 세밀한 스텝은 약 4배 비싸므로 앞 단계는 다음 단계의 절반 길이입니다. 전환은 데이터셋 한 바퀴의 가장 가까운 경계에 맞춥니다."),
+    DE("Der Anteil des Laufs, nach dem das Training die volle Auflösung erreicht: 0.3 heißt nach 30 % der Schritte. Jede frühere Stufe ist halb so lang wie die folgende, da ein feinerer Schritt etwa viermal so viel kostet. Wechsel rasten am nächsten vollständigen Durchlauf des Datensatzes ein."),
+    FR("La part du run après laquelle l'entraînement atteint la pleine résolution : 0.3 signifie après 30 % des étapes. Chaque étape précédente dure la moitié de la suivante, car une étape plus fine coûte environ quatre fois plus. Les changements s'alignent sur le passage complet le plus proche du jeu de données."),
+    ES("La fracción de la ejecución en la que el entrenamiento alcanza la resolución completa: 0.3 es tras el 30 % de los pasos. Cada etapa anterior dura la mitad que la siguiente, porque un paso más fino cuesta unas cuatro veces más. Los cambios se ajustan a la pasada completa por el conjunto de datos más cercana."),
+    PT("A fração do treino em que se chega à resolução completa: 0.3 é após 30% dos passos. Cada etapa anterior dura metade da seguinte, porque um passo mais fino custa cerca de quatro vezes mais. As mudanças se alinham à passagem completa pelo conjunto de dados mais próxima."),
+    IT("La frazione del run entro cui l'addestramento raggiunge la risoluzione piena: 0.3 significa dopo il 30% dei passi. Ogni fase precedente dura la metà della successiva, perché un passo più fine costa circa quattro volte tanto. I cambi si allineano al passaggio completo sul set di dati più vicino."),
+    NL("Het deel van de run waarna de training volle resolutie bereikt: 0.3 is na 30% van de stappen. Elke eerdere fase duurt half zo lang als de volgende, omdat een fijnere stap ongeveer vier keer zoveel kost. Wisselingen vallen samen met de dichtstbijzijnde volledige ronde door de dataset."),
+    RU("Доля запуска, к которой обучение выходит на полное разрешение: 0.3 — после 30% шагов. Каждый предыдущий этап вдвое короче следующего, поскольку более мелкий шаг стоит примерно вчетверо дороже. Переключения привязываются к ближайшему полному проходу по набору данных."),
+    TR("Eğitimin tam çözünürlüğe ulaştığı çalıştırma oranı: 0.3, adımların %30'undan sonra demektir. Daha ince bir adım yaklaşık dört kat pahalı olduğundan her önceki aşama sonrakinin yarısı kadar sürer. Geçişler veri kümesi üzerindeki en yakın tam geçişe hizalanır."));
+SS_MSG(progressive_resolution_schedule,
+    EN("Manual resolution schedule"),
+    JA("手動の解像度スケジュール"),
+    ZH_HANS("手动分辨率计划"),
+    ZH_HANT("手動解析度計畫"),
+    KO("수동 해상도 일정"),
+    DE("Manueller Auflösungsplan"),
+    FR("Calendrier de résolution manuel"),
+    ES("Calendario de resolución manual"),
+    PT("Cronograma de resolução manual"),
+    IT("Calendario di risoluzione manuale"),
+    NL("Handmatig resolutieschema"),
+    RU("Ручное расписание разрешения"),
+    TR("Elle çözünürlük planı"));
+SS_MSG(progressive_resolution_schedule_help,
+    EN("Replaces the automatic stages with your own: step:divisor pairs, for example 0:4, 3000:2, 9000:1. Divisors may only shrink. Each switch moves to the nearest full pass over the dataset. Empty uses the automatic schedule."),
+    JA("自動の段階を自分の設定に置き換えます。ステップ:分母 の組で、例えば 0:4, 3000:2, 9000:1 です。分母は小さくなる方向にしか変えられません。各切り替えはデータセットの一巡の最も近い区切りに移ります。空なら自動のスケジュールを使います。"),
+    ZH_HANS("用自定义阶段替换自动阶段：步数:倍数 组成的对，例如 0:4, 3000:2, 9000:1。倍数只能逐渐减小。每次切换会移到最近的一次完整遍历数据集。留空则使用自动计划。"),
+    ZH_HANT("用自訂階段取代自動階段：步數:倍數 組成的對，例如 0:4, 3000:2, 9000:1。倍數只能逐漸減小。每次切換會移到最近的一次完整走過資料集。留空則使用自動計畫。"),
+    KO("자동 단계를 직접 정한 단계로 바꿉니다. 스텝:배수 쌍으로, 예: 0:4, 3000:2, 9000:1. 배수는 줄어드는 방향으로만 바꿀 수 있습니다. 각 전환은 데이터셋 한 바퀴의 가장 가까운 경계로 옮겨집니다. 비워 두면 자동 일정을 씁니다."),
+    DE("Ersetzt die automatischen Stufen durch eigene: Paare aus Schritt:Teiler, etwa 0:4, 3000:2, 9000:1. Teiler dürfen nur kleiner werden. Jeder Wechsel rückt auf den nächsten vollständigen Durchlauf des Datensatzes. Leer verwendet den automatischen Plan."),
+    FR("Remplace les étapes automatiques par les vôtres : des paires étape:diviseur, par exemple 0:4, 3000:2, 9000:1. Les diviseurs ne peuvent que diminuer. Chaque changement se place sur le passage complet du jeu de données le plus proche. Vide utilise le calendrier automatique."),
+    ES("Sustituye las etapas automáticas por las suyas: pares paso:divisor, por ejemplo 0:4, 3000:2, 9000:1. Los divisores solo pueden disminuir. Cada cambio se mueve a la pasada completa por el conjunto de datos más cercana. Vacío usa el calendario automático."),
+    PT("Substitui as etapas automáticas pelas suas: pares passo:divisor, por exemplo 0:4, 3000:2, 9000:1. Os divisores só podem diminuir. Cada mudança vai para a passagem completa pelo conjunto de dados mais próxima. Vazio usa o cronograma automático."),
+    IT("Sostituisce le fasi automatiche con le proprie: coppie passo:divisore, per esempio 0:4, 3000:2, 9000:1. I divisori possono solo diminuire. Ogni cambio si sposta al passaggio completo sul set di dati più vicino. Vuoto usa il calendario automatico."),
+    NL("Vervangt de automatische fasen door eigen fasen: paren stap:deler, bijvoorbeeld 0:4, 3000:2, 9000:1. Delers mogen alleen kleiner worden. Elke wissel schuift naar de dichtstbijzijnde volledige ronde door de dataset. Leeg gebruikt het automatische schema."),
+    RU("Заменяет автоматические этапы своими: пары шаг:делитель, например 0:4, 3000:2, 9000:1. Делители могут только уменьшаться. Каждое переключение переносится на ближайший полный проход по набору данных. Пусто — используется автоматическое расписание."),
+    TR("Otomatik aşamaları kendi aşamalarınızla değiştirir: adım:bölen çiftleri, örneğin 0:4, 3000:2, 9000:1. Bölenler yalnızca küçülebilir. Her geçiş veri kümesi üzerindeki en yakın tam geçişe kayar. Boş bırakılırsa otomatik plan kullanılır."));
+SS_MSG(progressive_splat_budget,
+    EN("Grow splats with resolution"),
+    JA("解像度に合わせてスプラットを増やす"),
+    ZH_HANS("随分辨率增加泼溅"),
+    ZH_HANT("隨解析度增加潑濺"),
+    KO("해상도에 맞춰 스플랫 늘리기"),
+    DE("Splats mit der Auflösung wachsen lassen"),
+    FR("Faire croître les splats avec la résolution"),
+    ES("Aumentar los splats con la resolución"),
+    PT("Aumentar os splats com a resolução"),
+    IT("Far crescere gli splat con la risoluzione"),
+    NL("Splats laten groeien met de resolutie"),
+    RU("Наращивать сплаты вместе с разрешением"),
+    TR("Splat sayısını çözünürlükle birlikte artır"));
+SS_MSG(progressive_splat_budget_help,
+    EN("Holds the number of splats below the maximum until the images are sharp enough to show where more are needed: each resolution stage may grow to the maximum divided by its divisor, so a quarter at 1/4, half at 1/2 and all of it at full resolution. Splats added from blurry images go where the coarse shape is wrong, not where the fine detail is. Off grows to the maximum as fast as usual."),
+    JA("画像が十分に鮮明になって、どこにスプラットが必要か分かるまで、スプラット数を最大値より低く抑えます。各解像度の段階は最大値をその分母で割った数まで増やせます。1/4 では 4 分の 1、1/2 では半分、元の解像度ですべてです。ぼやけた画像から足したスプラットは細部ではなく大まかな形の誤りに向かいます。オフなら通常どおりの速さで最大値まで増えます。"),
+    ZH_HANS("在图像清晰到能看出哪里需要更多泼溅之前，把泼溅数量压在最大值以下：每个分辨率阶段最多增长到最大值除以其缩小倍数，即 1/4 时为四分之一，1/2 时为一半，完整分辨率时为全部。从模糊图像添加的泼溅会去修正大致形状，而不是细节。关闭时按通常速度增长到最大值。"),
+    ZH_HANT("在影像清晰到能看出哪裡需要更多潑濺之前，把潑濺數量壓在最大值以下：每個解析度階段最多增長到最大值除以其縮小倍數，即 1/4 時為四分之一，1/2 時為一半，完整解析度時為全部。從模糊影像加入的潑濺會去修正大致形狀，而不是細節。關閉時按平常速度增長到最大值。"),
+    KO("이미지가 어디에 스플랫이 더 필요한지 보일 만큼 선명해질 때까지 스플랫 수를 최대치 아래로 묶어 둡니다. 각 해상도 단계는 최대치를 그 배수로 나눈 수까지 늘 수 있습니다. 1/4에서는 4분의 1, 1/2에서는 절반, 원래 해상도에서는 전부입니다. 흐린 이미지에서 더한 스플랫은 세부가 아니라 대략적인 형태의 오차로 갑니다. 끄면 평소 속도로 최대치까지 늘어납니다."),
+    DE("Hält die Zahl der Splats unter dem Maximum, bis die Bilder scharf genug sind, um zu zeigen, wo mehr gebraucht werden: Jede Auflösungsstufe darf bis zum Maximum geteilt durch ihren Teiler wachsen, also ein Viertel bei 1/4, die Hälfte bei 1/2 und alles bei voller Auflösung. Splats aus unscharfen Bildern landen dort, wo die grobe Form falsch ist, nicht bei den feinen Details. Aus wächst wie gewohnt bis zum Maximum."),
+    FR("Maintient le nombre de splats sous le maximum jusqu'à ce que les images soient assez nettes pour montrer où il en faut davantage : chaque étape de résolution peut croître jusqu'au maximum divisé par son diviseur, soit un quart à 1/4, la moitié à 1/2 et la totalité en pleine résolution. Les splats ajoutés à partir d'images floues vont là où la forme grossière est fausse, pas vers les détails fins. Désactivé, la croissance atteint le maximum aussi vite que d'habitude."),
+    ES("Mantiene el número de splats por debajo del máximo hasta que las imágenes son lo bastante nítidas para mostrar dónde hacen falta más: cada etapa de resolución puede crecer hasta el máximo dividido por su divisor, es decir, un cuarto a 1/4, la mitad a 1/2 y todo a resolución completa. Los splats añadidos desde imágenes borrosas van donde la forma general está mal, no al detalle fino. Desactivado, crece hasta el máximo tan rápido como siempre."),
+    PT("Mantém o número de splats abaixo do máximo até que as imagens estejam nítidas o bastante para mostrar onde são necessários mais: cada etapa de resolução pode crescer até o máximo dividido pelo seu divisor, ou seja, um quarto em 1/4, metade em 1/2 e tudo em resolução completa. Splats adicionados a partir de imagens borradas vão para onde a forma geral está errada, não para os detalhes finos. Desligado, cresce até o máximo tão rápido quanto de costume."),
+    IT("Tiene il numero di splat sotto il massimo finché le immagini non sono abbastanza nitide da mostrare dove ne servono altri: ogni fase di risoluzione può crescere fino al massimo diviso per il suo divisore, quindi un quarto a 1/4, metà a 1/2 e tutto a piena risoluzione. Gli splat aggiunti da immagini sfocate vanno dove la forma generale è sbagliata, non sui dettagli fini. Disattivato, cresce fino al massimo con la velocità di sempre."),
+    NL("Houdt het aantal splats onder het maximum totdat de beelden scherp genoeg zijn om te tonen waar er meer nodig zijn: elke resolutiefase mag groeien tot het maximum gedeeld door haar deler, dus een kwart bij 1/4, de helft bij 1/2 en alles bij volledige resolutie. Splats die uit wazige beelden worden toegevoegd, gaan naar waar de grove vorm niet klopt, niet naar het fijne detail. Uit groeit zo snel als gewoonlijk tot het maximum."),
+    RU("Держит число сплатов ниже максимума, пока изображения не станут достаточно чёткими, чтобы показать, где нужно больше: на каждом этапе разрешения число может расти до максимума, делённого на делитель этапа, то есть четверть при 1/4, половина при 1/2 и весь максимум при полном разрешении. Сплаты, добавленные по размытым изображениям, уходят туда, где неверна общая форма, а не в мелкие детали. Выключено — рост до максимума с обычной скоростью."),
+    TR("Görüntüler nerede daha fazla splat gerektiğini gösterecek kadar netleşene dek splat sayısını en yüksek değerin altında tutar: her çözünürlük aşaması en yüksek değerin kendi bölenine bölümüne kadar büyüyebilir; yani 1/4'te dörtte bir, 1/2'de yarısı, tam çözünürlükte tamamı. Bulanık görüntülerden eklenen splat'ler ince ayrıntıya değil, kaba şeklin yanlış olduğu yere gider. Kapalıyken her zamanki hızla en yüksek değere büyür."));
+SS_MSG(progressive_splat_budget_schedule,
+    EN("Manual splat budget"),
+    JA("手動のスプラット予算"),
+    ZH_HANS("手动泼溅预算"),
+    ZH_HANT("手動潑濺預算"),
+    KO("수동 스플랫 예산"),
+    DE("Manuelles Splat-Budget"),
+    FR("Budget de splats manuel"),
+    ES("Presupuesto de splats manual"),
+    PT("Orçamento de splats manual"),
+    IT("Budget di splat manuale"),
+    NL("Handmatig splatbudget"),
+    RU("Ручной бюджет сплатов"),
+    TR("Elle splat bütçesi"));
+SS_MSG(progressive_splat_budget_schedule_help,
+    EN("Replaces the automatic budget with your own: step:splats pairs, the splats a count or a percent of the maximum, for example 0:25%, 3000:50%, 9000:100%. Budgets may only grow. Empty follows the resolution stages."),
+    JA("自動の予算を自分の設定に置き換えます。ステップ:スプラット数 の組で、スプラット数は個数か最大値に対する割合です。例えば 0:25%, 3000:50%, 9000:100% です。予算は増える方向にしか変えられません。空なら解像度の段階に従います。"),
+    ZH_HANS("用自定义预算替换自动预算：步数:泼溅数 组成的对，泼溅数可以是个数或最大值的百分比，例如 0:25%, 3000:50%, 9000:100%。预算只能增加。留空则跟随分辨率阶段。"),
+    ZH_HANT("用自訂預算取代自動預算：步數:潑濺數 組成的對，潑濺數可以是個數或最大值的百分比，例如 0:25%, 3000:50%, 9000:100%。預算只能增加。留空則跟隨解析度階段。"),
+    KO("자동 예산을 직접 정한 예산으로 바꿉니다. 스텝:스플랫 수 쌍이며, 스플랫 수는 개수 또는 최대치에 대한 백분율입니다. 예: 0:25%, 3000:50%, 9000:100%. 예산은 늘어나는 방향으로만 바꿀 수 있습니다. 비워 두면 해상도 단계를 따릅니다."),
+    DE("Ersetzt das automatische Budget durch ein eigenes: Paare aus Schritt:Splats, die Splats als Anzahl oder als Prozent des Maximums, etwa 0:25%, 3000:50%, 9000:100%. Budgets dürfen nur wachsen. Leer folgt den Auflösungsstufen."),
+    FR("Remplace le budget automatique par le vôtre : des paires étape:splats, les splats en nombre ou en pourcentage du maximum, par exemple 0:25%, 3000:50%, 9000:100%. Les budgets ne peuvent qu'augmenter. Vide suit les étapes de résolution."),
+    ES("Sustituye el presupuesto automático por el suyo: pares paso:splats, los splats como cantidad o como porcentaje del máximo, por ejemplo 0:25%, 3000:50%, 9000:100%. Los presupuestos solo pueden crecer. Vacío sigue las etapas de resolución."),
+    PT("Substitui o orçamento automático pelo seu: pares passo:splats, os splats como quantidade ou porcentagem do máximo, por exemplo 0:25%, 3000:50%, 9000:100%. Os orçamentos só podem crescer. Vazio segue as etapas de resolução."),
+    IT("Sostituisce il budget automatico con il proprio: coppie passo:splat, gli splat come numero o percentuale del massimo, per esempio 0:25%, 3000:50%, 9000:100%. I budget possono solo crescere. Vuoto segue le fasi di risoluzione."),
+    NL("Vervangt het automatische budget door een eigen budget: paren stap:splats, de splats als aantal of als percentage van het maximum, bijvoorbeeld 0:25%, 3000:50%, 9000:100%. Budgetten mogen alleen groeien. Leeg volgt de resolutiefasen."),
+    RU("Заменяет автоматический бюджет своим: пары шаг:сплаты, где сплаты — количество или процент от максимума, например 0:25%, 3000:50%, 9000:100%. Бюджет может только расти. Пусто — бюджет следует этапам разрешения."),
+    TR("Otomatik bütçeyi kendi bütçenizle değiştirir: adım:splat çiftleri; splat bir sayı ya da en yüksek değerin yüzdesidir, örneğin 0:25%, 3000:50%, 9000:100%. Bütçeler yalnızca büyüyebilir. Boş bırakılırsa çözünürlük aşamalarını izler."));
 SS_MSG(downscale_rounding_mode,
     EN("Downscale rounding"), JA("縮小時の丸め方"),
     ZH_HANS("缩小时的取整方式"), ZH_HANT("縮小時的取整方式"),

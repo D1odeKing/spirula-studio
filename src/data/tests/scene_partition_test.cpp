@@ -6,6 +6,7 @@
 
 #include "checkpoint/SplatMerge.h"
 #include "checkpoint/SplatPly.h"
+#include "data/JsonWrite.h"
 #include "data/RegionProgram.h"
 #include "data/ScenePartition.h"
 #include "data/SceneTransform.h"
@@ -336,11 +337,11 @@ int main() {
         write_splat_ply(c0, (r0 / "splat.ply").string());
         write_splat_ply(c1, (r1 / "splat.ply").string());
         write_text(tmp / "outputs" / "run_a" / "config.json",
-                   "{\"partition\": \"" + json + "\", \"partition_part\": 0}");
+                   "{\"partition\": " + json_quote(json) + ", \"partition_part\": 0}");
         write_text(tmp / "outputs" / "run_b" / "config.json",
-                   "{\"partition\": \"" + json + "\", \"partition_part\": 1}");
+                   "{\"partition\": " + json_quote(json) + ", \"partition_part\": 1}");
         write_text(tmp / "outputs" / "run_stale" / "config.json",
-                   "{\"partition\": \"" + json + "\", \"partition_part\": 1}");
+                   "{\"partition\": " + json_quote(json) + ", \"partition_part\": 1}");
         SceneTransform T;
         T.t[0] = -30.0;
         const double centre[3] = {30, 0, 0};

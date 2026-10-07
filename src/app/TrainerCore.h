@@ -18,6 +18,8 @@
 // setup_engine() calls engine_reset(), so a fresh session can follow a
 // finished one in the same process (the GUI's "train again" path).
 
+#include "app/SystemRecorder.h"
+#include "app/TrainPerfLog.h"
 #include "app/TrainForecast.h"
 #include "engine/Engine.h"
 #include "core/ColorSpace.h"
@@ -137,6 +139,8 @@ struct RunState {
     bool  bilagrid_depth_init  = false;
     bool  bilagrid_normal_init = false;
     bool  ppisp_init           = false;
+    // (first step, splats): the progressive splat budget's growth ceilings.
+    std::vector<std::pair<int, int64_t>> growth_caps;
 };
 
 std::array<float, (int)LossWeightIndex::length>
@@ -280,7 +284,7 @@ public:
     // caller must hold engine_mutex.
     std::map<std::string, float> train_step(int step);
 
-    void save_checkpoint(int step);
+    void save_checkpoint(int step, bool full);
 
     // Held-out eval: render every frame of the eval split, score it, and write
     // metrics.json. No-op when eval_mode is "all" (nothing is held out) or the
@@ -345,6 +349,9 @@ private:
     void observe_memory(int step, int64_t splats_ran);
     TrainForecast _forecast;
     int _batches_per_epoch = 1;
+    int _resolution_divisor = 0;   // of the last step; 0 before the first
+    TrainPerfLog _perf;            // log_performance, SS_TRAIN_PERF
+    SystemRecorder _system;        // log_performance: setup_engine() to the end of train()
     std::atomic<int64_t> _live_splats{0};
     OomRisk _warned_risk = OomRisk::Low;
 };

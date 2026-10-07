@@ -746,24 +746,26 @@ void test_attention(vk::Arena& arena) {
 
 void test_rope(vk::Arena& arena) {
     vk::ArenaScope scope(arena);
-    const int N = 36, H = 3, HD = 64, dim = H * HD;
-    auto x = randn((size_t)N * dim);
+    const int N = 36, H = 3, HD = 64, dim = H * HD, B = 2, stride = 3 * dim;
+    auto x = randn((size_t)B * N * stride);
     auto f = randn((size_t)N * (HD / 2) * 2);
-    Tensor tx = upload_f32(arena, x, N, dim);
-    rope(tx, upload_f32(arena, f, (int64_t)N * (HD / 2) * 2), H, HD, N);
-
-    std::vector<float> want = x;
-    for (int n = 0; n < N; ++n)
-        for (int h = 0; h < H; ++h)
-            for (int i = 0; i < HD / 2; ++i) {
-                float c = f[((size_t)n * (HD / 2) + i) * 2 + 0];
-                float s = f[((size_t)n * (HD / 2) + i) * 2 + 1];
-                size_t b = (size_t)n * dim + h * HD + i * 2;
-                float re = x[b], im = x[b + 1];
-                want[b] = re * c - im * s;
-                want[b + 1] = re * s + im * c;
-            }
-    check("rope 2d-axial", readback(tx), want, 1e-5f);
+    for (bool split : {false, true}) {
+        Tensor tx = upload_f32(arena, x, B * N, stride);
+        rope(tx, upload_f32(arena, f, (int64_t)N * (HD / 2) * 2), H, HD, N, B, stride, split);
+        std::vector<float> want = x;
+        for (int b = 0; b < B; ++b)
+            for (int n = 0; n < N; ++n)
+                for (int h = 0; h < H; ++h)
+                    for (int i = 0; i < HD / 2; ++i) {
+                        const float c = f[((size_t)n * (HD / 2) + i) * 2];
+                        const float s = f[((size_t)n * (HD / 2) + i) * 2 + 1];
+                        const size_t first = ((size_t)b * N + n) * stride + h * HD + (split ? i : i * 2);
+                        const size_t second = first + (split ? HD / 2 : 1);
+                        want[first] = x[first] * c - x[second] * s;
+                        want[second] = x[first] * s + x[second] * c;
+                    }
+        check(split ? "rope split-half batched stride" : "rope consecutive batched stride", readback(tx), want, 1e-5f);
+    }
 }
 
 // ================
@@ -862,41 +864,42 @@ void test_conv(vk::Arena& arena) {
                 }
         check("conv2d depthwise 7x7", readback(to), want, 2e-4f);
     }
-    {
-        // ConvTranspose2d(k=2, s=2) through the GEMM + scatter path.
+    for (int patch : {2, 4}) {
         vk::ArenaScope scope(arena);
         const int Hi = 7, Wi = 9, Ci = 10, Co = 6;
+        const int taps = patch * patch;
         auto x = randn((size_t)Hi * Wi * Ci);
-        auto w = randn((size_t)Ci * Co * 4, 0.2f);  // [Cin, Cout, 2, 2]
+        auto w = randn((size_t)Ci * Co * taps, 0.2f);
         auto b = randn((size_t)Co);
-        // Repack to [Cout*4, Cin] exactly as model/Weights.cpp does.
-        std::vector<float> wp((size_t)Co * 4 * Ci);
+        std::vector<float> wp((size_t)Co * taps * Ci);
         for (int ci = 0; ci < Ci; ++ci)
             for (int co = 0; co < Co; ++co)
-                for (int i = 0; i < 2; ++i)
-                    for (int j = 0; j < 2; ++j)
-                        wp[((size_t)co * 4 + i * 2 + j) * Ci + ci] =
-                            w[(((size_t)ci * Co + co) * 2 + i) * 2 + j];
+                for (int i = 0; i < patch; ++i)
+                    for (int j = 0; j < patch; ++j)
+                        wp[((size_t)co * taps + i * patch + j) * Ci + ci] =
+                            w[(((size_t)ci * Co + co) * patch + i) * patch + j];
 
-        Tensor to = arena_tensor(arena, DType::F32, Hi * 2, Wi * 2, Co);
-        conv_transpose2x2(arena, to, upload_f32(arena, x, Hi, Wi, Ci),
-                          upload_f32(arena, wp, (int64_t)Co * 4, Ci),
-                          upload_f32(arena, b, Co), Act::GeluErf);
+        Tensor to = arena_tensor(arena, DType::F32, Hi * patch, Wi * patch, Co);
+        const Tensor ti = upload_f32(arena, x, Hi, Wi, Ci);
+        const Tensor tw = upload_f32(arena, wp, (int64_t)Co * taps, Ci);
+        const Tensor tb = upload_f32(arena, b, Co);
+        if (patch == 2) conv_transpose2x2(arena, to, ti, tw, tb, Act::GeluErf);
+        else conv_transpose_patch(arena, to, ti, tw, tb, patch, Act::GeluErf);
 
-        std::vector<float> want((size_t)Hi * 2 * Wi * 2 * Co);
+        std::vector<float> want((size_t)Hi * patch * Wi * patch * Co);
         for (int y = 0; y < Hi; ++y)
             for (int xx = 0; xx < Wi; ++xx)
                 for (int co = 0; co < Co; ++co)
-                    for (int i = 0; i < 2; ++i)
-                        for (int j = 0; j < 2; ++j) {
+                    for (int i = 0; i < patch; ++i)
+                        for (int j = 0; j < patch; ++j) {
                             double s = b[co];
                             for (int ci = 0; ci < Ci; ++ci)
                                 s += (double)x[((size_t)y * Wi + xx) * Ci + ci] *
-                                     w[(((size_t)ci * Co + co) * 2 + i) * 2 + j];
-                            want[((size_t)(y * 2 + i) * (Wi * 2) + xx * 2 + j) * Co + co] =
+                                     w[(((size_t)ci * Co + co) * patch + i) * patch + j];
+                            want[((size_t)(y * patch + i) * (Wi * patch) + xx * patch + j) * Co + co] =
                                 act_ref((float)s, Act::GeluErf);
                         }
-        check("conv_transpose 2x2 s2", readback(to), want, 2e-4f);
+        check(patch == 2 ? "conv_transpose 2x2 s2" : "conv_transpose 4x4 s4", readback(to), want, 2e-4f);
     }
 }
 
@@ -1072,6 +1075,25 @@ float sample_zero(const std::vector<float>& src, int H, int W, int C, int c, flo
 }
 
 void test_learned_frontend(vk::Arena& arena) {
+    {
+        vk::ArenaScope scope(arena);
+        const int rows = 257, cols = 3;
+        std::vector<float> input(rows * cols), divisors(input.size());
+        for (size_t i = 0; i < input.size(); ++i) {
+            input[i] = (float)((int)(i % 511) - 255) / 117;
+            divisors[i] = 0.1f + (float)(i % 79) / 17;
+        }
+        for (int broadcast : {0, 1, 2}) {
+            const std::vector<float> denominator = broadcast == 0 ? divisors : broadcast == 1 ?
+                std::vector<float>{0.229f, -0.224f, 0.225f} : std::vector<float>{-0.7f};
+            const Tensor x = upload_f32(arena, input, rows, cols);
+            nn::div(x, x, upload_f32(arena, denominator, (int64_t)denominator.size()));
+            std::vector<float> expected(input.size());
+            for (size_t i = 0; i < expected.size(); ++i)
+                expected[i] = input[i] / denominator[broadcast == 0 ? i : broadcast == 1 ? i % cols : 0];
+            check("division broadcast in place", readback(x), expected, 2e-6f);
+        }
+    }
     {   // SELU -- ALIKED's gate, in every block and both heads.
         vk::ArenaScope scope(arena);
         const int N = 4096;
@@ -1298,6 +1320,53 @@ void test_learned_frontend(vk::Arena& arena) {
 // ================
 // The monocular-geometry ops (src/metric3d/)
 // ================
+
+void test_local_correlation(vk::Arena& arena) {
+    std::mt19937 rng(2048);
+    auto values = [&](size_t n, float scale = 1.0f) {
+        std::normal_distribution<float> distribution(0.0f, scale);
+        std::vector<float> v(n);
+        for (float& x : v) x = distribution(rng);
+        return v;
+    };
+    for (bool half : {false, true}) for (int radius : {0, 1, 3}) for (int size : {0, 1}) {
+        vk::ArenaScope scope(arena);
+        const int h = size ? 128 : 7, w = size ? 160 : 5, c = 19, window = 2 * radius + 1, taps = window * window;
+        auto a = values(h * w * c), b = values(h * w * c), warp = values(h * w * 2, 0.8f);
+        if (half) { a = round_f16(a); b = round_f16(b); }
+        Tensor out = arena_tensor(arena, DType::F32, h, w, taps, 1, 3);
+        Tensor ta = half ? upload_f16(arena, a, h * w, c).view(h, w, c) : upload_f32(arena, a, h, w, c);
+        Tensor tb = half ? upload_f16(arena, b, h * w, c).view(h, w, c) : upload_f32(arena, b, h, w, c);
+        local_correlation(out, ta, tb,
+                          upload_f32(arena, warp, h, w, 2), radius);
+        std::vector<float> expected((size_t)h * w * taps);
+        for (int pixel = 0; pixel < h * w; ++pixel)
+            for (int dy = -radius; dy <= radius; ++dy)
+                for (int dx = -radius; dx <= radius; ++dx) {
+                    const float x = ((warp[pixel * 2] + 2.0f * dx / w + 1) * w - 1) / 2;
+                    const float y = ((warp[pixel * 2 + 1] + 2.0f * dy / h + 1) * h - 1) / 2;
+                    double dot = 0;
+                    for (int ch = 0; ch < c; ++ch)
+                        dot += a[pixel * c + ch] * (double)sample_zero(b, h, w, c, ch, y, x);
+                    expected[(size_t)pixel * taps + (dy + radius) * window + dx + radius] =
+                        (float)(dot / std::sqrt((double)c));
+                }
+        const auto actual = readback(out);
+        if (!size) check(half ? "warp correlation fp16" : "warp correlation fp32", actual, expected, 2e-4f);
+        else {
+            double error = 0, energy = 0, maximum = 0;
+            for (size_t i = 0; i < actual.size(); ++i) {
+                const double delta = (double)actual[i] - expected[i];
+                error += delta * delta; energy += (double)expected[i] * expected[i];
+                maximum = std::max(maximum, std::abs(delta));
+            }
+            const double relative = std::sqrt(error / energy);
+            const bool passed = std::isfinite(relative) && relative < 2e-5 && maximum < 2e-4;
+            ++g_checks; g_failures += passed ? 0 : 1;
+            std::printf("  %s warp correlation large %s L2 %.3g max %.3g\n", passed ? "ok  " : "FAIL", half ? "fp16" : "fp32", relative, maximum);
+        }
+    }
+}
 
 void test_geometry(vk::Arena& arena) {
     {   // tanh / elu / silu -- the ConvGRU's gates, the normal head's
@@ -1803,6 +1872,7 @@ int main(int argc, char** argv) {
         std::printf("Convolution\n");    test_conv(arena);
         std::printf("Spatial / gather\n"); test_spatial(arena);
         std::printf("Learned frontend\n"); test_learned_frontend(arena);
+        test_local_correlation(arena);
         std::printf("Monocular geometry\n"); test_geometry(arena);
         std::printf("Swin / DETR / BiRefNet\n"); test_segmentation_ops(arena);
 
@@ -1812,10 +1882,12 @@ int main(int argc, char** argv) {
         if (vk::Context::get().hasInt64()) {
             std::printf("\nWide addressing\n");
             set_wide_index(WideIndex::Force);
+            test_rope(arena);
             test_norm(arena);
             test_conv(arena);
             test_spatial(arena);
             test_learned_frontend(arena);
+            test_local_correlation(arena);
             test_geometry(arena);
             test_segmentation_ops(arena);
             set_wide_index(WideIndex::Auto);

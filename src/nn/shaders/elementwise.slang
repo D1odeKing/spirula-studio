@@ -8,7 +8,7 @@
 #include "_common.slang"
 
 // Spec ids 0..3.
-[SpecializationConstant] const int kOp        = 0;  // 0 add, 1 mul, 2 sub, 3 max
+[SpecializationConstant] const int kOp        = 0;  // 0 add, 1 mul, 2 sub, 3 max, 4 div
 [SpecializationConstant] const int kBroadcast = 0;  // 0 elementwise, 1 per-column, 2 scalar, 3 per-row
 [SpecializationConstant] const int kAct       = 0;
 [SpecializationConstant] const int kInputF16  = 0;
@@ -42,6 +42,7 @@ void binary(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
         case 1:  r = av * bv; break;
         case 2:  r = av - bv; break;
         case 3:  r = max(av, bv); break;
+        case 4:  r = av / bv; break;
         default: r = av + bv; break;
     }
     p.out[i] = apply_act(r, kAct);

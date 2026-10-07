@@ -5,6 +5,7 @@
 #include "nn/vk/Stream.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace nn {
@@ -200,6 +201,10 @@ void add(const Tensor& out, const Tensor& a, const Tensor& b, float alpha, float
 
 void mul(const Tensor& out, const Tensor& a, const Tensor& b, Act act) {
     binary_op(out, a, b, 1, 1.0f, 1.0f, act);
+}
+
+void div(const Tensor& out, const Tensor& a, const Tensor& b) {
+    binary_op(out, a, b, 4, 1.0f, 1.0f, Act::None);
 }
 
 void mul_rows(const Tensor& out, const Tensor& a, const Tensor& b, Act act) {
@@ -527,6 +532,39 @@ void grid_sample_points(const Tensor& out, const Tensor& in, const Tensor& pos,
     vk::SpecList spec{(uint32_t)(in.dtype == DType::F16), 0u, (uint32_t)align_corners};
     vk::Stream::get().dispatchFlat(entry, spec, N * C, 256, &p, sizeof(p),
                                    &p.groups_per_row);
+}
+
+void local_correlation(const Tensor& out, const Tensor& a, const Tensor& b,
+                       const Tensor& warp, int radius) {
+    NN_CHECK(radius >= 0 && radius <= 16, "local_correlation: radius must be 0..16");
+    NN_CHECK(a.ndim == 3 && b.ndim == 3 && a.dtype == b.dtype &&
+             (a.dtype == DType::F32 || a.dtype == DType::F16) &&
+             a.shape[0] == b.shape[0] && a.shape[1] == b.shape[1] && a.shape[2] == b.shape[2],
+             "local_correlation: equal feature maps required");
+    const int64_t h = a.shape[0], w = a.shape[1], c = a.shape[2];
+    const int window = 2 * radius + 1, taps = window * window;
+    NN_CHECK(h > 0 && w > 0 && c > 0 && warp.ndim == 3 && warp.dtype == DType::F32 &&
+             warp.shape[0] == h && warp.shape[1] == w && warp.shape[2] == 2 &&
+             out.ndim == 3 && out.dtype == DType::F32 && out.shape[0] == h &&
+             out.shape[1] == w && out.shape[2] == taps, "local_correlation: incompatible output or warp");
+    struct Params {
+        uint64_t out, a, b, warp;
+        uint32_t h, w, c, radius, start, count, groups_per_row;
+        float inv_sqrt_channels;
+    } p{};
+    p.out = out.ptr; p.a = a.ptr; p.b = b.ptr; p.warp = warp.ptr;
+    p.h = (uint32_t)h; p.w = (uint32_t)w; p.c = (uint32_t)c; p.radius = (uint32_t)radius;
+    p.inv_sqrt_channels = 1.0f / std::sqrt((float)c);
+    const KernelName entry = span_entry("resample.local_correlation", {out, a, b, warp});
+    auto& stream = vk::Stream::get();
+    const double work_per_thread = 32.0 * c;
+    const int64_t chunk = std::max<int64_t>(1, (int64_t)(stream.workCap() / work_per_thread));
+    for (int64_t begin = 0; begin < out.numel(); begin += chunk) {
+        p.start = (uint32_t)begin;
+        p.count = (uint32_t)std::min(chunk, out.numel() - begin);
+        stream.dispatchFlat(entry, {(uint32_t)(a.dtype == DType::F16)}, p.count, 256,
+                            &p, sizeof p, &p.groups_per_row, p.count * work_per_thread);
+    }
 }
 
 // One workgroup per row, so rows are independent: the grid folds over them and

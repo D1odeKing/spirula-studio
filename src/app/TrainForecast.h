@@ -183,8 +183,12 @@ void SplatSchedule::segments(int from, int64_t live, F&& f) const {
         int g = std::max(s, _d.refine_start_iter + 1);
         g = (g + _d.refine_every - 1) / _d.refine_every * _d.refine_every;
         for (; g < stop && n < _cap; g += _d.refine_every) {
-            const int64_t next = densify_target(_d, n, _cap);
-            if (next == n) break;
+            const int64_t next = densify_target(_d, n, densify_cap_at(_d, g, _cap));
+            if (next == n) {
+                // Held at a budget stage's ceiling: wait for a later stage to raise it.
+                if (densify_cap_at(_d, stop - 1, _cap) > n) continue;
+                break;
+            }
             f(s, g + 1, n);
             n = next;
             s = g + 1;

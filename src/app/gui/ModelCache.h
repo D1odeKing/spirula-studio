@@ -58,11 +58,13 @@ struct ModelEntry {
     MaskModelKind kind = MaskModelKind::Sam;
     const char* url = nullptr;       // null: sam3.cpp's repository + `file`
     const char* mirror = nullptr;    // null: the project's mirror, under `file`
+    const char* sha256 = nullptr;
 };
 
 // The order the combo lists them in; the default is GuiApp's, not index 0.
 const std::vector<ModelEntry>& model_catalog();
 const ModelEntry* find_model(const std::string& id);
+const ModelEntry& dense_model_entry();
 
 // Words for a checkpoint that has none: the detector finds boxes, the SAM
 // model cuts them out. Picked in a second combo; its licence family is "gdino".
@@ -129,7 +131,7 @@ public:
     // `expected_bytes` is only used for the progress readout; curl reports the
     // real length. 0 means unknown. `mirror`, if set, is tried when `url` fails.
     void start(const std::string& url, const std::string& dest,
-               uint64_t expected_bytes, const std::string& mirror = "");
+               uint64_t expected_bytes, const std::string& mirror = "", const std::string& sha256 = "");
     // The first file of the pair that is not on disk yet, false if none is;
     // the caller starts the next one when this is Done.
     bool start(const ModelEntry& e, const TextDetector* d = nullptr);
@@ -143,7 +145,7 @@ public:
     std::vector<std::string> drain_log();
 
 private:
-    void run(std::vector<std::string> urls, std::string dest, uint64_t expected_bytes);
+    void run(std::vector<std::string> urls, std::string dest, uint64_t expected_bytes, std::string sha256);
     int fetch(const std::string& url, const std::string& part, uint64_t expected_bytes);
     void log(const std::string& line);
 

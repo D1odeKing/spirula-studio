@@ -15,7 +15,7 @@ namespace gui {
 
 namespace {
 
-const char* const kStepNames[kNumSteps] = {"frames", "masks", "model", "geometry"};
+const char* const kStepNames[kNumSteps] = {"frames", "masks", "model", "dense", "geometry"};
 
 std::mutex& record_mutex() {
     static std::mutex mu;
@@ -106,6 +106,7 @@ Step settings_step(const std::string& key) {
     if (starts("mask_") || key == "use_found_masks" || key == "flip_found_masks")
         return Step::Masks;
     if (starts("geometry_")) return Step::Geometry;
+    if (starts("dense_")) return Step::Dense;
     if (starts("sfm_") || starts("colmap_") || starts("image_") || key == "engine_colmap" ||
         key == "point_color_in_image_space")
         return Step::Model;

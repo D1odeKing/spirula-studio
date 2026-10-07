@@ -11,6 +11,8 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include <GLFW/glfw3.h>
+
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -76,6 +78,8 @@ struct State {
 
     std::deque<Step> queue;         // guarded by mu
     uint64_t queued = 0, applied = 0;
+    ImVec2 pointer;
+    bool pointer_valid = false;
 
     bool want_shot = false;         // guarded by mu
     bool shot_ready = false;
@@ -771,9 +775,21 @@ bool begin_frame() {
     }
 
     ImGuiIO& io = ImGui::GetIO();
+    if (popped) {
+        // Backend cursor events otherwise displace the scripted press in visible windows.
+        io.ClearEventsQueue();
+        if (step.kind == Step::Kind::MousePos) { s.pointer = {step.x,step.y}; s.pointer_valid = true; }
+        if (s.pointer_valid) io.AddMousePosEvent(s.pointer.x,s.pointer.y);
+    }
     switch (step.kind) {
         case Step::Kind::None: break;
-        case Step::Kind::MousePos: io.AddMousePosEvent(step.x, step.y); break;
+        case Step::Kind::MousePos:
+            if (GLFWwindow* window = glfwGetCurrentContext(); window && glfwGetWindowAttrib(window,GLFW_VISIBLE)) {
+                if (!glfwGetWindowAttrib(window,GLFW_FOCUSED)) glfwFocusWindow(window);
+                glfwSetCursorPos(window,step.x,step.y);
+            }
+            io.AddMousePosEvent(step.x, step.y);
+            break;
         case Step::Kind::MouseButton:
             io.AddMouseButtonEvent(step.button, step.down);
             break;

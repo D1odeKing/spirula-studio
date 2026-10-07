@@ -21,6 +21,44 @@
 
 static const int WG = 256;
 
+struct CorrelationParams {
+    float* out;
+    uint* a;
+    uint* b;
+    uint* warp;
+    uint h, w, c, radius, start, count, groups_per_row;
+    float inv_sqrt_channels;
+};
+
+[shader("compute")]
+[numthreads(WG, 1, 1)]
+void local_correlation(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
+                       uniform CorrelationParams p) {
+    uint local = fold_index(gid, tid, p.groups_per_row, uint(WG));
+    if (local >= p.count) return;
+    uint i = p.start + local;
+    uint window = 2 * p.radius + 1;
+    uint taps = window * window;
+    uint pixel = i / taps, tap = i % taps;
+    float gx = load_at(p.warp, pixel * 2, false);
+    float gy = load_at(p.warp, pixel * 2 + 1, false);
+    float sum = 0;
+    if (isfinite(gx) && isfinite(gy)) {
+        // Add the window in normalized coordinates before pixel conversion.
+        precise float nx = gx + 2.0f * float(int(tap % window) - int(p.radius)) / float(p.w);
+        precise float ny = gy + 2.0f * float(int(tap / window) - int(p.radius)) / float(p.h);
+        precise float sx = ((nx + 1) * float(p.w) - 1) * 0.5f;
+        precise float sy = ((ny + 1) * float(p.h) - 1) * 0.5f;
+        for (uint ch = 0; ch < p.c; ++ch) {
+            float a = load_at(p.a, pixel * p.c + ch, kInputF16 != 0) * p.inv_sqrt_channels;
+            float b = sample_bilinear_zero(p.b, kInputF16 != 0, int(p.h), int(p.w),
+                                          int(p.c), int(ch), sy, sx);
+            sum += a * b;
+        }
+    }
+    store_at(p.out, i, sum);
+}
+
 struct ResizeParams {
     float* out;
     uint*  x;
