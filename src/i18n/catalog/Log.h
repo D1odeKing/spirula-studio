@@ -2411,31 +2411,89 @@ SS_MSG(warn_init_ply_ignored,
        "точки, поэтому --init-ply игнорируется"),
     TR("Uyarı: --resume denetim noktasının kendi splat'larını geri yükler, bu "
        "yüzden --init-ply yok sayılır"));
-SS_MSG(warn_validation_unported,
-    EN("warning: validation images are held out but early stopping / eval is "
-       "not ported yet"),
-    JA("警告: 検証用の画像は取り分けられますが、早期終了と評価はまだ移植されて"
-       "いません"),
-    ZH_HANS("警告：验证图像已经留出，但提前停止和评估还没有移植过来"),
-    ZH_HANT("警告：驗證影像已經留出，但提前停止和評估還沒有移植過來"),
-    KO("경고: 검증용 이미지는 떼어 두지만, 조기 종료와 평가는 아직 이식되지 "
-       "않았습니다"),
-    DE("Warnung: Validierungsbilder werden zurückgehalten, aber vorzeitiges "
-       "Beenden und die Auswertung sind noch nicht portiert"),
-    FR("Avertissement : des images de validation sont mises de côté, mais "
-       "l'arrêt anticipé et l'évaluation ne sont pas encore portés"),
-    ES("Aviso: se apartan imágenes de validación, pero la parada temprana y la "
-       "evaluación todavía no están portadas"),
-    PT("Aviso: imagens de validação são separadas, mas a parada antecipada e a "
-       "avaliação ainda não foram portadas"),
-    IT("Avviso: le immagini di validazione vengono messe da parte, ma "
-       "l'arresto anticipato e la valutazione non sono ancora stati portati"),
-    NL("Waarschuwing: er worden validatiebeelden apart gehouden, maar vroegtijdig "
-       "stoppen en evalueren zijn nog niet overgezet"),
-    RU("Предупреждение: проверочные снимки откладываются, но ранняя остановка и "
-       "оценка ещё не перенесены"),
-    TR("Uyarı: doğrulama görüntüleri ayrılıyor ama erken durdurma ve "
-       "değerlendirme henüz taşınmadı"));
+SS_MSG(warn_early_stop_no_validation,
+    EN("warning: --early-stop-patience needs --validation-fraction above 0, so "
+       "the run will not stop early"),
+    JA("警告: --early-stop-patience には 0 より大きい --validation-fraction が"
+       "必要なため、早期終了は行われません"),
+    ZH_HANS("警告：--early-stop-patience 需要 --validation-fraction 大于 0，因此"
+            "不会提前停止"),
+    ZH_HANT("警告：--early-stop-patience 需要 --validation-fraction 大於 0，因此"
+            "不會提前停止"),
+    KO("경고: --early-stop-patience에는 0보다 큰 --validation-fraction이 필요하"
+       "므로 조기 종료하지 않습니다"),
+    DE("Warnung: --early-stop-patience braucht --validation-fraction über 0, "
+       "der Lauf endet daher nicht vorzeitig"),
+    FR("Avertissement : --early-stop-patience nécessite --validation-fraction "
+       "au-dessus de 0, l'exécution ne s'arrêtera donc pas plus tôt"),
+    ES("Aviso: --early-stop-patience requiere --validation-fraction mayor que 0, "
+       "así que la ejecución no se detendrá antes"),
+    PT("Aviso: --early-stop-patience requer --validation-fraction acima de 0, "
+       "então a execução não vai parar antes"),
+    IT("Avviso: --early-stop-patience richiede --validation-fraction sopra 0, "
+       "quindi l'esecuzione non si fermerà in anticipo"),
+    NL("Waarschuwing: --early-stop-patience vereist --validation-fraction boven "
+       "0, dus de run stopt niet vroegtijdig"),
+    RU("Предупреждение: --early-stop-patience требует --validation-fraction "
+       "больше 0, поэтому ранней остановки не будет"),
+    TR("Uyarı: --early-stop-patience için --validation-fraction 0'dan büyük "
+       "olmalı, bu yüzden çalıştırma erken durmayacak"));
+SS_MSG(validation_views,
+    EN("Validation: images held out: {0}"),
+    JA("検証: 取り分けた画像: {0}"),
+    ZH_HANS("验证：留出的图像：{0}"),
+    ZH_HANT("驗證：留出的影像：{0}"),
+    KO("검증: 떼어 둔 이미지: {0}"),
+    DE("Validierung: zurückgehaltene Bilder: {0}"),
+    FR("Validation : images mises de côté : {0}"),
+    ES("Validación: imágenes apartadas: {0}"),
+    PT("Validação: imagens reservadas: {0}"),
+    IT("Validazione: immagini messe da parte: {0}"),
+    NL("Validatie: apart gezette beelden: {0}"),
+    RU("Проверка: отложено изображений: {0}"),
+    TR("Doğrulama: ayrılan görüntü: {0}"));
+// {1} and {2} are the mean PSNR (dB) and SSIM over the validation images.
+SS_MSG(validation_result,
+    EN("Validation at step {0}: PSNR {1}, SSIM {2}"),
+    JA("ステップ {0} の検証: PSNR {1}、SSIM {2}"),
+    ZH_HANS("第 {0} 步验证：PSNR {1}，SSIM {2}"),
+    ZH_HANT("第 {0} 步驗證：PSNR {1}，SSIM {2}"),
+    KO("스텝 {0} 검증: PSNR {1}, SSIM {2}"),
+    DE("Validierung bei Schritt {0}: PSNR {1}, SSIM {2}"),
+    FR("Validation à l'étape {0} : PSNR {1}, SSIM {2}"),
+    ES("Validación en el paso {0}: PSNR {1}, SSIM {2}"),
+    PT("Validação no passo {0}: PSNR {1}, SSIM {2}"),
+    IT("Validazione al passo {0}: PSNR {1}, SSIM {2}"),
+    NL("Validatie bij stap {0}: PSNR {1}, SSIM {2}"),
+    RU("Проверка на шаге {0}: PSNR {1}, SSIM {2}"),
+    TR("{0}. adımda doğrulama: PSNR {1}, SSIM {2}"));
+// {1} is --early-stop-metric's value ('psnr' / 'ssim'), printed verbatim; {3}
+// is the best score it reached, at step {2}.
+SS_MSG(early_stopped,
+    EN("Stopped early at step {0}: validation {1} has not improved since step "
+       "{2} (best {3})"),
+    JA("ステップ {0} で早期終了: 検証の {1} はステップ {2} から改善していませ"
+       "ん (最良 {3})"),
+    ZH_HANS("在第 {0} 步提前停止：验证 {1} 自第 {2} 步起没有提升（最佳 {3}）"),
+    ZH_HANT("在第 {0} 步提前停止：驗證 {1} 自第 {2} 步起沒有提升（最佳 {3}）"),
+    KO("스텝 {0}에서 조기 종료: 검증 {1}이(가) 스텝 {2} 이후 개선되지 않았습니"
+       "다 (최고 {3})"),
+    DE("Vorzeitig beendet bei Schritt {0}: Validierungs-{1} hat sich seit "
+       "Schritt {2} nicht verbessert (bester Wert {3})"),
+    FR("Arrêt anticipé à l'étape {0} : le {1} de validation ne progresse plus "
+       "depuis l'étape {2} (meilleur {3})"),
+    ES("Parada temprana en el paso {0}: el {1} de validación no mejora desde el "
+       "paso {2} (mejor {3})"),
+    PT("Parada antecipada no passo {0}: o {1} de validação não melhora desde o "
+       "passo {2} (melhor {3})"),
+    IT("Arresto anticipato al passo {0}: il {1} di validazione non migliora dal "
+       "passo {2} (migliore {3})"),
+    NL("Vroegtijdig gestopt bij stap {0}: validatie-{1} is sinds stap {2} niet "
+       "verbeterd (beste {3})"),
+    RU("Ранняя остановка на шаге {0}: {1} на проверке не растёт с шага {2} "
+       "(лучшее {3})"),
+    TR("{0}. adımda erken durduruldu: doğrulama {1} değeri {2}. adımdan beri "
+       "iyileşmedi (en iyi {3})"));
 // {0} is --orientation-method's value and {1} is --center-method's; both are
 // identifiers ('up', 'poses') and print verbatim.
 SS_MSG(warn_pose_normalization_approx,

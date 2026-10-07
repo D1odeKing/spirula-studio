@@ -588,7 +588,7 @@ int spirula_train_main(int argc, char** argv) {
         session.train(cb);
         // Held-out eval. Replaces the engine's DataManager, so nothing may
         // train afterwards -- and the viewer, which only reads splats, is
-        // unaffected. TODO: early stopping on the validation split.
+        // unaffected.
         session.eval();
 
         if (viewer_on && cfg.keep_viewer_alive) {

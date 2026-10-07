@@ -167,6 +167,9 @@ inline bool train_choices_free_form(const char* choices) {
     X(int, eval_interval, 8, "dataset", "advanced", "")                      \
     X(float, train_split_fraction, 0.9f, "dataset", "advanced", "")          \
     X(float, validation_fraction, 0.0f, "dataset", "expert", "")             \
+    X(int, steps_per_validation, 1000, "dataset", "expert", "")              \
+    X(int, early_stop_patience, 0, "dataset", "expert", "")                  \
+    X(std::string, early_stop_metric, "psnr", "dataset", "expert", "psnr|ssim") \
     X(bool, warp_to_pinhole, false, "dataset", "advanced", "")               \
     X(bool, warp_spherical_to_pinhole, true, "dataset", "advanced", "")      \
     X(std::string, warp_face_fit, "uniform", "dataset", "advanced", "uniform|per-face") \

@@ -296,26 +296,22 @@ agree. Only the C++ exists now, so the table said nothing the code does not.
 
 ## TODOs (rough priority)
 
-1. **Eval pass + metrics** — iterate `next_val_batch` / render train views,
-   PSNR/SSIM from engine buffers; then `validation_fraction` early-stop (the
-   `overfit_score_*` / `early_stop_*` fields were parsed but unused and have
-   been removed; re-add them when the pass lands).
-2. **Resume** — `engine_load_checkpoint` after skeleton setup; config.json
+1. **Resume** — `engine_load_checkpoint` after skeleton setup; config.json
    round-trip.
-3. ~~ImGui native viewport (Phase 2)~~ DONE 2026-07-12 (the GUI, see
+2. ~~ImGui native viewport (Phase 2)~~ DONE 2026-07-12 (the GUI, see
    above). Still open within it: CUDA-GL interop upload (currently D2H +
    glTexImage2D — fine at viewport sizes), debug-only `sh` /
    `refinement_score` buffers (engine_debug_forward) not ported, COLMAP
    progress bar is stage-based only, no mesh-export UI (use `spirula-mesh`).
-4. Seeding fidelity: jitter repeated seed points toward a neighbor instead of
+3. Seeding fidelity: jitter repeated seed points toward a neighbor instead of
    exact duplication; `suppress_initial_scales`. (Exact kNN: DONE, `Knn.h`.)
-5. COLMAP **text** format fallback. (Metashape parser: DONE,
+4. COLMAP **text** format fallback. (Metashape parser: DONE,
    `MetashapeParser.cpp`. Camera-to-image resolution fit: DONE,
    `dsparse::fit_camera_resolution`.)
-6. Non-default orientation/center methods (`pca`/`vertical`/`gsplat`/`focus`)
+5. Non-default orientation/center methods (`pca`/`vertical`/`gsplat`/`focus`)
    — currently approximated as `up`/`poses` with a warning (only affects
    `train_frame_scale`).
-7. Windows: MSVC+nvcc build DONE (2026-07-10, VS2022 + CUDA 12.8 on an
+6. Windows: MSVC+nvcc build DONE (2026-07-10, VS2022 + CUDA 12.8 on an
    RTX 3090: no-torch static build links `spirula.exe` and trains
    mipnerf360/garden; only source fix needed was an MSVC branch for a GCC
    atomic builtin in `MeshingHost.cpp`). Remaining: `cudart_static`, CI,
@@ -413,6 +409,23 @@ a 3115×2076 scene take ~90 s of scoring however the threads are arranged, and
 LPIPS is not native. `--save-eval-images 1` writes `eval-gt-NNNNN.png` and
 `eval-render-NNNNN.png` per view; `reference/python/eval_lpips.py` reads those
 and merges `lpips_*` into `metrics.json`.
+
+## Validation
+
+`--validation-fraction` holds a linspace-spread slice of the TRAIN split out of
+training (`assign_val_split()`); unlike the eval split it is scored while the
+run is going. Every `--steps-per-validation` steps `TrainerSession::validate()`
+renders each held-out image through `engine_preview_forward` -- the same
+decode, mask and warp a training batch gets, at the training resolution, with
+no bilagrid / PPISP (their per-image slots never trained) -- and averages
+`image_psnr` and `image_ssim` from `EvalMetrics` over the views. Each pass is
+logged and appended to `validation.json` in the run folder.
+
+`--early-stop-patience N` ends the run once N passes in a row fail to beat the
+best `--early-stop-metric` (`psnr` or `ssim`) so far; the final checkpoint is
+then written at the step it stopped on, and eval runs as usual. Rendering
+takes the engine mutex one image at a time and scoring runs outside it, so the
+viewer stays live. A pass is not counted in the step-time forecast.
 
 ## Unsupported-by-design (guarded with clear errors)
 

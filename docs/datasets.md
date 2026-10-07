@@ -543,7 +543,8 @@ own up.
 - `filename` — basename contains `train` / `eval`.
 
 `validation_fraction` additionally holds out a linspace-spread slice for
-validation. Frames whose camera position exceeds `outlier_threshold` MADs from
+validation, scored during training and used for early stopping
+(src/app/README.md, "Validation"). Frames whose camera position exceeds `outlier_threshold` MADs from
 the geometric median of all camera positions are rejected (default: off).
 
 `require_image_files=false` keeps frames whose image file is missing — the

@@ -282,6 +282,18 @@ public:
 
     void save_checkpoint(int step);
 
+    // Mean scores over the validation split (ds.val_indices) at one step.
+    struct ValidationScore {
+        int step = 0;
+        float psnr = 0.0f, ssim = 0.0f;
+    };
+    // Renders and scores every validation image at the current state, at the
+    // training resolution. Between steps; takes engine_mutex per image.
+    ValidationScore validate(int step);
+    // One entry per validation pass train() ran, written to validation.json.
+    std::vector<ValidationScore> validation_history;
+    bool stopped_early = false;
+
     // Held-out eval: render every frame of the eval split, score it, and write
     // metrics.json. No-op when eval_mode is "all" (nothing is held out) or the
     // eval split is empty. Replaces the engine's DataManager with one over the
@@ -343,6 +355,11 @@ private:
     bool _diverged_loss_reported = false;
 
     void observe_memory(int step, int64_t splats_ran);
+    // Records `v` and returns true when --early-stop-patience says to stop.
+    bool record_validation(const ValidationScore& v);
+    void write_validation_json() const;
+    int _val_best = -1;   // index into validation_history
+    std::vector<float> _val_gt, _val_render;   // reused: 4K readback is ~200 MB
     TrainForecast _forecast;
     int _batches_per_epoch = 1;
     std::atomic<int64_t> _live_splats{0};

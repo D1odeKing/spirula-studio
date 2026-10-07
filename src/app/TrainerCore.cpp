@@ -808,8 +808,10 @@ void TrainerSession::check_config() {
         log(lmsg::warn_init_ply_ignored.get());
     else if (!cfg.init_ply.empty())
         find_splat_ply(cfg.init_ply);  // before the dataset is parsed, not after
-    if (cfg.validation_fraction > 0)
-        log(lmsg::warn_validation_unported.get());
+    if (cfg.early_stop_patience > 0 && cfg.validation_fraction <= 0)
+        log(lmsg::warn_early_stop_no_validation.get());
+    if (cfg.early_stop_metric != "psnr" && cfg.early_stop_metric != "ssim")
+        throw std::runtime_error("unknown early_stop_metric '" + cfg.early_stop_metric + "'");
     if (cfg.orientation_method != "up" || cfg.center_method != "poses")
         log(lfmt(lmsg::warn_pose_normalization_approx,
                  {cfg.orientation_method, cfg.center_method}));
@@ -1578,6 +1580,12 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
         _warned_risk = OomRisk::Low;
     }
 
+    validation_history.clear();
+    stopped_early = false;
+    _val_best = -1;
+    const bool validating = cfg.steps_per_validation > 0 && !ds.val_indices.empty();
+    if (validating) log(lfmt(lmsg::validation_views, {(long long)ds.val_indices.size()}));
+
     int step = start_step;
     for (; step < cfg.num_iterations; step++) {
         // Pause gate + render-fairness yield: give viewer render workers an
@@ -1672,6 +1680,16 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             p.losses = std::move(losses);
             cb.on_step(p);
         }
+
+        // After the step's latency is recorded, so the forecast's step-time
+        // model never sees a validation pass. One cut short by a stop is dropped.
+        if (validating && (step + 1) % cfg.steps_per_validation == 0) {
+            const ValidationScore v = validate(step + 1);
+            if (!stop_requested.load() && record_validation(v)) {
+                ++step;   // the final checkpoint is saved at the steps completed
+                break;
+            }
+        }
     }
 
     {
@@ -1698,6 +1716,98 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
     // a count that included the checkpoint's steps would not match the time.
     log(lfmt(lmsg::train_finished, {cur_step.load() - start_step,
                                     format_duration(training_time_s)}));
+}
+
+TrainerSession::ValidationScore TrainerSession::validate(int step) {
+    const int sh_deg = step / std::max(cfg.sh_degree_warmup_every, 1);
+    const LossConfig loss = build_step_config(cfg, st, step).loss;
+    const bool packed = cfg.packed || cfg.use_bvh;
+    double psnr_sum = 0.0, ssim_sum = 0.0;
+    int64_t views = 0;
+    for (int32_t index : ds.val_indices) {
+        if (stop_requested.load()) break;
+        int npass = 1;
+        for (int pi = 0; pi < npass; pi++) {
+            int64_t B = 0, H = 0, W = 0, C = 0;
+            {
+                std::lock_guard<std::mutex> lk(engine_mutex);
+                if (engine_preview_forward(index, cfg.primitive, sh_deg, packed,
+                                           false, loss, pi, &npass) <= 0)
+                    continue;
+                auto shape = engine_get_render_rgb_shape();
+                B = std::get<0>(shape); H = std::get<1>(shape);
+                W = std::get<2>(shape); C = std::get<3>(shape);
+                const size_t n = (size_t)(B * H * W * C);
+                _val_render.resize(n);
+                _val_gt.resize(n);
+                engine_copy_render_to_host(
+                    TorchTensorView{(uint64_t)(uintptr_t)_val_render.data(), 4, {B, H, W, C}},
+                    TorchTensorView{0, 0, {}}, TorchTensorView{0, 0, {}},
+                    TorchTensorView{0, 0, {}}, TorchTensorView{0, 0, {}});
+                engine_copy_gt_rgb_to_host(
+                    TorchTensorView{(uint64_t)(uintptr_t)_val_gt.data(), 4, {B, H, W, C}});
+            }
+            // Scored outside the lock, so the viewer can render meanwhile.
+            for (float& x : _val_render) x = std::min(std::max(x, 0.0f), 1.0f);
+            const int64_t view_px = H * W * C;
+            for (int64_t v = 0; v < B; v++) {
+                const float* g = _val_gt.data() + v * view_px;
+                const float* r = _val_render.data() + v * view_px;
+                psnr_sum += image_psnr(g, r, view_px);
+                ssim_sum += image_ssim(g, r, (int)H, (int)W, (int)C);
+                views++;
+            }
+        }
+    }
+    if (const char* err = backend::last_error())
+        throw std::runtime_error("GPU backend error in validation at step " +
+                                 std::to_string(step) + ": " + err);
+    ValidationScore s;
+    s.step = step;
+    if (views > 0) {
+        s.psnr = (float)(psnr_sum / (double)views);
+        s.ssim = (float)(ssim_sum / (double)views);
+    }
+    return s;
+}
+
+bool TrainerSession::record_validation(const ValidationScore& v) {
+    validation_history.push_back(v);
+    const bool by_ssim = cfg.early_stop_metric == "ssim";
+    auto score = [by_ssim](const ValidationScore& s) { return by_ssim ? s.ssim : s.psnr; };
+    const int cur = (int)validation_history.size() - 1;
+    if (_val_best < 0 || score(v) > score(validation_history[(size_t)_val_best]))
+        _val_best = cur;
+    log(lfmt(lmsg::validation_result, {v.step, v.psnr, v.ssim}));
+    stopped_early = cfg.early_stop_patience > 0 && cur - _val_best >= cfg.early_stop_patience;
+    write_validation_json();
+    if (stopped_early) {
+        const ValidationScore& best = validation_history[(size_t)_val_best];
+        log(lfmt(lmsg::early_stopped,
+                 {v.step, cfg.early_stop_metric, best.step, score(best)}));
+    }
+    return stopped_early;
+}
+
+void TrainerSession::write_validation_json() const {
+    std::ofstream f((out_dir / "validation.json").string());
+    if (!f) throw std::runtime_error("cannot write validation.json");
+    auto list = [&](const char* key, auto get) {
+        f << "    \"" << key << "\": [";
+        for (size_t i = 0; i < validation_history.size(); i++)
+            f << (i ? ", " : "") << get(validation_history[i]);
+        f << "],\n";
+    };
+    f << "{\n";
+    list("step", [](const ValidationScore& s) { return s.step; });
+    list("psnr", [](const ValidationScore& s) { return s.psnr; });
+    list("ssim", [](const ValidationScore& s) { return s.ssim; });
+    f << "    \"num_validation_images\": " << ds.val_indices.size() << ",\n";
+    f << "    \"early_stop_metric\": \"" << cfg.early_stop_metric << "\",\n";
+    f << "    \"best_step\": "
+      << (_val_best < 0 ? 0 : validation_history[(size_t)_val_best].step) << ",\n";
+    f << "    \"stopped_early\": " << (stopped_early ? "true" : "false") << "\n";
+    f << "}\n";
 }
 
 std::string TrainerSession::progress_json() {

@@ -1547,50 +1547,182 @@ SS_MSG(validation_fraction,
     IT("Quota per la validazione"), NL("Aandeel voor de validatie"),
     RU("Доля для проверки"), TR("Doğrulama için ayrılan oran"));
 SS_MSG(validation_fraction_help,
-    EN("Share of the training images set aside to watch for overfitting. Training "
-       "can then stop before quality starts to drop. Early stopping is not active "
-       "yet: the images are held out but the run always goes to the end."),
-    JA("過学習を見張るために取り分けておく学習画像の割合です。品質が落ち始める"
-       "前に学習を止められます。早期終了はまだ有効ではありません。画像は取り分"
-       "けられますが、実行は常に最後まで進みます。"),
-    ZH_HANS("为监视过拟合而从训练图像中留出的比例。这样可以在质量开始下降前停"
-            "止训练。早停目前尚未启用：图像会被留出，但训练始终会跑到最后。"),
-    ZH_HANT("為監視過擬合而從訓練影像中留出的比例。這樣可以在品質開始下降前停"
-            "止訓練。早停目前尚未啟用：影像會被留出，但訓練始終會跑到最後。"),
-    KO("과적합을 감시하려고 학습 이미지에서 떼어 두는 비율입니다. 품질이 떨어"
-       "지기 시작하기 전에 학습을 멈출 수 있습니다. 조기 종료는 아직 동작하지"
-       " 않습니다. 이미지는 떼어 두지만 실행은 언제나 끝까지 갑니다."),
+    EN("Share of the training images set aside to watch for overfitting. Every "
+       "`steps_per_validation` steps the run scores PSNR and SSIM on them and "
+       "writes validation.json; with `early_stop_patience` set, training stops "
+       "once they stop improving."),
+    JA("過学習を見張るために取り分けておく学習画像の割合です。"
+       "`steps_per_validation` ステップごとにこれらの画像で PSNR と SSIM を測り、"
+       "validation.json に書き出します。`early_stop_patience` を設定すると、"
+       "改善が止まった時点で学習を終了します。"),
+    ZH_HANS("为监视过拟合而从训练图像中留出的比例。每隔 `steps_per_validation` "
+            "步在这些图像上计算 PSNR 和 SSIM，并写入 validation.json；设置了 "
+            "`early_stop_patience` 时，指标不再提升就停止训练。"),
+    ZH_HANT("為監視過擬合而從訓練影像中留出的比例。每隔 `steps_per_validation` "
+            "步在這些影像上計算 PSNR 和 SSIM，並寫入 validation.json；設定了 "
+            "`early_stop_patience` 時，指標不再提升就停止訓練。"),
+    KO("과적합을 감시하려고 학습 이미지에서 떼어 두는 비율입니다. "
+       "`steps_per_validation` 스텝마다 이 이미지로 PSNR과 SSIM을 재서 "
+       "validation.json에 기록합니다. `early_stop_patience`를 설정하면 "
+       "개선이 멈췄을 때 학습을 끝냅니다."),
     DE("Anteil der Trainingsbilder, der zurückgelegt wird, um Überanpassung zu "
-       "beobachten. Das Training kann dann enden, bevor die Qualität abzufallen "
-       "beginnt. Frühes Stoppen ist noch nicht aktiv: Die Bilder werden zurückgehalten, "
-       "aber der Lauf geht immer bis zum Ende."),
-    FR("Part des images d'entraînement mise de côté pour surveiller le surapprentissage. "
-       "L'entraînement peut alors s'arrêter avant que la qualité ne baisse. L'arrêt "
-       "anticipé n'est pas encore actif : les images sont mises de côté, mais "
-       "l'exécution va toujours jusqu'au bout."),
+       "beobachten. Alle `steps_per_validation` Schritte misst der Lauf darauf "
+       "PSNR und SSIM und schreibt validation.json; mit `early_stop_patience` "
+       "endet das Training, sobald sich die Werte nicht mehr verbessern."),
+    FR("Part des images d'entraînement mise de côté pour surveiller le "
+       "surapprentissage. Toutes les `steps_per_validation` étapes, l'exécution "
+       "y mesure le PSNR et le SSIM et écrit validation.json ; avec "
+       "`early_stop_patience`, l'entraînement s'arrête quand ils ne progressent plus."),
     ES("Proporción de las imágenes de entrenamiento apartada para vigilar el "
-       "sobreajuste. El entrenamiento puede así detenerse antes de que la calidad "
-       "empiece a caer. La parada temprana todavía no está activa: las imágenes "
-       "se apartan, pero la ejecución siempre llega al final."),
+       "sobreajuste. Cada `steps_per_validation` pasos la ejecución mide en ellas "
+       "el PSNR y el SSIM y escribe validation.json; con `early_stop_patience`, "
+       "el entrenamiento se detiene cuando dejan de mejorar."),
     PT("Proporção das imagens de treinamento reservada para vigiar o sobreajuste. "
-       "O treinamento pode então parar antes de a qualidade começar a cair. A "
-       "parada antecipada ainda não está ativa: as imagens são reservadas, mas "
-       "a execução vai sempre até o fim."),
+       "A cada `steps_per_validation` passos a execução mede nelas o PSNR e o "
+       "SSIM e grava validation.json; com `early_stop_patience`, o treinamento "
+       "para quando eles deixam de melhorar."),
     IT("Quota delle immagini di addestramento messa da parte per sorvegliare "
-       "il sovradattamento. L'addestramento può così fermarsi prima che la qualità "
-       "cominci a calare. L'arresto anticipato non è ancora attivo: le immagini "
-       "vengono messe da parte, ma l'esecuzione arriva sempre alla fine."),
+       "il sovradattamento. Ogni `steps_per_validation` passi l'esecuzione vi "
+       "misura PSNR e SSIM e scrive validation.json; con `early_stop_patience`, "
+       "l'addestramento si ferma quando smettono di migliorare."),
     NL("Aandeel van de trainingsbeelden dat apart wordt gezet om overfitting "
-       "in de gaten te houden. De training kan dan stoppen voordat de kwaliteit "
-       "begint te dalen. Vroegtijdig stoppen werkt nog niet: de beelden worden "
-       "apart gezet, maar de run loopt altijd tot het eind."),
+       "in de gaten te houden. Elke `steps_per_validation` stappen meet de run "
+       "er PSNR en SSIM op en schrijft validation.json; met `early_stop_patience` "
+       "stopt de training zodra die niet meer verbeteren."),
     RU("Доля обучающих изображений, отложенная, чтобы следить за переобучением. "
-       "Тогда обучение можно остановить до того, как качество начнёт падать. "
-       "Ранняя остановка пока не работает: снимки откладываются, но запуск всегда "
-       "идёт до конца."),
-    TR("Aşırı öğrenmeyi izlemek için eğitim görüntülerinden ayrılan oran. Böylece "
-       "kalite düşmeye başlamadan eğitim durdurulabilir. Erken durdurma henüz "
-       "etkin değil: görüntüler ayrılır ama çalıştırma hep sonuna kadar gider."));
+       "Каждые `steps_per_validation` шагов запуск измеряет на них PSNR и SSIM и "
+       "пишет validation.json; при заданном `early_stop_patience` обучение "
+       "останавливается, когда они перестают расти."),
+    TR("Aşırı öğrenmeyi izlemek için eğitim görüntülerinden ayrılan oran. Her "
+       "`steps_per_validation` adımda bu görüntülerde PSNR ve SSIM ölçülür ve "
+       "validation.json yazılır; `early_stop_patience` ayarlıysa iyileşme "
+       "durduğunda eğitim sona erer."));
+
+SS_MSG(steps_per_validation,
+    EN("Validation interval"), JA("検証の間隔"), ZH_HANS("验证间隔"),
+    ZH_HANT("驗證間隔"), KO("검증 간격"), DE("Validierungsintervall"),
+    FR("Intervalle de validation"), ES("Intervalo de validación"),
+    PT("Intervalo de validação"), IT("Intervallo di validazione"),
+    NL("Validatie-interval"), RU("Интервал проверки"), TR("Doğrulama aralığı"));
+SS_MSG(steps_per_validation_help,
+    EN("How often, in steps, the validation images are rendered and scored. 0 "
+       "never scores them. Each pass renders every validation image, so a short "
+       "interval slows training."),
+    JA("検証用画像をレンダリングして採点する間隔をステップ数で指定します。0 "
+       "なら採点しません。毎回すべての検証用画像をレンダリングするので、間隔を"
+       "短くすると学習が遅くなります。"),
+    ZH_HANS("多少步渲染并评分一次验证图像。0 表示从不评分。每次都会渲染全部验"
+            "证图像，所以间隔太短会拖慢训练。"),
+    ZH_HANT("多少步算圖並評分一次驗證影像。0 表示從不評分。每次都會算圖全部驗"
+            "證影像，所以間隔太短會拖慢訓練。"),
+    KO("검증 이미지를 렌더링하고 점수를 내는 간격을 스텝 수로 지정합니다. 0이면"
+       " 점수를 내지 않습니다. 매번 모든 검증 이미지를 렌더링하므로 간격이 짧으"
+       "면 학습이 느려집니다."),
+    DE("Wie oft, in Schritten, die Validierungsbilder gerendert und bewertet "
+       "werden. 0 bewertet sie nie. Jeder Durchgang rendert alle "
+       "Validierungsbilder, ein kurzes Intervall bremst also das Training."),
+    FR("À quelle fréquence, en étapes, les images de validation sont rendues et "
+       "notées. 0 ne les note jamais. Chaque passe rend toutes les images de "
+       "validation : un intervalle court ralentit l'entraînement."),
+    ES("Cada cuántos pasos se renderizan y puntúan las imágenes de validación. "
+       "0 no las puntúa nunca. Cada pasada renderiza todas las imágenes de "
+       "validación, así que un intervalo corto ralentiza el entrenamiento."),
+    PT("De quantos em quantos passos as imagens de validação são renderizadas e "
+       "pontuadas. 0 nunca as pontua. Cada passada renderiza todas as imagens de "
+       "validação, então um intervalo curto deixa o treinamento mais lento."),
+    IT("Ogni quanti passi le immagini di validazione vengono renderizzate e "
+       "valutate. 0 non le valuta mai. Ogni passata renderizza tutte le immagini "
+       "di validazione, quindi un intervallo breve rallenta l'addestramento."),
+    NL("Om de hoeveel stappen de validatiebeelden worden gerenderd en gescoord. "
+       "0 scoort ze nooit. Elke ronde rendert alle validatiebeelden, dus een kort "
+       "interval vertraagt de training."),
+    RU("Как часто, в шагах, проверочные изображения рендерятся и оцениваются. 0 "
+       "— никогда. Каждый проход рендерит все проверочные изображения, поэтому "
+       "короткий интервал замедляет обучение."),
+    TR("Doğrulama görüntülerinin kaç adımda bir işlenip puanlanacağı. 0 hiç "
+       "puanlamaz. Her geçiş tüm doğrulama görüntülerini işler, bu yüzden kısa "
+       "bir aralık eğitimi yavaşlatır."));
+
+SS_MSG(early_stop_patience,
+    EN("Early-stop patience"), JA("早期終了までの猶予"), ZH_HANS("早停耐心值"),
+    ZH_HANT("早停耐心值"), KO("조기 종료 인내 횟수"),
+    DE("Geduld für frühes Stoppen"), FR("Patience de l'arrêt anticipé"),
+    ES("Paciencia de la parada temprana"), PT("Paciência da parada antecipada"),
+    IT("Pazienza dell'arresto anticipato"), NL("Geduld voor vroegtijdig stoppen"),
+    RU("Терпение ранней остановки"), TR("Erken durdurma sabrı"));
+SS_MSG(early_stop_patience_help,
+    EN("Stop training once this many validation passes in a row bring no "
+       "improvement in `early_stop_metric`. 0 always trains to the end. Needs "
+       "`validation_fraction` above 0."),
+    JA("検証がこの回数続けて `early_stop_metric` を改善しなければ、学習を終了"
+       "します。0 なら常に最後まで学習します。`validation_fraction` を 0 より"
+       "大きくする必要があります。"),
+    ZH_HANS("连续这么多次验证都没有提升 `early_stop_metric` 时停止训练。0 表示"
+            "始终训练到最后。需要 `validation_fraction` 大于 0。"),
+    ZH_HANT("連續這麼多次驗證都沒有提升 `early_stop_metric` 時停止訓練。0 表示"
+            "始終訓練到最後。需要 `validation_fraction` 大於 0。"),
+    KO("검증이 이 횟수만큼 연달아 `early_stop_metric`을 개선하지 못하면 학습을"
+       " 멈춥니다. 0이면 언제나 끝까지 학습합니다. `validation_fraction`이 0보"
+       "다 커야 합니다."),
+    DE("Das Training beenden, sobald so viele Validierungen hintereinander "
+       "`early_stop_metric` nicht verbessern. 0 trainiert immer bis zum Ende. "
+       "Setzt `validation_fraction` über 0 voraus."),
+    FR("Arrêter l'entraînement dès que ce nombre de validations d'affilée "
+       "n'améliore pas `early_stop_metric`. 0 entraîne toujours jusqu'au bout. "
+       "Nécessite `validation_fraction` au-dessus de 0."),
+    ES("Detener el entrenamiento cuando esta cantidad de validaciones seguidas "
+       "no mejore `early_stop_metric`. 0 entrena siempre hasta el final. "
+       "Requiere `validation_fraction` mayor que 0."),
+    PT("Parar o treinamento quando essa quantidade de validações seguidas não "
+       "melhorar `early_stop_metric`. 0 treina sempre até o fim. Requer "
+       "`validation_fraction` acima de 0."),
+    IT("Fermare l'addestramento quando questo numero di validazioni di fila non "
+       "migliora `early_stop_metric`. 0 addestra sempre fino alla fine. Richiede "
+       "`validation_fraction` sopra 0."),
+    NL("De training stoppen zodra zoveel validaties achter elkaar "
+       "`early_stop_metric` niet verbeteren. 0 traint altijd tot het eind. "
+       "Vereist `validation_fraction` boven 0."),
+    RU("Остановить обучение, когда столько проверок подряд не улучшают "
+       "`early_stop_metric`. 0 — всегда обучать до конца. Требует "
+       "`validation_fraction` больше 0."),
+    TR("Bu sayıda doğrulama art arda `early_stop_metric` değerini "
+       "iyileştirmezse eğitimi durdurur. 0 her zaman sonuna kadar eğitir. "
+       "`validation_fraction` değerinin 0'dan büyük olmasını gerektirir."));
+
+SS_MSG(early_stop_metric,
+    EN("Early-stop metric"), JA("早期終了の指標"), ZH_HANS("早停指标"),
+    ZH_HANT("早停指標"), KO("조기 종료 지표"), DE("Kennzahl für frühes Stoppen"),
+    FR("Mesure de l'arrêt anticipé"), ES("Métrica de la parada temprana"),
+    PT("Métrica da parada antecipada"), IT("Metrica dell'arresto anticipato"),
+    NL("Maat voor vroegtijdig stoppen"), RU("Показатель ранней остановки"),
+    TR("Erken durdurma ölçütü"));
+SS_MSG(early_stop_metric_help,
+    EN("Which validation score early stopping watches: `psnr` or `ssim`. Both "
+       "are always computed and written to validation.json."),
+    JA("早期終了が見張る検証スコアです: `psnr` または `ssim`。どちらも常に計算"
+       "され、validation.json に書き出されます。"),
+    ZH_HANS("早停监视哪个验证分数：`psnr` 或 `ssim`。两者都会计算并写入 "
+            "validation.json。"),
+    ZH_HANT("早停監視哪個驗證分數：`psnr` 或 `ssim`。兩者都會計算並寫入 "
+            "validation.json。"),
+    KO("조기 종료가 지켜보는 검증 점수입니다: `psnr` 또는 `ssim`. 둘 다 항상 "
+       "계산해 validation.json에 기록합니다."),
+    DE("Welchen Validierungswert das frühe Stoppen beobachtet: `psnr` oder "
+       "`ssim`. Beide werden immer berechnet und in validation.json geschrieben."),
+    FR("Le score de validation que surveille l'arrêt anticipé : `psnr` ou "
+       "`ssim`. Les deux sont toujours calculés et écrits dans validation.json."),
+    ES("Qué puntuación de validación vigila la parada temprana: `psnr` o "
+       "`ssim`. Ambas se calculan siempre y se escriben en validation.json."),
+    PT("Qual pontuação de validação a parada antecipada vigia: `psnr` ou "
+       "`ssim`. As duas são sempre calculadas e gravadas em validation.json."),
+    IT("Quale punteggio di validazione sorveglia l'arresto anticipato: `psnr` "
+       "o `ssim`. Entrambi vengono sempre calcolati e scritti in validation.json."),
+    NL("Welke validatiescore vroegtijdig stoppen in de gaten houdt: `psnr` of "
+       "`ssim`. Beide worden altijd berekend en naar validation.json geschreven."),
+    RU("Какую оценку проверки отслеживает ранняя остановка: `psnr` или `ssim`. "
+       "Обе всегда вычисляются и пишутся в validation.json."),
+    TR("Erken durdurmanın izlediği doğrulama puanı: `psnr` ya da `ssim`. "
+       "İkisi de her zaman hesaplanır ve validation.json dosyasına yazılır."));
 
 SS_MSG(warp_to_pinhole,
     EN("Split fisheye into perspective views"),
