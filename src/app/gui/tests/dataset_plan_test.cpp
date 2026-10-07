@@ -641,7 +641,9 @@ int main() {
     {
         build(ws, made);
         std::vector<PrepCapture> c = recorded_captures(ws.string(), made.prep);
-        expect(c.size() == 1 && c[0].path == "/captures/walk.insv" && c[0].subdir.empty(),
+        // Absolute as the record keeps it: Windows puts the current drive in front.
+        const std::string walk = fs::absolute("/captures/walk.insv").lexically_normal().generic_string();
+        expect(c.size() == 1 && c[0].path == walk && c[0].subdir.empty(),
                "the frames' fields name the video they were cut from");
         SfmJob f = made;
         f.prep.force_external_decode = true;
