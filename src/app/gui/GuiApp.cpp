@@ -6128,7 +6128,8 @@ void GuiApp::draw_dataset_preview(float height) {
                                     ImGui::GetCursorStartPos().y);
     }
 
-    if (reels[tab]) {
+    // -1 when only the dense live view is up and no tab has content yet.
+    if (tab >= 0 && reels[tab]) {
         reels[tab]->draw(h - px(8.0f));
         return;
     }
