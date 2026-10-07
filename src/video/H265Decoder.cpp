@@ -840,15 +840,7 @@ void H265Decoder::flush() {
 int H265Decoder::allocSlot() {
     for (uint32_t i = 0; i < format_.max_dpb_slots; ++i)
         if (!dpb_[i].used) return (int)i;
-    // Only reachable on a stream that violates its own DPB bound.
-    int worst = 0, worst_poc = INT32_MAX;
-    for (uint32_t i = 0; i < format_.max_dpb_slots; ++i)
-        if (dpb_[i].poc < worst_poc) {
-            worst_poc = dpb_[i].poc;
-            worst = (int)i;
-        }
-    dpb_[worst].used = false;
-    return worst;
+    return -1;
 }
 
 bool H265Decoder::decodeFrame(const uint8_t* data, size_t size, int nal_length_size,
@@ -1054,16 +1046,6 @@ bool H265Decoder::decodeFrame(const uint8_t* data, size_t size, int nal_length_s
     }
     const bool drop_rasl = is_rasl(nal_type) && no_rasl_output_;
 
-    // Long-term references, now that PicOrderCntVal is known.
-    std::vector<int> lt_curr_poc;
-    for (const LtEntry& e : lt_entries) {
-        if (!e.used) continue;
-        int poc = (int)e.lsb;
-        if (e.msb_present)
-            poc = poc_ - e.msb_cycle * (int)sps.max_poc_lsb - (int)poc_lsb + (int)e.lsb;
-        lt_curr_poc.push_back(poc);
-    }
-
     // ---- reference picture set (8.3.2) ----
     int poc_st_before[kMaxRps], poc_st_after[kMaxRps];
     int n_before = 0, n_after = 0;
@@ -1078,15 +1060,34 @@ bool H265Decoder::decodeFrame(const uint8_t* data, size_t size, int nal_length_s
         all_rps_poc.push_back(poc);
         if (slice_rps.used_s1[i] && n_after < kMaxRps) poc_st_after[n_after++] = poc;
     }
-    for (int poc : lt_curr_poc) all_rps_poc.push_back(poc);
+    const size_t first_lt = all_rps_poc.size();
+    std::vector<int> lt_curr_poc;
+    for (const LtEntry& e : lt_entries) {
+        int poc = (int)e.lsb;
+        if (e.msb_present) {
+            poc = poc_ - e.msb_cycle * (int)sps.max_poc_lsb - (int)poc_lsb + (int)e.lsb;
+        } else {
+            for (uint32_t i = 0; i < format_.max_dpb_slots; ++i)
+                if (dpb_[i].used && (dpb_[i].poc & ((int)sps.max_poc_lsb - 1)) == poc) {
+                    poc = dpb_[i].poc;
+                    break;
+                }
+        }
+        all_rps_poc.push_back(poc);
+        if (e.used) lt_curr_poc.push_back(poc);
+    }
 
-    // Anything the current picture's RPS does not name leaves the DPB.
+    // RPS retention includes pictures that this frame does not use.
     for (uint32_t i = 0; i < format_.max_dpb_slots; ++i) {
-        if (!dpb_[i].used) continue;
-        bool keep = false;
-        for (int poc : all_rps_poc)
-            if (dpb_[i].poc == poc) { keep = true; break; }
-        if (!keep) dpb_[i].used = false;
+        DpbFrame& f = dpb_[i];
+        if (!f.used) continue;
+        const bool short_term = std::find(all_rps_poc.begin(),
+                                          all_rps_poc.begin() + first_lt, f.poc) !=
+                                all_rps_poc.begin() + first_lt;
+        const bool long_term = std::find(all_rps_poc.begin() + first_lt,
+                                         all_rps_poc.end(), f.poc) != all_rps_poc.end();
+        f.used = short_term || long_term;
+        f.long_term = long_term;
     }
 
     auto slot_for_poc = [&](int poc) -> uint8_t {
@@ -1119,21 +1120,17 @@ bool H265Decoder::decodeFrame(const uint8_t* data, size_t size, int nal_length_s
          ++i)
         std_pic_.RefPicSetLtCurr[i] = slot_for_poc(lt_curr_poc[i]);
 
-    // pReferenceSlots must contain every slot those three lists name.
     out.refs.clear();
-    auto add_ref = [&](uint8_t slot) {
-        if (slot == STD_VIDEO_H265_NO_REFERENCE_PICTURE) return;
-        for (const auto& r : out.refs)
-            if (r.slot == (int32_t)slot) return;
-        DpbFrame& f = dpb_[slot];
+    for (uint32_t i = 0; i < format_.max_dpb_slots; ++i) {
+        DpbFrame& f = dpb_[i];
+        if (!f.used) continue;
         f.std_ref.PicOrderCntVal = f.poc;
         f.std_ref.flags.used_for_long_term_reference = f.long_term ? 1 : 0;
-        out.refs.push_back({(int32_t)slot, &f.std_ref});
-    };
-    for (int i = 0; i < STD_VIDEO_DECODE_H265_REF_PIC_SET_LIST_SIZE; ++i) {
-        add_ref(std_pic_.RefPicSetStCurrBefore[i]);
-        add_ref(std_pic_.RefPicSetStCurrAfter[i]);
-        add_ref(std_pic_.RefPicSetLtCurr[i]);
+        out.refs.push_back({(int32_t)i, &f.std_ref});
+    }
+    if (out.refs.size() > format_.max_active_references) {
+        error = "H.265 retained references exceed the video session's active-reference limit";
+        return false;
     }
 
     vk_pic_ = VkVideoDecodeH265PictureInfoKHR{
@@ -1143,6 +1140,10 @@ bool H265Decoder::decodeFrame(const uint8_t* data, size_t size, int nal_length_s
     vk_pic_.pSliceSegmentOffsets = slice_offsets.data();
 
     const int slot = allocSlot();
+    if (slot < 0) {
+        error = "H.265 reference picture set exceeds the video session's DPB slot limit";
+        return false;
+    }
     pending_slot_ = slot;
     pending_is_ref_ = true;
 

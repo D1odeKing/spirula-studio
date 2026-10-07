@@ -45,9 +45,9 @@ fail=0
 
 resolves() {
     local p=$1
-    printf '%s\n' "$tracked" | grep -qxF "$p"      && return 0
-    printf '%s\n' "$tracked" | grep -qxF "src/$p"  && return 0
-    printf '%s\n' "$tracked" | grep -qE "/$(printf '%s' "$p" | sed 's/[.[\*^$]/\\&/g')\$"
+    echo "$tracked" | grep -qxF "$p"      && return 0
+    echo "$tracked" | grep -qxF "src/$p"  && return 0
+    echo "$tracked" | grep -qE "/$(printf '%s' "$p" | sed 's/[.[\*^$]/\\&/g')\$"
 }
 
 report() {

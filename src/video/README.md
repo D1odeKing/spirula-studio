@@ -67,6 +67,12 @@ several pictures (`PictureInfo::more_in_packet`), and `show_existing_frame`
 re-outputs a picture decoded earlier, which is why pool images are pinned while
 a DPB slot still names them.
 
+For H.265, a picture in the current RPS stays bound and submitted as a DPB
+reference even when `used_by_curr_pic` is false. That flag controls only the
+current-picture `StCurrBefore`, `StCurrAfter`, and `LtCurr` lists; a later picture
+may still need the retained slot. Pictures absent from the RPS are retired
+before setup-slot allocation, and a live slot must never be reused for setup.
+
 ## Two decode output layouts
 
 `VkVideoDecodeCapabilitiesKHR` reports one of two arrangements and both are
