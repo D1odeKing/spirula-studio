@@ -142,6 +142,24 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
     const auto keyed = work / "fusion-keyed.bin", ordered = work / "fusion-ordered.bin";
     const uint64_t partition_records = std::max<uint64_t>(1,budget / (8 * sizeof(Cluster)));
     uint64_t count = 0;
+    // Steps in order with rough shares of the time, reported as permille of the whole.
+    enum Step { Key, SortSurfaces, Split, Local, Gather, Neighbours, SortEdges, Merge, kSteps };
+    static constexpr uint32_t kWeight[kSteps] = {5, 15, 5, 20, 5, 30, 10, 10};
+    std::mutex report_mutex;
+    uint32_t reported = 0;
+    auto report = [&](Step step, uint64_t done, uint64_t total) {
+        uint32_t base = 0;
+        for (int i = 0; i < step; ++i) base += kWeight[i];
+        const double part = total ? std::min(1.0, (double)done / (double)total) : 1.0;
+        const uint32_t permille = base * 10 + (uint32_t)(part * kWeight[step] * 10);
+        std::lock_guard<std::mutex> lock(report_mutex);
+        if (!progress || permille <= reported) return;
+        reported = permille;
+        progress(permille, 1000);
+    };
+    std::error_code size_error;
+    const uint64_t source_records = fs::file_size(source,size_error) / sizeof(Surface);
+    const uint64_t tick = std::max<uint64_t>(1, source_records / 200);
     {
         std::ifstream input(source,std::ios::binary);
         std::ofstream output(keyed,std::ios::binary | std::ios::trunc);
@@ -158,10 +176,13 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
                 p.cell[c] = (int64_t)k;
             }
             write_disk_record(output,p); ++count;
+            if (count % tick == 0) report(Key,count,source_records);
         }
         flush_disk_output(output);
     }
-    external_sort<Surface>(keyed,ordered,budget / 2,less,check); fs::remove(keyed);
+    external_sort<Surface>(keyed,ordered,budget / 2,less,check,
+        [&](uint64_t done,uint64_t total) { report(SortSurfaces,done,total); });
+    fs::remove(keyed);
     DiskArray<Partition> partitions(work / "fusion-partitions.bin",budget / 16);
     {
         std::ifstream input(ordered,std::ios::binary); Surface p; Cell previous{}; uint64_t index = 0, begin = 0;
@@ -171,10 +192,12 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
                 partitions.push_back({begin,index}); begin = index;
             }
             previous = cell(p); ++index;
+            if (index % tick == 0) report(Split,index,count);
         }
         if (index > begin) partitions.push_back({begin,index});
     }
     FusionStatistics statistics; statistics.partitions = partitions.size();
+    std::atomic<uint64_t> local_done{0}, neighbour_done{0};
     statistics.workers = parallel_partitions(partitions,requested_workers,budget / 2,check,
         [&](uint64_t index,Partition part,uint64_t worker_budget,const auto& stopped) {
             std::ifstream input(ordered,std::ios::binary); input.seekg((std::streamoff)(part.begin * sizeof(Surface)));
@@ -191,6 +214,7 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
                     merge(candidate,value); group.set(j,candidate); joined = true; break;
                 }
                 if (!joined) group.push_back(value);
+                if ((i + 1 - part.begin) % 4096 == 0) report(Local,local_done += 4096,count);
             }
             publish();
             flush_disk_output(output);
@@ -202,6 +226,7 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
         CellRange range;
         for (uint64_t i = 0; i < partitions.size(); ++i) {
             if (check) check();
+            report(Gather,i,partitions.size());
             {
                 std::ifstream input(part_file(work,"local",i),std::ios::binary); Cluster value;
                 while (read_disk_record(input,value)) {
@@ -246,6 +271,7 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
                         }
                     }
                 }
+                if ((i + 1 - part.begin) % 256 == 0) report(Neighbours,neighbour_done += 256,cell_count);
             }
             flush_disk_output(output);
         }));
@@ -264,12 +290,15 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
     partitions.clear();
     external_sort<Edge>(edges,sorted_edges,budget / 2,[](const auto& a,const auto& b) {
         return std::tie(a.a,a.b) < std::tie(b.a,b.b);
-    },check); fs::remove(edges);
+    },check,[&](uint64_t done,uint64_t total) { report(SortEdges,done,total); }); fs::remove(edges);
     {
         DiskTable<Cluster> states(clusters,budget / 2,true);
         std::ifstream input(sorted_edges,std::ios::binary); Edge edge;
+        const uint64_t edge_tick = std::max<uint64_t>(1,statistics.boundary_candidates / 100);
+        uint64_t merged = 0;
         while (read_disk_record(input,edge)) {
             if (check) check();
+            if (++merged % edge_tick == 0) report(Merge,merged,2 * statistics.boundary_candidates);
             auto a = root(states,edge.a,check), b = root(states,edge.b,check);
             if (a == b) continue;
             if (a > b) std::swap(a,b);
@@ -282,13 +311,15 @@ FusionStatistics fuse_surfaces(const fs::path& source, const fs::path& destinati
             if (check) check();
             const auto value = states.get(i);
             if (value.parent == i) { write_disk_record(output,value.surface); ++statistics.surfaces; }
-            if (progress && (i + 1) % partition_records == 0) progress(i + 1,cluster_count);
+            if ((i + 1) % partition_records == 0)
+                report(Merge,statistics.boundary_candidates + (i + 1) * statistics.boundary_candidates / std::max<uint64_t>(1,cluster_count),
+                       2 * statistics.boundary_candidates);
         }
         flush_disk_output(output);
         states.flush();
     }
     fs::remove(sorted_edges); fs::remove(clusters); fs::remove(cells);
-    if (progress) progress(count,count);
+    if (progress) progress(1000,1000);
     return statistics;
 }
 

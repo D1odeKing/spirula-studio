@@ -548,8 +548,11 @@ struct Reconstruction::Impl {
         reset_preview();
         if (!config.remove_outliers) {
             std::ifstream input(fused,std::ios::binary); Surface p;
+            uint64_t read = 0;
             while (read_disk_record(input,p)) {
-                check(); if (config.point_limit && writer.count() >= config.point_limit) continue;
+                check();
+                if (progress && ++read % 65536 == 0) progress("export",read,stats.fused);
+                if (config.point_limit && writer.count() >= config.point_limit) continue;
                 double raw[3], xyz[3];
                 for (int c = 0; c < 3; ++c) raw[c] = p.point[c] + dataset.center[c];
                 for (int c = 0; c < 3; ++c) {
@@ -590,12 +593,17 @@ struct Reconstruction::Impl {
             knn::KdTree3 tree(xyz.data(), (int64_t)stats.fused);
             std::vector<float> means((size_t)stats.fused);
             std::atomic<uint64_t> next{0};
+            std::mutex report;
             auto query = [&] {
                 if (!neighbors) return;
                 std::vector<float> distances((size_t)neighbors);
                 for (;;) {
                     const auto begin = next.fetch_add(256);
                     if (begin >= stats.fused) return;
+                    if (progress && begin % 65536 == 0) {
+                        std::lock_guard<std::mutex> lock(report);
+                        progress("outliers",begin,stats.fused);
+                    }
                     for (uint64_t i = begin; i < std::min(begin + 256, stats.fused); ++i) {
                         check();
                         const int count = tree.query(&xyz[(size_t)i * 3], (int32_t)i, neighbors, distances.data());
@@ -619,6 +627,7 @@ struct Reconstruction::Impl {
             uint64_t index = 0;
             while (read_disk_record(input, p)) {
                 check();
+                if (progress && (index + 1) % 65536 == 0) progress("export",index + 1,stats.fused);
                 if (means[(size_t)index++] > threshold || (config.point_limit && writer.count() >= config.point_limit)) continue;
                 double raw[3], xyz_source[3];
                 for (int c = 0; c < 3; ++c) raw[c] = p.point[c] + dataset.center[c];
@@ -635,7 +644,7 @@ struct Reconstruction::Impl {
         writer.finish();
         stats.exported = writer.count();
         if (!stats.exported) throw std::runtime_error("dense fusion and outlier filtering produced an empty cloud");
-        if (progress) progress("fuse", stats.refined, stats.refined);
+        if (progress) progress("export", stats.fused, stats.fused);
     }
 };
 

@@ -164,9 +164,10 @@ InferencePrecision Session::precision() const {
     return impl_->weights.mixedPrecision() ? InferencePrecision::Mixed : InferencePrecision::Float32;
 }
 
-void Session::load(const std::string& checkpoint, InferencePrecision precision) {
+void Session::load(const std::string& checkpoint, InferencePrecision precision,
+                   const std::function<void(uint64_t, uint64_t)>& progress) {
     unload();
-    impl_->weights.load(checkpoint, resolvePrecision(precision) == InferencePrecision::Mixed);
+    impl_->weights.load(checkpoint, resolvePrecision(precision) == InferencePrecision::Mixed, progress);
 }
 
 void Session::unload() {

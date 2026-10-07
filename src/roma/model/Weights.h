@@ -3,6 +3,8 @@
 #include "nn/WeightStore.h"
 #include "nn/io/TorchCheckpoint.h"
 
+#include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -10,7 +12,9 @@ namespace spirula::roma {
 
 class Weights {
 public:
-    void load(const std::string& path, bool mixed = false);
+    // `progress(done, total)` counts checkpoint tensors.
+    void load(const std::string& path, bool mixed = false,
+              const std::function<void(uint64_t, uint64_t)>& progress = {});
     bool mixedPrecision() const { return mixed_; }
     void release() { store_.release(); }
     nn::Tensor get(const std::string& name) const { return store_.get(name); }

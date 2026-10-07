@@ -65,14 +65,18 @@ bool run_dense_step(const DenseJob& job, const std::string& dataset, const std::
     const int code = run_process(argv, "", [&](const std::string& line) {
         std::vector<std::string> fields;
         auto stage_label = [](const std::string& label) {
-            return label == D::prepare.get() || label == D::match.get() ||
-                   label == D::refine.get() || label == D::fuse.get();
+            return label == D::prepare.get() || label == D::match.get() || label == D::refine.get() ||
+                   label == D::fuse.get() || label == D::load_model.get() || label == D::outliers.get() ||
+                   label == D::export_cloud.get();
         };
         if (spirula::i18n::scan(D::error, line, fields)) {
             child_error = line;
             progress.note(line, false);
         } else if (spirula::i18n::scan(D::progress, line, fields) && fields.size() == 3 && stage_label(fields[0])) {
             progress.count(Stage::Dense, std::atoll(fields[1].c_str()), std::atoll(fields[2].c_str()));
+            progress.detail(Stage::Dense, line);
+        } else if (spirula::i18n::scan(D::progress_percent, line, fields) && fields.size() == 2 && stage_label(fields[0])) {
+            progress.count(Stage::Dense, std::atoll(fields[1].c_str()), 100);
             progress.detail(Stage::Dense, line);
         } else if (spirula::i18n::scan(D::count, line, fields) && fields.size() == 2 && stage_label(fields[0])) {
             progress.count(Stage::Dense, std::atoll(fields[1].c_str()), 0);

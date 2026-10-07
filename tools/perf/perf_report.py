@@ -198,7 +198,7 @@ def stages(train, cores):
 PALETTE = ["#2a78d6", "#d9611e", "#1f9e6a", "#9b4fd1", "#c7334a", "#7a7a7a"]
 
 
-DENSE_PHASES = ["prepare", "match", "refine", "fuse"]
+DENSE_PHASES = ["prepare", "load", "match", "refine", "fuse", "outliers", "export"]
 
 
 def dense_verdict(st, cores):

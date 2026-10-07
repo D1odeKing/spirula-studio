@@ -107,14 +107,23 @@ int spirula_dense_main(int argc, char** argv) {
 #ifdef SS_HAVE_ROMA
         interrupted.store(false);
         std::signal(SIGINT, interrupt); std::signal(SIGTERM, interrupt);
+        // Fusion reports permille of its steps, so it prints as a percentage.
         auto progress = [](const char* stage, uint64_t done, uint64_t total) {
+            const std::string name = stage;
             const auto* message = &D::prepare;
-            if (std::string(stage) == "match") message = &D::match;
-            else if (std::string(stage) == "refine") message = &D::refine;
-            else if (std::string(stage) == "fuse") message = &D::fuse;
-            else if (std::string(stage) == "complete") return;
+            if (name == "load") message = &D::load_model;
+            else if (name == "match") message = &D::match;
+            else if (name == "refine") message = &D::refine;
+            else if (name == "fuse") message = &D::fuse;
+            else if (name == "outliers") message = &D::outliers;
+            else if (name == "export") message = &D::export_cloud;
+            else if (name == "complete") return;
             const auto label = format(*message, {});
-            const auto text = total ? format(D::progress, {label, (long long)done, (long long)total}) : format(D::count, {label, (long long)done});
+            const auto text = name == "fuse" && total ? format(D::progress_percent, {label, (long long)(done * 100 / total)})
+                : total ? format(D::progress, {label, (long long)done, (long long)total}) : format(D::count, {label, (long long)done});
+            static std::string last;   // finer steps than the text shows would repeat it
+            if (text == last) return;
+            last = text;
             std::printf("%s\n", text.c_str()); std::fflush(stdout);
         };
         const auto result = app::run_dense(dataset, config, progress, &interrupted, progress_dir, perf_dir);

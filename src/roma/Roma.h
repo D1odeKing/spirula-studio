@@ -74,7 +74,8 @@ public:
     ~Session();
     Session(const Session&) = delete;
     Session& operator=(const Session&) = delete;
-    void load(const std::string& checkpoint, InferencePrecision precision = InferencePrecision::Float32);
+    void load(const std::string& checkpoint, InferencePrecision precision = InferencePrecision::Float32,
+              const std::function<void(uint64_t, uint64_t)>& progress = {});
     static InferencePrecision resolvePrecision(InferencePrecision precision);
     InferencePrecision precision() const;
     void unload();

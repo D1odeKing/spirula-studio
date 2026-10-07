@@ -118,7 +118,7 @@ void Weights::validate(const nn::TorchCheckpoint& f) {
     }
 }
 
-void Weights::load(const std::string& path, bool mixed) {
+void Weights::load(const std::string& path, bool mixed, const std::function<void(uint64_t, uint64_t)>& progress) {
     release();
     mixed_ = mixed;
     nn::TorchCheckpoint f(path);
@@ -135,7 +135,12 @@ void Weights::load(const std::string& path, bool mixed) {
              "'%s': RoMa matcher temperature must be positive", path.c_str());
     uint64_t staged = 0;
     try {
-        for (const auto& name : f.names()) {
+        const auto names = f.names();
+        uint64_t loaded = 0;
+        for (const auto& name : names) {
+            if (progress && loaded * 100 / names.size() != (loaded + 1) * 100 / names.size())
+                progress(loaded + 1, names.size());   // whole percents: a log line per tensor is noise
+            ++loaded;
             nn::OnnxTensor t = f.read(name);
             for (float v : t.data) NN_CHECK(std::isfinite(v), "'%s': nonfinite weight '%s'", path.c_str(), name.c_str());
             if (name.size() >= 12 && name.compare(name.size() - 12, 12, ".running_var") == 0) {
@@ -173,6 +178,7 @@ void Weights::load(const std::string& path, bool mixed) {
         store_.stage("input.std", {3}, {0.229f, 0.224f, 0.225f}, false);
         store_.stage("input.mean", {3}, {0.485f, 0.456f, 0.406f}, false);
         store_.upload("roma-weights");
+        if (progress) progress(names.size(), names.size());
     } catch (...) { release(); throw; }
 }
 

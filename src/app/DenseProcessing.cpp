@@ -1200,7 +1200,10 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
             const auto pa = item.a.get(), pb = item.b.get();
             if (!session.loaded()) {
                 const auto load_start = std::chrono::steady_clock::now();
-                session.load(checkpoint, resolved_precision);
+                session.load(checkpoint, resolved_precision, [&](uint64_t done, uint64_t total) {
+                    check_cancel(cancel);
+                    if (progress) progress("load", done, total);
+                });
                 model_load_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - load_start).count();
             }
             auto options = config.match;
