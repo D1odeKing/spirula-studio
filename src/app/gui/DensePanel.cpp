@@ -8,6 +8,9 @@
 #include "i18n/catalog/Dataset.h"
 #include "sfm/core/HostMemory.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace gui {
 
 bool GuiApp::dense_model_missing() const {
@@ -121,9 +124,11 @@ void GuiApp::draw_dense_options() {
     ui::help_on_hover_disabled(D::use_masks_help);
     changed |= ui::Checkbox(D::sparse_face_pairs, &config.sparse_face_pairs);
     ui::help_on_hover_disabled(D::sparse_face_pairs_help);
-    int cache_mib = (int)std::min<uint64_t>(INT32_MAX, config.image_cache_bytes >> 20);
-    if (ui::InputInt(D::image_cache, &cache_mib)) {
-        config.image_cache_bytes = (uint64_t)std::max(0, cache_mib) << 20; changed = true;
+    // Shown in GB, stored in bytes; whole MiB keep a typed value from drifting.
+    float cache_gb = (float)((double)config.image_cache_bytes / (1024.0 * 1024.0 * 1024.0));
+    if (ui::InputFloat(D::image_cache, &cache_gb, 0.5f, 1.0f, "%.1f")) {
+        const double mib = std::round(std::max(0.0, (double)cache_gb) * 1024.0);
+        config.image_cache_bytes = (uint64_t)mib << 20; changed = true;
     }
     ui::help_on_hover_disabled(D::image_cache_help);
     if (_dense.use_for_training) draw_train_mask_mode(ImGui::GetContentRegionAvail().x * 0.55f);

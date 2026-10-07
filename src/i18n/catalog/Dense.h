@@ -143,10 +143,10 @@ SS_MSG(sparse_face_pairs,
     ES("Elegir vistas con las pistas dispersas"), PT("Selecionar vistas com trajetórias esparsas"), IT("Seleziona viste tramite tracce sparse"),
     NL("Koppelingsvlakken kiezen met dunne puntsporen"), RU("Выбирать виды по разреженным трекам"), TR("Eşleşen görünümleri seyrek izlerle seç"));
 SS_MSG(image_cache,
-    EN("CPU image cache MiB (0 = auto)"), JA("CPU 画像キャッシュ MiB（0 = 自動）"), ZH_HANS("CPU 图像缓存 MiB（0 = 自动）"), ZH_HANT("CPU 影像快取 MiB（0 = 自動）"),
-    KO("CPU 이미지 캐시 MiB (0 = 자동)"), DE("CPU-Bildcache MiB (0 = automatisch)"), FR("Cache images CPU MiB (0 = auto)"),
-    ES("Caché de imágenes CPU MiB (0 = auto)"), PT("Cache de imagens CPU MiB (0 = auto)"), IT("Cache immagini CPU MiB (0 = auto)"),
-    NL("CPU-afbeeldingscache MiB (0 = automatisch)"), RU("Кэш изображений CPU MiB (0 = авто)"), TR("CPU görüntü önbelleği MiB (0 = otomatik)"));
+    EN("CPU image cache GB (0 = auto)"), JA("CPU 画像キャッシュ GB（0 = 自動）"), ZH_HANS("CPU 图像缓存 GB（0 = 自动）"), ZH_HANT("CPU 影像快取 GB（0 = 自動）"),
+    KO("CPU 이미지 캐시 GB (0 = 자동)"), DE("CPU-Bildcache GB (0 = automatisch)"), FR("Cache images CPU GB (0 = auto)"),
+    ES("Caché de imágenes CPU GB (0 = auto)"), PT("Cache de imagens CPU GB (0 = auto)"), IT("Cache immagini CPU GB (0 = auto)"),
+    NL("CPU-afbeeldingscache GB (0 = automatisch)"), RU("Кэш изображений CPU GB (0 = авто)"), TR("CPU görüntü önbelleği GB (0 = otomatik)"));
 SS_MSG(precision_auto,
     EN("Auto (GPU capabilities)"), JA("自動（GPU の機能）"), ZH_HANS("自动（GPU 功能）"), ZH_HANT("自動（GPU 功能）"), KO("자동 (GPU 기능)"),
     DE("Automatisch (GPU-Funktionen)"), FR("Auto (capacités du GPU)"), ES("Auto (capacidades de GPU)"), PT("Auto (recursos da GPU)"),
