@@ -3,10 +3,10 @@
 // FeatureWatcher -- the frames of a run, with the features found on them, while
 // the extractor is still working through the rest.
 //
-// It walks the image list in the order the extractor does and waits for each
-// one's feature file to appear, so the reel advances at the pace of the stage
-// rather than at the pace of the disk. Its own thread because it decodes an
-// image per frame, which is not something to do between two ImGui calls.
+// It puts each image on the reel as its feature file appears, so the reel
+// advances at the pace of the stage, in the extractor's order, whatever that
+// is. Its own thread because it decodes an image per frame, which is not
+// something to do between two ImGui calls.
 //
 // No channel from the child is involved: the feature files ARE the channel,
 // and they are written whether or not anybody is watching.
