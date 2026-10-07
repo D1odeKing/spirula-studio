@@ -698,12 +698,34 @@ bool Context::wait(uint64_t value) {
     wi.semaphoreCount = 1;
     wi.pSemaphores = &_timeline;
     wi.pValues = &value;
-    VkResult r = vkWaitSemaphores(_device, &wi, UINT64_MAX);
-    if (r != VK_SUCCESS) {
-        set_error("vkWaitSemaphores failed", r);
-        return false;
+    // Waited in slices: after a driver reset, an unbounded wait can block forever
+    // instead of reporting the lost device. Windows resets any job running past
+    // two seconds, so a minute in which no work finishes means the GPU is gone.
+    uint64_t seen = 0;
+    auto progressed = std::chrono::steady_clock::now();
+    for (;;) {
+        VkResult r = vkWaitSemaphores(_device, &wi, 1000000000ull);
+        if (r == VK_SUCCESS) return true;
+        if (r != VK_TIMEOUT) {
+            set_error("vkWaitSemaphores failed", r);
+            return false;
+        }
+        uint64_t current = 0;
+        r = vkGetSemaphoreCounterValue(_device, _timeline, &current);
+        if (r != VK_SUCCESS) {
+            set_error("vkGetSemaphoreCounterValue failed", r);
+            return false;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (current != seen) {
+            seen = current;
+            progressed = now;
+        } else if (now - progressed > std::chrono::seconds(60)) {
+            set_error("the GPU stopped responding: no work finished for a minute (the driver may have "
+                      "reset it, often after running out of GPU memory)", VK_ERROR_DEVICE_LOST);
+            return false;
+        }
     }
-    return true;
 }
 
 uint32_t Context::find_memory_type(uint32_t type_bits,

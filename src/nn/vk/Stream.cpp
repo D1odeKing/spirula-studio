@@ -4,6 +4,7 @@
 #include "nn/core/Log.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -168,6 +169,34 @@ void Stream::shutdown() {
 // Recording
 // ================
 
+namespace {
+
+// Waits in slices, failing on a lost device or a minute with no work finished:
+// after a driver reset an unbounded wait can block forever (see the training
+// backend's Context::wait for the same reasoning).
+void wait_timeline(VkDevice device, VkSemaphore timeline, const uint64_t* value) {
+    VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+    wi.semaphoreCount = 1;
+    wi.pSemaphores = &timeline;
+    wi.pValues = value;
+    uint64_t seen = 0;
+    auto progressed = std::chrono::steady_clock::now();
+    for (;;) {
+        const VkResult r = vkWaitSemaphores(device, &wi, 1000000000ull);
+        if (r == VK_SUCCESS) return;
+        if (r != VK_TIMEOUT) NN_VK_CHECK(r);
+        uint64_t current = 0;
+        NN_VK_CHECK(vkGetSemaphoreCounterValue(device, timeline, &current));
+        const auto now = std::chrono::steady_clock::now();
+        if (current != seen) { seen = current; progressed = now; }
+        else if (now - progressed > std::chrono::seconds(60))
+            ::nn::fail("the GPU stopped responding: no work finished for a minute "
+                       "(the driver may have reset it, often after running out of GPU memory)");
+    }
+}
+
+}  // namespace
+
 VkCommandBuffer Stream::begin() {
     Impl& s = impl();
     if (s.recording) return s.cbs[s.cur];
@@ -178,11 +207,7 @@ VkCommandBuffer Stream::begin() {
         uint64_t v = 0;
         vkGetSemaphoreCounterValue(ctx.device(), s.timeline, &v);
         if (v < s.cb_value[s.cur]) {
-            VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
-            wi.semaphoreCount = 1;
-            wi.pSemaphores = &s.timeline;
-            wi.pValues = &s.cb_value[s.cur];
-            NN_VK_CHECK(vkWaitSemaphores(ctx.device(), &wi, UINT64_MAX));
+            wait_timeline(ctx.device(), s.timeline, &s.cb_value[s.cur]);
         }
         s.harvest(s.cur);
     }
@@ -276,11 +301,7 @@ void Stream::sync() {
     uint64_t v = 0;
     vkGetSemaphoreCounterValue(ctx.device(), s.timeline, &v);
     if (v < s.submitted) {
-        VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
-        wi.semaphoreCount = 1;
-        wi.pSemaphores = &s.timeline;
-        wi.pValues = &s.submitted;
-        NN_VK_CHECK(vkWaitSemaphores(ctx.device(), &wi, UINT64_MAX));
+        wait_timeline(ctx.device(), s.timeline, &s.submitted);
     }
     for (int i = 0; i < Impl::kRing; ++i) s.harvest(i);
     s.resolveQueries();
