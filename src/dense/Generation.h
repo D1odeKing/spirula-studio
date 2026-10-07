@@ -200,21 +200,26 @@ inline std::string verified_seed_path(const std::string& dataset, const std::str
 
 // The dense cloud an edit saved to `path` replaces, and its dataset: the current
 // generation for the dense folder's own roma.ply. False when `path` is not one.
-inline bool edited_artifact(const std::filesystem::path& path, std::string& dataset, ArtifactFiles& files) {
+// The dataset folder whose dense cloud `path` is, from the path alone; "" otherwise.
+inline std::string dense_dataset_of(const std::filesystem::path& path) {
     namespace fs = std::filesystem;
     const fs::path file = fs::absolute(path).lexically_normal(), parent = file.parent_path();
-    if (file.filename() != "roma.ply") return false;
-    if (parent.filename() == "dense") {
-        dataset = parent.parent_path().string();
-        files = artifact_files(dataset);
-        return true;
-    }
+    if (file.filename() != "roma.ply") return {};
+    if (parent.filename() == "dense") return parent.parent_path().string();
     const auto generations = parent.parent_path();
     if (generations.filename() != "generations" || generations.parent_path().filename() != "dense" ||
         !generation_name(parent.filename().string()))
-        return false;
-    dataset = generations.parent_path().parent_path().string();
-    files = {file, parent / "manifest.json", parent.filename().string()};
+        return {};
+    return generations.parent_path().parent_path().string();
+}
+
+inline bool edited_artifact(const std::filesystem::path& path, std::string& dataset, ArtifactFiles& files) {
+    namespace fs = std::filesystem;
+    dataset = dense_dataset_of(path);
+    if (dataset.empty()) return false;
+    const fs::path file = fs::absolute(path).lexically_normal(), parent = file.parent_path();
+    files = parent.filename() == "dense" ? artifact_files(dataset)
+                                         : ArtifactFiles{file, parent / "manifest.json", parent.filename().string()};
     return true;
 }
 

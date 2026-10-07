@@ -692,7 +692,9 @@ void EditSession::draw_panel() {
 void EditSession::draw_trainer_button(float full) {
     const std::string dataset = trainer_dataset();
     if (dataset.empty()) return;
-    const int target = folder_target();
+    // A dense cloud has no folder target: its one target is the cloud itself.
+    const bool dense = !dense_dataset().empty();
+    const int target = dense ? 0 : folder_target();
     ImGui::Spacing();
     if (ui::Button(msg::to_trainer, ImVec2(full, 0))) {
         if (!_doc->dirty()) {
@@ -717,7 +719,7 @@ void EditSession::draw_trainer_button(float full) {
             save_in_place();
             ImGui::CloseCurrentPopup();
         }
-        if (can_save_copy()) {
+        if (can_save_copy() && !dense) {   // a copy elsewhere would not be the seed
             ImGui::SameLine();
             if (ui::Button(msg::save_copy)) {
                 _train_after_save = true;

@@ -139,6 +139,14 @@ int main() {
     std::string found;
     ArtifactFiles files;
     check(!edited_artifact(root / "elsewhere" / "cloud.ply", found, files), "other files are left alone");
+    const fs::path ds = root / "set";
+    check(fs::equivalent(dense_dataset_of(ds / "dense" / "roma.ply"), ds, ec) || dense_dataset_of(ds / "dense" / "roma.ply") ==
+              fs::absolute(ds).lexically_normal().string(), "the dense folder's cloud names its dataset");
+    check(dense_dataset_of(ds / "dense" / "generations" / "run-1" / "roma.ply") == fs::absolute(ds).lexically_normal().string(),
+          "a generation's cloud names its dataset");
+    check(dense_dataset_of(ds / "dense" / "generations" / "run-1" / "other.ply").empty() &&
+              dense_dataset_of(ds / "roma.ply").empty() && dense_dataset_of(ds / "dense" / "generations" / ".." / "roma.ply") ==
+              fs::absolute(ds).lexically_normal().string(), "other files name no dataset");
     fs::remove_all(root, ec);
     std::printf("%s\n", g_failures ? "dense_edit_test: FAILED" : "dense_edit_test: OK");
     return g_failures ? 1 : 0;

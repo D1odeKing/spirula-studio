@@ -1107,7 +1107,8 @@ void GuiApp::open_dataset(std::string dir, std::string image_dir,
     if (!_dense_selected_seed.empty() && _cfg.seed_pointcloud == _dense_selected_seed && dir != _workspace) {
         _cfg.seed_pointcloud.clear(); _dense_selected_seed.clear();
     }
-    if (dir == _workspace && _dense.enable && _dense.use_for_training && dense_completed(dir) &&
+    const bool want_dense = std::exchange(_force_dense_seed, false) || (_dense.enable && _dense.use_for_training);
+    if (dir == _workspace && want_dense && dense_completed(dir) &&
         !_cfg_ui.touched.count("seed_pointcloud") && (_cfg.seed_pointcloud.empty() || _cfg.seed_pointcloud == _dense_selected_seed)) {
         _dense_selected_seed = spirula::dense::artifact_files(dir).cloud.string();
         _cfg.seed_pointcloud = _dense_selected_seed;
@@ -1151,6 +1152,9 @@ void GuiApp::open_edited_dataset() {
         std::error_code ec;
         return !a.empty() && !b.empty() && fs::equivalent(a, b, ec);
     };
+    // An edited dense cloud trains as the seed, whatever the dense options say.
+    _force_dense_seed = same(dataset, source) && same(source, _sparse_edit_src.dir) &&
+                        dense_completed(source);
     DatasetFolders from;
     if (same(source, _sparse_edit_src.dir) ||
         same(source, spirula::resolve_sparse_dir(_sparse_edit_src.dir)))
@@ -6290,6 +6294,16 @@ void GuiApp::draw_dataset_open_buttons(const DatasetFolders& f, bool model) {
             request_open_splat(f.dir);
         }
         ui::help_on_hover(emsg::sparse_edit_help);
+        if (f.dir == _workspace && workspace_state().dense) {
+            ImGui::SameLine();
+            if (ui::Button(spirula::i18n::msg::dense::edit_cloud)) {
+                _edit_after_open = true;
+                _sparse_edit_src = f;
+                try { request_open_splat(spirula::dense::artifact_files(f.dir).cloud.string()); }
+                catch (const std::exception& e) { log(e.what()); }
+            }
+            ui::help_on_hover(spirula::i18n::msg::dense::edit_cloud_help);
+        }
         ImGui::SameLine();
         if (ui::Button(spirula::i18n::msg::partition::open_button)) open_partition_panel(f);
         ui::help_on_hover(spirula::i18n::msg::partition::open_button_help);

@@ -621,6 +621,7 @@ private:
         bool mask_flipped = false;
     };
     DatasetFolders _sparse_edit_src;
+    bool _force_dense_seed = false;   // the next open trains from the dense cloud just edited
     // A dataset already in the output folder, read the way a run would read it.
     DatasetFolders workspace_folders(const WorkspaceState& prior) const;
     // Open in trainer / edit reconstruction / correct masks, for one dataset.

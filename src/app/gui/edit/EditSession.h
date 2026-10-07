@@ -349,6 +349,8 @@ private:
     bool _ask_train = false;
     // The dataset the trainer button would open, "" when there is none.
     std::string trainer_dataset() const;
+    // The dataset whose dense cloud is being edited, or "".
+    std::string dense_dataset() const;
     int folder_target() const;
     void draw_trainer_button(float full);
     void take_save_result();

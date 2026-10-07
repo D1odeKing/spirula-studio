@@ -6,6 +6,7 @@
 #include "app/gui/ViewportPanel.h"
 #include "i18n/Message.h"
 #include "app/gui/edit/PointsDoc.h"
+#include "dense/Generation.h"
 #include "app/gui/edit/WorldGrid.h"
 #include "i18n/catalog/Edit.h"
 #include "i18n/catalog/EditTransform.h"
@@ -627,8 +628,13 @@ void EditSession::poll() {
 
 std::string EditSession::trainer_dataset() const {
     if (!_to_trainer || !_doc || _doc->kind() != EditDoc::Kind::Points) return {};
-    if (folder_target() < 0) return {};
+    if (folder_target() < 0) return dense_dataset();
     return static_cast<const PointsDoc*>(_doc.get())->dataset_dir();
+}
+
+std::string EditSession::dense_dataset() const {
+    if (!_doc || _doc->kind() != EditDoc::Kind::Points) return {};
+    return spirula::dense::dense_dataset_of(_doc->source_path());
 }
 
 int EditSession::folder_target() const {
@@ -710,8 +716,10 @@ void EditSession::take_save_result() {
         _status = spirula::i18n::format(msg::saved_to, {_save_path});
         _status_err = false;
         // Last: the owner is free to end this session in answer.
+        // A dense cloud is saved inside its dataset, which is what trains.
+        const std::string dense = dense_dataset();
         if (to_trainer && _to_trainer)
-            _to_trainer(_save_path, trainer_dataset());
+            _to_trainer(dense.empty() ? _save_path : dense, trainer_dataset());
     } else {
         _status = spirula::i18n::format(msg::save_failed, {_save_error});
         _status_err = true;
