@@ -193,7 +193,36 @@ expectation, one executable. Neither exists yet.
 | what a typed-in command line becomes, or what a message may carry into it | `command_argv_test` — the message stays one argument and stays JSON-safe |
 | the home screen's recent list, or how `gui.conf` stores it | `recent_list_test` |
 | a per-cell optimizer launcher (Vulkan) | `SS_OPTIM_SLICE_CELLS=2048` on `optim_parity` / `optimgeo_parity`, which forces the multi-slice path only an SH buffer past ~24M splats would otherwise take ([SH layouts](notes/sh-quant-layout.md)) |
+| H.265 reference handling | `hevc_reference_retention_test` on a non-NVIDIA Vulkan video-decode device with `SS_ENABLE_PATENTED=ON` |
 | anything | one short training run per backend on a public scene |
+
+## H.265 retained-reference regression
+
+With patented decoding explicitly enabled, run `build_vulkan/hevc_reference_retention_test`
+on a supported **non-NVIDIA Vulkan device** advertising H.265 Main and Main10
+video decode (on Windows, use `build_vulkan\hevc_reference_retention_test.exe`).
+Build with `build_develop.bat -DSS_BACKEND=vulkan -DSS_ENABLE_PATENTED=ON`
+on Windows or the corresponding `build_develop.bash` command on Linux.
+The committed 320×180, 72-frame fixtures in `src/video/tests/data/` are
+synthetic FFmpeg `testsrc2` clips, not private recordings. The test checks
+software-decoded RGB pixels in both the full run and after seeking backward
+across GOP boundaries; an exit code alone is not a pixel-correctness check.
+It requires an actual video-decode-capable GPU, not a CPU-only test runner.
+
+To regenerate either `hevc_main_retention` (8-bit `yuv420p`) or
+`hevc_main10_retention` (10-bit `yuv420p10le`), substitute `<format>` and
+`<name>` in these commands; FFmpeg must have `libx265`:
+
+```sh
+ffmpeg -f lavfi -i 'testsrc2=size=320x180:rate=24:duration=3' -pix_fmt <format> -c:v libx265 -preset medium -crf 20 -x265-params 'keyint=24:min-keyint=24:bframes=4:ref=4:scenecut=0:pools=2:log-level=error' <name>.mp4
+ffmpeg -i <name>.mp4 -vf 'select=eq(n\,22)+eq(n\,46)' -fps_mode passthrough -frames:v 2 -pix_fmt rgb24 -f rawvideo <name>.rgb
+```
+
+At POC 24, the short-term RPS retains four pictures marked unused by the
+current picture; following pictures use them. The second GOP exercises
+retirement and slot reuse. The Main10 test failed before the correction
+(frame 22: 10.53 dB PSNR against software) and passes with retained references;
+the threshold is 28 dB to allow host/GPU color-conversion differences.
 
 ## Profiling
 
