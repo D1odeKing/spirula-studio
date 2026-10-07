@@ -70,25 +70,9 @@ void FeatureWatcher::run(std::string image_dir, std::string mask_dir,
     std::sort(files.begin(), files.end());
 
     const fs::path root(image_dir);
-    for (const fs::path& f : files) {
-        // The feature files mirror the image tree, so a camera folder is part
-        // of the name. Lexical: fs::relative resolves symlinks, and an images/
-        // of links into a raw capture would relativize right out of the tree.
-        fs::path rel = f.lexically_relative(root);
-        if (rel.empty() || *rel.begin() == "..") rel = f.filename();
-        const std::string rel_stem =
-            (rel.parent_path() / rel.stem()).generic_string();
-        const std::string feat =
-            (fs::path(features_dir) / (rel_stem + ".bin")).string();
-
-        std::vector<KeyPoint2D> kp;
-        // Wait for this image's turn rather than skipping ahead: out of order,
-        // the reel would show whatever the disk happened to have and none of
-        // the sense of the stage working through the capture.
-        while (!_stop.load() && !read_keypoints_file(feat, 0, 0, kp))
-            std::this_thread::sleep_for(std::chrono::milliseconds(120));
-        if (_stop.load()) return;
-
+    auto show = [&](const fs::path& f, const fs::path& rel,
+                    const std::string& rel_stem, const std::string& feat,
+                    std::vector<KeyPoint2D>& kp) {
         FilmFrame frame;
         frame.name = rel.generic_string();
         frame.image_path = f.string();
@@ -133,6 +117,44 @@ void FeatureWatcher::run(std::string image_dir, std::string mask_dir,
         } else {
             film->add(frame);
         }
+    };
+
+    struct Pending {
+        const fs::path* file;
+        fs::path rel;
+        std::string rel_stem, feat;
+    };
+    std::vector<Pending> pending;
+    pending.reserve(files.size());
+    for (const fs::path& f : files) {
+        // The feature files mirror the image tree, so a camera folder is part
+        // of the name. Lexical: fs::relative resolves symlinks, and an images/
+        // of links into a raw capture would relativize right out of the tree.
+        fs::path rel = f.lexically_relative(root);
+        if (rel.empty() || *rel.begin() == "..") rel = f.filename();
+        std::string rel_stem = (rel.parent_path() / rel.stem()).generic_string();
+        std::string feat = (fs::path(features_dir) / (rel_stem + ".bin")).string();
+        pending.push_back({&f, std::move(rel), std::move(rel_stem), std::move(feat)});
+    }
+
+    // Whatever is ready, not one name at a time: the extractor goes largest
+    // image first, and skips one it cannot decode, so waiting on the next name
+    // stalls the reel on a capture of mixed sizes until that image comes up.
+    std::vector<KeyPoint2D> kp;
+    while (!pending.empty()) {
+        bool any = false;
+        for (size_t i = 0; i < pending.size() && !_stop.load();) {
+            const Pending& p = pending[i];
+            if (!read_keypoints_file(p.feat, 0, 0, kp)) {
+                i++;
+                continue;
+            }
+            show(*p.file, p.rel, p.rel_stem, p.feat, kp);
+            pending.erase(pending.begin() + (ptrdiff_t)i);
+            any = true;
+        }
+        if (_stop.load()) return;
+        if (!any) std::this_thread::sleep_for(std::chrono::milliseconds(120));
     }
 }
 
