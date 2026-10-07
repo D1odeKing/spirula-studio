@@ -9,6 +9,7 @@ namespace gui {
 
 struct DenseJob {
     bool enable = false, use_for_training = true;
+    bool log_performance = false;   // --perf-dir; not a dense setting, so reuse ignores it
     spirula::dense::DenseConfig config;
 };
 

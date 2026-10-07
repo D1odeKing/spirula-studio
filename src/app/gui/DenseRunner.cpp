@@ -11,6 +11,7 @@
 #include "nn/Device.h"
 #endif
 
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 
@@ -49,9 +50,17 @@ bool run_dense_step(const DenseJob& job, const std::string& dataset, const std::
     if (!file) { error = spirula::i18n::format(D::error, {settings.string()}); return false; }
     file.close();
     progress.enter(Stage::Dense, D::title.get());
-    const std::vector<std::string> argv{app::exe_path(), "--lang", spirula::i18n::code(spirula::i18n::current()),
-                                      "dense", dataset, "--config", settings.string(),
-                                      "--progress-dir", spirula::dense::progress_dir(dataset).string()};
+    std::vector<std::string> argv{app::exe_path(), "--lang", spirula::i18n::code(spirula::i18n::current()),
+                                  "dense", dataset, "--config", settings.string(),
+                                  "--progress-dir", spirula::dense::progress_dir(dataset).string()};
+    fs::path perf;
+    if (job.log_performance) {
+        char stamp[32];
+        const std::time_t now = std::time(nullptr);
+        std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", std::localtime(&now));
+        perf = fs::absolute(root / "perf" / stamp);
+        argv.insert(argv.end(), {"--perf-dir", perf.string()});
+    }
     std::string child_error;
     const int code = run_process(argv, "", [&](const std::string& line) {
         std::vector<std::string> fields;
@@ -70,6 +79,7 @@ bool run_dense_step(const DenseJob& job, const std::string& dataset, const std::
             progress.detail(Stage::Dense, line);
         } else progress.note(line, !spirula::i18n::scan(D::completed, line, fields));
     }, cancel);
+    if (!perf.empty()) progress.note(Stage::Dense, spirula::i18n::format(D::perf_saved, {perf.string()}), false);
     if (code != 0 || !dense_completed(dataset)) {
         error = !child_error.empty() && code != kCancelled ? child_error :
             spirula::i18n::format(D::error, {code == kCancelled ? "cancelled" : "child process did not complete"});

@@ -713,6 +713,7 @@ void GuiApp::write_run_settings(std::ofstream& f) {
     section(spirula::i18n::msg::dense::title.get());
     line("enabled", cfg_str(_dense.enable));
     line("use_for_training", cfg_str(_dense.use_for_training));
+    line("log_performance", cfg_str(_dense.log_performance));
     line("settings", spirula::dense::config_json(_dense.config));
 
     section(msg::runlog_section_geometry.get());

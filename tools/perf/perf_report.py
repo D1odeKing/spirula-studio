@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn a tools/perf/record_run.ps1 session into report.html and a text summary.
 
-Reads, from the session folder: train_perf.csv (the trainer, SS_TRAIN_PERF),
-system.csv, gpu_engines.csv, nvidia.csv and meta.json. Rows are matched by
+Reads, from the session folder: train_perf.csv (the trainer, SS_TRAIN_PERF)
+or dense_perf.csv (the dense step, `spirula dense --perf-dir`), system.csv, gpu_engines.csv, nvidia.csv and meta.json. Rows are matched by
 their Unix-millisecond timestamps. Standard library only; nothing in the build
 or the application uses this.
 
@@ -10,7 +10,9 @@ or the application uses this.
 
 What it answers, per progressive-resolution stage: how fast training ran, and
 whether the GPU was the limit, or waited -- for data (decode on the CPU, or the
-disk) or for other host work in the step.
+disk) or for other host work in the step. For a dense step, the same per phase
+(prepare, match, refine, fuse): GPU-bound, CPU-bound on all cores or on one
+thread, or disk-bound.
 """
 
 import bisect
@@ -196,6 +198,54 @@ def stages(train, cores):
 PALETTE = ["#2a78d6", "#d9611e", "#1f9e6a", "#9b4fd1", "#c7334a", "#7a7a7a"]
 
 
+DENSE_PHASES = ["prepare", "match", "refine", "fuse"]
+
+
+def dense_verdict(st, cores):
+    gpu, cpu, busiest, used = st["gpu"], st["cpu_total"], st["cpu_max_core"], st["spirula_cores"]
+    if not math.isnan(gpu) and gpu >= 75:
+        return ("GPU-bound", "The GPU is busy for most of this phase: the expected state for matching, and the limit here.")
+    if (not math.isnan(cpu) and cpu >= 85) or (cores and not math.isnan(used) and used >= 0.75 * cores):
+        return ("CPU-bound: all cores", "Every core is busy and the GPU waits: the phase is limited by "
+                "CPU work it already spreads across threads (decoding, sampling, refinement, fusion).")
+    if not math.isnan(busiest) and busiest >= 90 and not math.isnan(used) and used < 2.5:
+        return ("CPU-bound: one thread", "One core is saturated while the rest idle: a serial part of this "
+                "phase is the limit, and spreading it across threads would speed it up.")
+    if not math.isnan(st["disk_busy"]) and st["disk_busy"] >= 80:
+        return ("disk-bound", "The disk is busy while the CPU and GPU are not: reading images, caches or "
+                "spilled data is the limit.")
+    return ("waiting", "Neither the CPU, the GPU nor the disk is saturated: time goes to synchronization, "
+            "memory latency or work this sampling cannot see.")
+
+
+def dense_phases(dense, cores):
+    names = [p for p in DENSE_PHASES if any(r["phase"] == p for r in dense)]
+    names += sorted({r["phase"] for r in dense} - set(DENSE_PHASES) - {"complete"})
+    out = []
+    for name in names:
+        rows = [r for r in dense if r["phase"] == name]
+        nv = lambda r: r["nv"].get("utilization_gpu") if isinstance(r["nv"].get("utilization_gpu"), float) else float("nan")
+        both = lambda r: max((v for v in (nv(r), r["adapter"]) if not math.isnan(v)), default=float("nan"))
+        st = {
+            "phase": name,
+            "seconds": sum(r["interval_s"] for r in rows),
+            "done": max((r["done"] for r in rows), default=0),
+            "total": max((r["total"] for r in rows), default=0),
+            "rate": mean(r["done_per_s"] for r in rows if r["done_per_s"] > 0),
+            "gpu": mean(both(r) for r in rows),
+            "nv_util": mean(nv(r) for r in rows),
+            "cpu_total": mean(r["sys"].get("cpu_total") for r in rows),
+            "cpu_max_core": mean(r["sys"].get("cpu_max_core") for r in rows),
+            "spirula_cores": mean(r["sys"].get("spirula_cores") for r in rows),
+            "disk_read_mb": mean((r["sys"].get("disk_read_bps") or 0) / MIB for r in rows if r["sys"]),
+            "disk_busy": mean(r["sys"].get("disk_busy_pct") for r in rows),
+            "ram_used": mean(r["sys"].get("ram_used_gib") for r in rows),
+        }
+        st["verdict"], st["why"] = dense_verdict(st, cores)
+        out.append(st)
+    return out
+
+
 def chart(title, series, t_max, y_label, bands=(), y_max=None, height=170):
     """series: [(name, [(t, y), ...])]."""
     W, H, L, R, T, B = 900, height, 56, 12, 22, 26
@@ -240,8 +290,9 @@ def main(argv):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     meta, train, system, nvidia, adapters = load(session)
+    dense = [r for r in read_csv(session / "dense_perf.csv") if isinstance(r.get("interval_s"), float)]
     meta["cpu"] = str(meta.get("cpu", "")).strip()
-    if not system and not train:
+    if not system and not train and not dense:
         print(f"No samples in {session}")
         return 1
     t0, cores = derive(meta, train, system, nvidia)
@@ -266,10 +317,36 @@ def main(argv):
         bands.insert(0, (0.0, train[0]["t"], "setup"))
 
     st = stages(train, cores)
+
+    # A dense step: its phases are the bands and the table.
+    sys_t, nv_t = [r["unix_ms"] for r in system], [r["unix_ms"] for r in nvidia]
+    for r in dense:
+        r["t"] = rel(r["unix_ms"])
+        r["sys"] = nearest(sys_t, system, r["unix_ms"]) or {}
+        r["nv"] = nearest(nv_t, nvidia, r["unix_ms"]) or {}
+        # Spirula's busiest adapter, the driver's per-process view for any GPU vendor.
+        near = [v for series in adapters.values() for t_, v in series if abs(t_ - r["unix_ms"]) <= 1500]
+        r["adapter"] = max(near) if near else float("nan")
+    phases = dense_phases(dense, cores)
+    if dense and not train:
+        cur = None
+        for r in dense:
+            if cur is None or r["phase"] != cur[1]:
+                if cur:
+                    bands.append((cur[0], r["t"], cur[1]))
+                cur = (r["t"], r["phase"])
+        if cur:
+            bands.append((cur[0], t_max, cur[1]))
     sys_series = lambda key, scale=1.0: [(rel(r["unix_ms"]), r[key] * scale) for r in system if isinstance(r.get(key), float)]
     nv_series = lambda key, scale=1.0: [(rel(r["unix_ms"]), r[key] * scale) for r in nvidia if isinstance(r.get(key), float)]
 
     charts = []
+    if dense:
+        charts.append(chart("Dense progress", [
+            ("% of the phase done", [(r["t"], 100.0 * r["done"] / r["total"]) for r in dense if r["total"] > 0])],
+            t_max, "%", bands, 100))
+        charts.append(chart("Dense rate", [("items per second", [(r["t"], r["done_per_s"]) for r in dense])],
+                            t_max, "/s", bands))
     if train:
         charts.append(chart("Training throughput", [("steps per second", [(r["t"], r["steps_per_s"]) for r in train])],
                             t_max, "steps/s", bands))
@@ -316,7 +393,7 @@ def main(argv):
             lines += ["Settings: " + ", ".join(f"{k} {cfg[k]}" for k in keys if cfg.get(k) not in (None, "")), ""]
         except (ValueError, OSError):
             pass
-    if not train:
+    if not train and not dense:
         lines.append("No train_perf.csv: tick Log performance stats in the GUI (or start Spirula through "
                      "record_run.ps1) to see where step time goes.")
     if setup:
@@ -326,6 +403,13 @@ def main(argv):
                   f"Spirula {fmt(mean(r.get('spirula_cores') for r in setup))} cores, "
                   f"disk {fmt(mean((r.get('disk_read_bps') or 0) / MIB for r in setup), 0)} MB/s, "
                   f"RAM up to {fmt(max((r.get('ram_used_gib') or 0) for r in setup), 1)} GiB", ""]
+    for s in phases:
+        lines += [f"Phase {s['phase']}: {fmt(s['seconds'] / 60)} min, {int(s['done'])} of {int(s['total'])} done, "
+                  f"{fmt(s['rate'], 2)} per second while advancing",
+                  f"  GPU {fmt(s['gpu'], 0, '%')} (NVIDIA {fmt(s['nv_util'], 0, '%')}), CPU {fmt(s['cpu_total'], 0, '%')}, "
+                  f"busiest core {fmt(s['cpu_max_core'], 0, '%')}, Spirula {fmt(s['spirula_cores'])} cores, "
+                  f"disk {fmt(s['disk_read_mb'], 0)} MB/s, RAM {fmt(s['ram_used'], 1)} GiB",
+                  f"  -> {s['verdict']}: {s['why']}", ""]
     for s in st:
         label = "1/%d" % s["divisor"] if s["divisor"] > 1 else "full size"
         thr = ", ".join(f"{k} {100 * v:.0f}%" for k, v in s["throttle"].items()) or "none"
@@ -346,11 +430,21 @@ def main(argv):
         f"<td>{fmt(s['nv_util'], 0, '%')}</td><td>{fmt(s['cpu_total'], 0, '%')}</td><td>{fmt(s['spirula_cores'])}</td>"
         f"<td>{fmt(s['disk_read_mb'], 0)}</td><td><b>{html.escape(s['verdict'])}</b><br>"
         f"<span class='dim'>{html.escape(s['why'])}</span></td></tr>" for s in st)
+    dense_rows = "".join(
+        f"<tr><td>{html.escape(s['phase'])}</td><td>{fmt(s['seconds'] / 60)}</td>"
+        f"<td>{int(s['done'])} / {int(s['total'])}</td><td>{fmt(s['rate'], 2)}</td><td>{fmt(s['gpu'], 0, '%')}</td>"
+        f"<td>{fmt(s['cpu_total'], 0, '%')}</td><td>{fmt(s['cpu_max_core'], 0, '%')}</td><td>{fmt(s['spirula_cores'])}</td>"
+        f"<td>{fmt(s['disk_read_mb'], 0)}</td><td><b>{html.escape(s['verdict'])}</b><br>"
+        f"<span class='dim'>{html.escape(s['why'])}</span></td></tr>" for s in phases)
+    dense_table = ("<table><thead><tr><th>Phase</th><th>min</th><th>done</th><th>per s</th><th>GPU</th><th>CPU</th>"
+                   "<th>busiest core</th><th>Spirula cores</th><th>disk MB/s</th><th>Verdict</th></tr></thead>"
+                   f"<tbody>{dense_rows}</tbody></table>") if phases else ""
+    title = "Dense step performance" if phases and not st else "Training performance"
     table = ("<table><thead><tr><th>Stage</th><th>min</th><th>steps</th><th>steps/s</th><th>ms/step</th>"
              "<th>data wait</th><th>GPU busy</th><th>NVIDIA</th><th>CPU</th><th>Spirula cores</th><th>disk MB/s</th>"
              f"<th>Verdict</th></tr></thead><tbody>{rows}</tbody></table>") if st else ""
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Training performance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title>
 <style>
 :root {{ --bg:#fbfbfa; --fg:#1d1d1f; --dim:#6b6b70; --grid:#e3e3e0; --band0:#eef3fb; --band1:#f6f1ea; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --bg:#161618; --fg:#ececee; --dim:#9a9aa0; --grid:#2c2c30;
@@ -367,9 +461,9 @@ th, td {{ text-align:left; padding:6px 8px; border-bottom:1px solid var(--grid);
 pre {{ white-space:pre-wrap; background:var(--band0); padding:10px; border-radius:6px; font-size:12px; }}
 .wrap {{ overflow-x:auto; }}
 </style></head><body>
-<h1>Training performance</h1>
+<h1>{title}</h1>
 <p class="dim">{html.escape(meta.get('cpu', ''))} · {', '.join(html.escape(g.get('name', '')) for g in meta.get('gpus', []))}</p>
-<div class="wrap">{table}</div>
+<div class="wrap">{dense_table}{table}</div>
 {''.join(charts)}
 <h3>Summary</h3><pre>{html.escape(summary)}</pre>
 </body></html>"""

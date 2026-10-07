@@ -2,6 +2,7 @@
 #include "dense/Artifact.h"
 
 #include "app/FrameLook.h"
+#include "app/SystemRecorder.h"
 #include "app/GeometryWarp.h"
 #include "core/AtomicFile.h"
 #include "core/FileLock.h"
@@ -652,6 +653,82 @@ private:
     std::thread thread_;
 };
 
+// --perf-dir: once a second, the phase and its progress beside the machine's
+// counters (app/SystemRecorder.h), for tools/perf/perf_report.py.
+class DensePerfLog {
+public:
+    explicit DensePerfLog(const fs::path& dir) {
+        if (dir.empty()) return;
+        std::error_code error;
+        fs::create_directories(dir, error);
+        file_ = std::fopen((dir / "dense_perf.csv").string().c_str(), "w");
+        if (!file_) return;
+        std::fputs("unix_ms,phase,done,total,interval_s,done_per_s,rss_bytes\n", file_);
+        system_.start(dir);
+        thread_ = std::thread([this] { run(); });
+    }
+    ~DensePerfLog() {
+        if (thread_.joinable()) {
+            { std::lock_guard<std::mutex> lock(mutex_); quit_ = true; }
+            wake_.notify_all();
+            thread_.join();
+        }
+        system_.stop();
+        if (file_) std::fclose(file_);
+    }
+    // A phase change writes its row at once, so a phase shorter than a second still shows.
+    void update(const char* phase, uint64_t done, uint64_t total) {
+        if (!file_) return;
+        bool switched = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (phase_ != phase) {
+                closing_ = phase_ + "," + std::to_string(done_) + "," + std::to_string(total_);
+                last_done_ = 0; switched = switched_ = true;
+            }
+            phase_ = phase; done_ = done; total_ = total;
+        }
+        if (switched) wake_.notify_all();
+    }
+
+private:
+    void run() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        auto last = std::chrono::steady_clock::now();
+        for (;;) {
+            wake_.wait_for(lock, std::chrono::seconds(1), [&] { return quit_ || switched_; });
+            if (quit_) return;
+            switched_ = false;
+            const auto now = std::chrono::steady_clock::now();
+            const double interval = std::chrono::duration<double>(now - last).count();
+            last = now;
+            const long long ms = (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            // The phase just left, at its last count: it can end between two samples.
+            if (!closing_.empty()) {
+                std::fprintf(file_, "%lld,%s,0.0000,0.000,%llu\n", ms - 1, closing_.c_str(),
+                             (unsigned long long)sfm::processRamBytes());
+                closing_.clear();
+            }
+            const double rate = done_ >= last_done_ ? (double)(done_ - last_done_) / std::max(interval, 1e-3) : 0.0;
+            last_done_ = done_;
+            std::fprintf(file_, "%lld,%s,%llu,%llu,%.4f,%.3f,%llu\n", ms, phase_.c_str(),
+                         (unsigned long long)done_, (unsigned long long)total_, interval, rate,
+                         (unsigned long long)sfm::processRamBytes());
+            std::fflush(file_);
+        }
+    }
+
+    std::FILE* file_ = nullptr;
+    spirula::SystemRecorder system_;
+    std::thread thread_;
+    std::mutex mutex_;
+    std::condition_variable wake_;
+    bool quit_ = false, switched_ = false;
+    std::string phase_ = "prepare", closing_;
+    uint64_t done_ = 0, total_ = 0, last_done_ = 0;
+};
+
 void report_device(MemoryReporter& memory, const roma::Session& session) {
     const auto& context = nn::vk::Context::get();
     const auto budget = context.memoryBudget();
@@ -715,8 +792,9 @@ void cache_prediction(const fs::path& path, const roma::PairPrediction& p) {
 
 DenseResult run_dense(const std::string& dataset_path, const spirula::dense::DenseConfig& config,
                        const spirula::dense::DenseProgress& caller_progress, const std::atomic<bool>* cancel,
-                       const std::string& progress_dir) {
+                       const std::string& progress_dir, const std::string& perf_dir) {
     config.validate_run(); check_cancel(cancel);
+    DensePerfLog perf(perf_dir);
     const auto start = std::chrono::steady_clock::now();
     const fs::path root = fs::absolute(dataset_path);
     fs::create_directories(root / "dense" / "cache");
@@ -734,6 +812,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     memory.phase("prepare");
     const DenseProgress progress = [&](const char* stage, uint64_t done, uint64_t total) {
         memory.phase(stage);
+        perf.update(stage, done, total);
         if (caller_progress) caller_progress(stage, done, total);
     };
     DatasetParserConfig parser;
@@ -1030,6 +1109,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     }
     fs::remove(unordered_unique); fs::remove(ordered_unique);
     const double prepare_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    if (progress) progress("match", 0, job_count);   // model loading is matching's, not preparation's
 
     // Decoding runs ahead on worker threads and reconstruction trails on its own,
     // so the GPU waits only for its own previous pair.

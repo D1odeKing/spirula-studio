@@ -157,6 +157,14 @@ showing the preview retries loading. **Show what the run is doing** switches
 live loading and drawing off; hiding the dense preview releases its cloud and
 OpenGL buffers. Recording the disk checkpoint continues independently.
 
+### Performance stats
+
+**Log performance stats** in the dense options records the computer and the
+step once a second into a new folder under `dense/perf/`: CPU per core, RAM,
+disk, GPU use per adapter, NVIDIA clocks and temperature, and the phase with
+its progress. `python tools/perf/perf_report.py <that folder>` reports what
+limited each phase. See `tools/perf/README.md`.
+
 ### Editing the cloud before training
 
 The dense cloud can be cleaned up before it seeds training: cropped to the

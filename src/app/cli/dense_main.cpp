@@ -70,7 +70,7 @@ void help() {
     std::printf("  --%-30s %s\n", name.c_str(), name == "precision" ? "auto (auto|float32|mixed)" : json_field::emit(defaults.member).c_str()); }
     SS_DENSE_CONFIG_FIELDS(SS_DENSE_HELP)
 #undef SS_DENSE_HELP
-    std::printf("  --source-workflow true|false\n  --config PATH\n  --write-config PATH\n  --progress-dir DIR\n  --help\n");
+    std::printf("  --source-workflow true|false\n  --config PATH\n  --write-config PATH\n  --progress-dir DIR\n  --perf-dir DIR\n  --help\n");
 }
 
 }  // namespace
@@ -79,7 +79,7 @@ int spirula_dense_main(int argc, char** argv) {
     app::set_program_name(argc ? argv[0] : nullptr, "spirula dense");
     try {
         DenseConfig config;
-        std::string dataset, write_config, progress_dir;
+        std::string dataset, write_config, progress_dir, perf_dir;
         for (int i = 1; i < argc; ++i) {
             const std::string option = argv[i];
             if (option == "--help" || option == "-h") { help(); return 0; }
@@ -92,6 +92,7 @@ int spirula_dense_main(int argc, char** argv) {
             if (option == "--config") read_config(config, json_parse_file(value));
             else if (option == "--write-config") write_config = value;
             else if (option == "--progress-dir") progress_dir = value;
+            else if (option == "--perf-dir") perf_dir = value;
             else if (!command_field(config, option.substr(2), value)) throw std::runtime_error("unknown dense option: " + option);
         }
         config.validate_run();
@@ -116,7 +117,7 @@ int spirula_dense_main(int argc, char** argv) {
             const auto text = total ? format(D::progress, {label, (long long)done, (long long)total}) : format(D::count, {label, (long long)done});
             std::printf("%s\n", text.c_str()); std::fflush(stdout);
         };
-        const auto result = app::run_dense(dataset, config, progress, &interrupted, progress_dir);
+        const auto result = app::run_dense(dataset, config, progress, &interrupted, progress_dir, perf_dir);
         nn::shutdown();
         std::printf("%s\n", format(D::completed, {result.cloud, (long long)result.statistics.exported, result.seconds}).c_str());
         return 0;

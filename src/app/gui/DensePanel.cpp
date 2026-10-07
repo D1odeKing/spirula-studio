@@ -84,6 +84,8 @@ void GuiApp::draw_dense_options() {
     if (!_dense.enable) return;
     ui::Checkbox(D::use_training, &_dense.use_for_training);
     ui::help_on_hover_disabled(D::use_training_help);
+    ui::Checkbox(D::log_performance, &_dense.log_performance);
+    ui::help_on_hover_disabled(D::log_performance_help);
     auto& config = _dense.config;
     bool changed = false;
     int matching_space = config.matching_space == "source" ? 1 : 0;

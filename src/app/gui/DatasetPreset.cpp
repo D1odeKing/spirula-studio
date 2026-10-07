@@ -20,6 +20,7 @@ namespace {
     X("engine_colmap",              colmap_engine)                            \
     X("dense_enable",               sfm.dense.enable)                         \
     X("dense_use_for_training",     sfm.dense.use_for_training)               \
+    X("dense_log_performance",      sfm.dense.log_performance)                \
     X("dense_config",               sfm.dense.config)                         \
     /* ---- input handling and frame extraction ---- */                       \
     X("resume",                     sfm.prep.resume)                          \

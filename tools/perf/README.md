@@ -20,6 +20,18 @@ The recorder (`src/app/SystemRecorder.cpp`) uses about 1.5% of one CPU core.
 It covers Windows fully; on Linux it reads `/proc` and NVIDIA's driver but has
 no per-adapter GPU engines, and on macOS it records memory only.
 
+## Record a dense step
+
+Tick **Log performance stats** in the dense step's options (`spirula dense
+DATASET --perf-dir DIR` on the command line). The step records the same machine
+files plus `dense_perf.csv`: once a second, and at every change, the phase
+(prepare, match, refine, fuse) and how far it has got. Each run gets a new
+folder under the dataset's `dense/perf/`, which the log names when the step
+ends, finished or not. The report then gives one row per phase, with a
+verdict: GPU-bound, CPU-bound on all cores, CPU-bound on one thread (a serial
+part that more threads would speed up), disk-bound, or waiting. The option
+does not change the cloud or whether a finished one is reused.
+
 ## Record with the script
 
 `record_run.ps1` records the same files from outside Spirula, for runs the
@@ -47,6 +59,7 @@ e.g. `-- train --data <dataset folder>` for a command-line run.
 
 | File | Source | Contents |
 |---|---|---|
+| `dense_perf.csv` | the dense step (`DensePerfLog` in `src/app/DenseProcessing.cpp`) | per second and at each change: phase, done, total, rate, process RAM |
 | `train_perf.csv` | the trainer (`src/app/TrainPerfLog.h`) | per second: steps, step time, time waiting for the data loader, sampled GPU time per step, resolution stage, splats, pool VRAM, process RAM |
 | `system.csv` | Windows performance counters | CPU per core and total, RAM, disk throughput and busy time, and the CPU, memory, threads and I/O of every `spirula.exe` (a dense step's child included) |
 | `gpu_engines.csv` | Windows GPU engine counters | Spirula's utilization of each engine on each adapter, integrated and discrete |
