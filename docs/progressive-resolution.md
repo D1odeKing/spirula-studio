@@ -66,27 +66,38 @@ coarse shape. After the cap, only nearly transparent splats are ever moved, so
 the solid ones placed early stay where they landed.
 
 **Grow splats with resolution** (`progressive_splat_budget`, on by default
-with progressive resolution) holds each stage to a share of the maximum:
-the maximum divided by the stage's divisor. With the defaults:
+with progressive resolution) holds each stage below a limit and raises it at
+each switch.
 
-| Stage | Steps | Growth may reach |
+**Automatic** (the default) spreads the limits from the starting point count,
+the seed cloud the run begins with, to **Max splats**, raising them by the same
+factor at each stage and reaching the maximum at full resolution. Growth is
+multiplicative, so equal factors are equal shares of the growing. With 1.1
+million starting points and a 4 million maximum:
+
+| Stage | Steps (defaults) | Growth may reach |
 |---|---|---|
-| 1/4 | 0 to 3,000 | 250,000 |
-| 1/2 | 3,000 to 9,000 | 500,000 |
-| full | 9,000 on | 1,000,000 |
+| 1/4 | 0 to 3,000 | about 1.7 million |
+| 1/2 | 3,000 to 9,000 | about 2.6 million |
+| full | 9,000 on | 4 million |
 
-Growth waits at a stage's ceiling and resumes when the next stage begins, so
-the last half of the splats is placed from full-resolution error. A seed point
-cloud larger than the first ceiling is kept whole; growth starts once a later
-ceiling passes it. The budget follows the stages actually used, so a manual
-resolution schedule moves it too.
+The trainer uses the exact count after seeding, and logs it with the limits
+when training starts. The GUI shows the same preview below the setting: the
+point count of the seed cloud when one is set, else the dataset's sparse points
+once it is open. A seed at or above the maximum holds nothing back.
 
-**Manual budget.** `progressive_splat_budget_schedule` replaces the automatic
-ceilings with `step:splats` pairs. The splats are a count or a percent of the
-maximum, for example `0:25%, 3000:50%, 9000:100%`. Ceilings may only grow,
-values above the maximum are clamped to it, and a schedule whose first step is
-not 0 starts at its first value. The GUI shows the ceilings the run will use
-below the field.
+**Manual, per stage** gives one box per resolution stage. Each takes a splat
+count (`500000`), a fraction of the maximum (`0.25`) or a percentage (`25%`);
+a blank box uses the automatic value. Limits may only grow from stage to stage,
+and values above the maximum are clamped to it. Switching to manual fills the
+boxes with the automatic values. On the command line,
+`progressive_splat_budget_schedule` takes the same values separated by commas,
+one per stage, for example `25%, 0.5, 4000000`; `step:splats` pairs such as
+`0:25%, 3000:50%` set limits at explicit steps instead.
+
+Growth waits at a stage's limit and resumes when the next stage begins. Stage
+switches move to whole passes over the dataset, and the limits move with them;
+two stages that land on the same pass keep the later limit.
 
 Growth stops at `refine_stop_iter` (14,000 by default) or at the run length
 minus `refine_stop_num_iter`, whichever is later. A ceiling that rises after
@@ -141,8 +152,8 @@ firms up only after the last switch.
 | `progressive_resolution_start` | `4` | First divisor; a power of two of at least 2. |
 | `progressive_resolution_full_at` | `0.3` | Fraction of the run by which full size is reached. |
 | `progressive_resolution_schedule` | empty | Manual `step:divisor` stages; replaces the automatic ones. |
-| `progressive_splat_budget` | `true` | Hold splat growth to the maximum over each stage's divisor. |
-| `progressive_splat_budget_schedule` | empty | Manual `step:splats` ceilings (counts or percents); replaces the automatic ones. |
+| `progressive_splat_budget` | `true` | Hold splat growth below a limit per stage. |
+| `progressive_splat_budget_schedule` | empty | Empty is automatic; else one limit per stage (count, fraction or percent), or `step:splats` pairs. |
 
 The schedule and the budget are `src/data/ResolutionSchedule.h`; the batches
 are built by `DataManager` (`src/data/DataManager.cpp`), and the plan is logged

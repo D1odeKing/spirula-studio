@@ -6273,6 +6273,117 @@ GuiApp::DatasetFolders GuiApp::workspace_folders(const WorkspaceState& prior) co
     return f;
 }
 
+// The starting point count the automatic budget spreads from: the seed cloud's
+// PLY header when one is set, else the parsed dataset's points; -1 when unknown.
+int64_t GuiApp::starting_points() {
+    std::error_code ec;
+    if (!_cfg.seed_pointcloud.empty()) {
+        fs::path p = _cfg.seed_pointcloud;
+        if (p.is_relative()) p = fs::path(_cfg.data) / p;
+        const auto time = fs::last_write_time(p, ec);
+        if (ec) return -1;
+        if (p.string() != _seed_count_path || time != _seed_count_time) {
+            _seed_count_path = p.string();
+            _seed_count_time = time;
+            _seed_count = -1;
+            std::ifstream in(p, std::ios::binary);
+            for (std::string line; std::getline(in, line) && line.rfind("end_header", 0) != 0;)
+                if (line.rfind("element vertex ", 0) == 0) _seed_count = std::atoll(line.c_str() + 15);
+        }
+        return _seed_count;
+    }
+    const auto ph = _runner.phase();
+    if (const auto* s = _runner.session();
+        s && (ph == TrainRunner::Phase::Ready || ph == TrainRunner::Phase::Training || ph == TrainRunner::Phase::Done))
+        return s->ds.points.num();
+    return -1;
+}
+
+void GuiApp::draw_splat_budget(float w) {
+    std::string& text = _cfg.progressive_splat_budget_schedule;
+    progressive::Setpoints stages;
+    try {
+        stages = _cfg.progressive_resolution_schedule.empty()
+            ? progressive::automatic_setpoints(_cfg.progressive_resolution_start,
+                                               _cfg.progressive_resolution_full_at, _cfg.num_iterations)
+            : progressive::parse_setpoints(_cfg.progressive_resolution_schedule);
+    } catch (const std::exception&) { return; }   // the resolution fields above show the error
+    const int64_t seed = starting_points();
+    const int64_t cap = std::max(1, _cfg.cap_max);
+
+    int mode = text.empty() ? 0 : 1;
+    ImGui::SetNextItemWidth(w);
+    if (ui::Combo(fld::progressive_splat_budget_mode, &mode,
+                  {&fld::progressive_splat_budget_auto, &fld::progressive_splat_budget_manual})) {
+        // Manual starts from the automatic values, so switching changes nothing yet.
+        text.clear();
+        if (mode == 1)
+            for (const auto& [step, splats] : progressive::automatic_budget(stages, std::max<int64_t>(seed, 0), cap))
+                text += (text.empty() ? "" : ", ") + std::to_string(splats);
+        _cfg_ui.touched.insert("progressive_splat_budget_schedule");
+    }
+    ui::help_on_hover(fld::progressive_splat_budget_help);
+
+    if (mode == 1 && text.find(':') != std::string::npos) {
+        // A step:splats schedule from the command line or an older config.
+        ImGui::SetNextItemWidth(w);
+        if (ui::InputText(fld::progressive_splat_budget_schedule, &text))
+            _cfg_ui.touched.insert("progressive_splat_budget_schedule");
+        ui::help_on_hover(fld::progressive_splat_budget_schedule_help);
+    } else if (mode == 1) {
+        std::vector<std::string> boxes(1);
+        for (char c : text) {
+            if (c == ',') boxes.emplace_back();
+            else boxes.back() += c;
+        }
+        boxes.resize(stages.size());
+        bool changed = false;
+        for (size_t k = 0; k < boxes.size(); ++k) {
+            const std::string label = stages[k].second > 1
+                ? i18n::format(fld::progressive_splat_budget_stage, {(long long)stages[k].second})
+                : fld::progressive_splat_budget_stage_full.get();
+            std::string box = boxes[k];
+            while (!box.empty() && box.front() == ' ') box.erase(box.begin());
+            ImGui::SetNextItemWidth(w);
+            if (ui::InputTextWithHintRaw((label + "##splat_budget" + std::to_string(k)).c_str(),
+                                         fld::progressive_splat_budget_hint, &box)) {
+                boxes[k] = box;
+                changed = true;
+            }
+            ui::help_on_hover(fld::progressive_splat_budget_schedule_help);
+        }
+        if (changed) {
+            std::string joined;
+            for (size_t k = 0; k < boxes.size(); ++k) {
+                std::string b = boxes[k];
+                while (!b.empty() && b.front() == ' ') b.erase(b.begin());
+                joined += (k ? ", " : "") + b;
+            }
+            // Never empty, or the mode would read as automatic.
+            text = joined.find_first_not_of(" ,") == std::string::npos && boxes.size() == 1 ? " " : joined;
+            _cfg_ui.touched.insert("progressive_splat_budget_schedule");
+        }
+    }
+
+    // What the run will follow, before it starts.
+    std::string plan;
+    try {
+        for (const auto& [step, splats] : progressive::resolve_budget(stages, text, std::max<int64_t>(seed, 0), cap))
+            plan += (plan.empty() ? "" : "  >  ") + format_count((double)splats);
+        plan = i18n::format(fld::progressive_splat_budget_plan, {plan});
+    } catch (const std::exception& e) {
+        plan = e.what();
+    }
+    ui::TextColoredWrappedRaw(kDim, plan);
+    if (mode == 0) {
+        if (seed >= 0)
+            ui::TextColoredWrappedRaw(kDim, i18n::format(fld::progressive_splat_budget_seed,
+                                                         {format_count((double)seed), format_count((double)cap)}));
+        else
+            ui::TextColoredWrappedRaw(kDim, fld::progressive_splat_budget_seed_unknown.get());
+    }
+}
+
 void GuiApp::draw_dataset_open_buttons(const DatasetFolders& f, bool model) {
     if (model) {
         if (ui::Button(dmsg::open_in_trainer)) {
@@ -10317,28 +10428,7 @@ void GuiApp::draw_basic_options() {
         if (ui::Checkbox(fld::progressive_splat_budget, &_cfg.progressive_splat_budget))
             _cfg_ui.touched.insert("progressive_splat_budget");
         ui::help_on_hover(fld::progressive_splat_budget_help);
-        if (_cfg.progressive_splat_budget) {
-            ImGui::SetNextItemWidth(w);
-            if (ui::InputText(fld::progressive_splat_budget_schedule, &_cfg.progressive_splat_budget_schedule))
-                _cfg_ui.touched.insert("progressive_splat_budget_schedule");
-            ui::help_on_hover(fld::progressive_splat_budget_schedule_help);
-            // The budget the run will follow, so the numbers are visible before it starts.
-            std::string plan;
-            try {
-                const progressive::Setpoints stages = _cfg.progressive_resolution_schedule.empty()
-                    ? progressive::automatic_setpoints(_cfg.progressive_resolution_start,
-                                                       _cfg.progressive_resolution_full_at, _cfg.num_iterations)
-                    : progressive::parse_setpoints(_cfg.progressive_resolution_schedule);
-                const progressive::Budget budget = _cfg.progressive_splat_budget_schedule.empty()
-                    ? progressive::automatic_budget(stages, _cfg.cap_max)
-                    : progressive::parse_budget(_cfg.progressive_splat_budget_schedule, _cfg.cap_max);
-                for (const auto& [step, splats] : budget)
-                    plan += (plan.empty() ? "" : "   ") + std::to_string(step) + ": " + std::to_string(splats);
-            } catch (const std::exception& e) {
-                plan = e.what();
-            }
-            ui::TextColoredWrappedRaw(kDim, plan);
-        }
+        if (_cfg.progressive_splat_budget) draw_splat_budget(w);
         ImGui::Unindent();
     }
 

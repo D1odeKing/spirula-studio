@@ -58,9 +58,27 @@ void schedule_math() {
           progressive::scaled_extent(9, 2) == 4 && progressive::scaled_extent(8, 1) == 8,
           "floored, never below one pixel");
     using progressive::Budget;
-    check(progressive::automatic_budget(Setpoints{{0, 4}, {3000, 2}, {9000, 1}}, 1000000) ==
-              Budget{{0, 250000}, {3000, 500000}, {9000, 1000000}},
-          "automatic budget: the cap over each stage's divisor");
+    const Setpoints three{{0, 4}, {3000, 2}, {9000, 1}};
+    check(progressive::automatic_budget(three, 1000000, 8000000) ==
+              Budget{{0, 2000000}, {3000, 4000000}, {9000, 8000000}},
+          "automatic budget: the same factor each stage, from the seed to the cap");
+    check(progressive::automatic_budget(three, 9000000, 8000000) == Budget{{0, 8000000}, {3000, 8000000}, {9000, 8000000}} &&
+              progressive::automatic_budget(three, 0, 8000000).back().second == 8000000,
+          "automatic budget: a seed at or over the cap, or none, holds nothing back");
+    check(progressive::stage_budget(three, "500000, 0.5, 100%", 1000000, 8000000) ==
+              Budget{{0, 500000}, {3000, 4000000}, {9000, 8000000}},
+          "per-stage budget: a count, a fraction of the cap and a percent");
+    check(progressive::stage_budget(three, " , 3000000", 1000000, 8000000) ==
+              Budget{{0, 2000000}, {3000, 3000000}, {9000, 8000000}},
+          "per-stage budget: blank and missing stages take the automatic value");
+    check(throws([&] { progressive::stage_budget(three, "4000000, 1000000", 1000000, 8000000); }),
+          "per-stage budget that shrinks");
+    check(throws([&] { progressive::stage_budget(three, "1, 2, 3, 4", 1000000, 8000000); }),
+          "more values than stages");
+    check(throws([&] { progressive::stage_budget(three, "lots", 1000000, 8000000); }), "a value that is not a number");
+    check(progressive::resolve_budget(three, "", 1000000, 8000000) == progressive::automatic_budget(three, 1000000, 8000000) &&
+              progressive::resolve_budget(three, "0:10%", 1000000, 8000000) == Budget{{0, 800000}},
+          "resolve: empty is automatic, step:splats is the explicit schedule");
     check(progressive::parse_budget("3000:50%, 9000:1000000 6000:600000", 1000000) ==
               Budget{{0, 500000}, {3000, 500000}, {6000, 600000}, {9000, 1000000}},
           "manual budget: percents, counts, sorted, anchored at step 0");

@@ -621,7 +621,13 @@ private:
         bool mask_flipped = false;
     };
     DatasetFolders _sparse_edit_src;
-    bool _force_dense_seed = false;   // the next open trains from the dense cloud just edited
+    bool _force_dense_seed = false;
+    // Progressive splat budget: the mode and one box per resolution stage.
+    void draw_splat_budget(float w);
+    int64_t starting_points();
+    std::string _seed_count_path;
+    int64_t _seed_count = -1;
+    std::filesystem::file_time_type _seed_count_time{};   // the next open trains from the dense cloud just edited
     // A dataset already in the output folder, read the way a run would read it.
     DatasetFolders workspace_folders(const WorkspaceState& prior) const;
     // Open in trainer / edit reconstruction / correct masks, for one dataset.

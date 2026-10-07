@@ -824,9 +824,8 @@ void TrainerSession::check_config() {
     if (cfg.validation_fraction > 0)
         log(lmsg::warn_validation_unported.get());
     if (cfg.progressive_resolution) resolution_setpoints(cfg);
-    if (cfg.progressive_resolution && cfg.progressive_splat_budget &&
-        !cfg.progressive_splat_budget_schedule.empty())
-        progressive::parse_budget(cfg.progressive_splat_budget_schedule, cfg.cap_max);
+    if (cfg.progressive_resolution && cfg.progressive_splat_budget)
+        progressive::resolve_budget(resolution_setpoints(cfg), cfg.progressive_splat_budget_schedule, 1, cfg.cap_max);
     if (cfg.orientation_method != "up" || cfg.center_method != "poses")
         log(lfmt(lmsg::warn_pose_normalization_approx,
                  {cfg.orientation_method, cfg.center_method}));
@@ -1285,11 +1284,8 @@ void TrainerSession::setup_engine() {
     dm.deficit_sampling  = cfg.view_sampling == "deficit";
     dm.deficit_power     = cfg.view_deficit_power;
     dm.deficit_max_ratio = cfg.view_deficit_max_ratio;
-    progressive::Setpoints stage_steps;   // the stages' real first steps, for the splat budget
     if (cfg.progressive_resolution) {
         dm.resolution_stages = progressive::to_epochs(resolution_setpoints(cfg), _batches_per_epoch);
-        for (const auto& [epoch, divisor] : dm.resolution_stages)
-            stage_steps.emplace_back(epoch * _batches_per_epoch, divisor);
         // A resumed run picks the schedule up at the epoch its checkpoint was in.
         if (!cfg.resume.empty()) {
             try {
@@ -1329,9 +1325,16 @@ void TrainerSession::setup_engine() {
     st.train_frame_scale = ds.train_frame_scale;
     st.steps_per_epoch   = _batches_per_epoch;
     if (cfg.progressive_resolution && cfg.progressive_splat_budget) {
-        const progressive::Budget budget = cfg.progressive_splat_budget_schedule.empty()
-            ? progressive::automatic_budget(stage_steps, cfg.cap_max)
-            : progressive::parse_budget(cfg.progressive_splat_budget_schedule, cfg.cap_max);
+        // Per stage on the requested switches, then moved to the epoch boundaries the
+        // stages really start at; stages that land together keep the later value.
+        const int64_t seeded = engine_get_cur_num_splats();
+        progressive::Budget budget = progressive::resolve_budget(resolution_setpoints(cfg),
+            cfg.progressive_splat_budget_schedule, seeded, cfg.cap_max);
+        if (cfg.progressive_splat_budget_schedule.find(':') == std::string::npos) {
+            const int64_t per = std::max(1, _batches_per_epoch);
+            for (auto& entry : budget) entry.first = (entry.first + per / 2) / per * per;
+        }
+        log(lfmt(lmsg::splat_budget_seed, {(long long)seeded, (long long)cfg.cap_max}));
         const int stop = std::max(cfg.refine_stop_iter, cfg.num_iterations - cfg.refine_stop_num_iter);
         int64_t before = 0;
         for (const auto& [from, splats] : budget) {

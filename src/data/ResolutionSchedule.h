@@ -107,14 +107,65 @@ inline int divisor_at(const Setpoints& stages, int64_t at) {
 // (first step, splats), ascending and never shrinking: how far growth may go.
 using Budget = std::vector<std::pair<int64_t, int64_t>>;
 
-// cap / divisor for each resolution stage (given in steps), so the last half
-// of a 1/2-start budget is placed from images fine enough to show the detail.
-inline Budget automatic_budget(const Setpoints& step_stages, int64_t cap) {
+// From `seed` splats to `cap` by the same ratio each stage, reaching `cap` at the
+// last: growth is multiplicative, so equal ratios are equal shares of the work.
+inline Budget automatic_budget(const Setpoints& step_stages, int64_t seed, int64_t cap) {
     Budget out;
-    for (const auto& [step, divisor] : step_stages)
-        out.emplace_back(step, std::max<int64_t>(1, cap / std::max(1, divisor)));
+    const double n = (double)step_stages.size();
+    const bool spread = seed > 0 && seed < cap && n > 0;
+    for (size_t k = 0; k < step_stages.size(); ++k) {
+        const int64_t at = spread ? (int64_t)std::llround((double)seed * std::pow((double)cap / (double)seed, (double)(k + 1) / n))
+                                  : cap;
+        out.emplace_back(step_stages[k].first, std::clamp<int64_t>(at, 1, std::max<int64_t>(cap, 1)));
+    }
+    if (!out.empty()) out.back().second = std::max<int64_t>(cap, 1);
     return out;
 }
+
+// One budget value: a splat count ("500000"), a fraction of `cap` ("0.25") or a
+// percent ("25%"). False when `text` is none of these.
+inline bool budget_value(const std::string& text, int64_t cap, int64_t& out) {
+    std::string t = text;
+    while (!t.empty() && (t.back() == ' ' || t.back() == '	')) t.pop_back();
+    while (!t.empty() && (t.front() == ' ' || t.front() == '	')) t.erase(t.begin());
+    const bool percent = !t.empty() && t.back() == '%';
+    if (percent) t.pop_back();
+    size_t used = 0;
+    double v = 0.0;
+    try { v = std::stod(t, &used); } catch (const std::exception&) { return false; }
+    if (used != t.size() || !(v > 0.0) || (percent && v > 100.0)) return false;
+    const double splats = percent ? v / 100.0 * (double)cap : v <= 1.0 ? v * (double)cap : v;
+    out = std::clamp<int64_t>((int64_t)std::llround(splats), 1, std::max<int64_t>(cap, 1));
+    return true;
+}
+
+// One value per resolution stage, comma separated; a blank entry, or a stage past
+// the last entry, takes the automatic value. Ceilings may only grow.
+inline Budget stage_budget(const Setpoints& step_stages, const std::string& text, int64_t seed, int64_t cap) {
+    Budget out = automatic_budget(step_stages, seed, cap);
+    std::vector<std::string> items(1);
+    for (char c : text) {
+        if (c == ',') items.emplace_back();
+        else items.back() += c;
+    }
+    if (items.size() > out.size())
+        throw std::runtime_error("progressive_splat_budget_schedule has " + std::to_string(items.size()) +
+                                 " values for " + std::to_string(out.size()) + " resolution stages");
+    for (size_t k = 0; k < items.size(); ++k) {
+        if (items[k].find_first_not_of(" 	") == std::string::npos) continue;
+        if (!budget_value(items[k], cap, out[k].second))
+            throw std::runtime_error("progressive_splat_budget_schedule: '" + items[k] +
+                                     "' is not a splat count, a fraction of the maximum or a percent");
+    }
+    for (size_t k = 1; k < out.size(); ++k)
+        if (out[k].second < out[k - 1].second)
+            throw std::runtime_error("progressive_splat_budget_schedule may only grow: a later stage's budget is smaller");
+    return out;
+}
+
+// The budget a run follows: automatic when `text` is empty, explicit steps when it
+// holds step:splats pairs, else one value per stage.
+inline Budget resolve_budget(const Setpoints& step_stages, const std::string& text, int64_t seed, int64_t cap);
 
 // "step:splats" pairs, splats a whole number or a percent of `cap`, e.g.
 // "0:25%, 3000:500000, 9000:100%". Clamped to `cap`; may only grow.
@@ -154,6 +205,13 @@ inline Budget parse_budget(const std::string& text, int64_t cap) {
     }
     if (out.front().first != 0) out.insert(out.begin(), {0, out.front().second});
     return out;
+}
+
+inline Budget resolve_budget(const Setpoints& step_stages, const std::string& text, int64_t seed, int64_t cap) {
+    if (text.find_first_not_of(" ,	") == std::string::npos && text.find(',') == std::string::npos)
+        return automatic_budget(step_stages, seed, cap);
+    if (text.find(':') != std::string::npos) return parse_budget(text, cap);
+    return stage_budget(step_stages, text, seed, cap);
 }
 
 }  // namespace progressive
