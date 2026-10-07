@@ -728,7 +728,7 @@ inline std::vector<TwoViewMatches> verifyPairs(
         const uint32_t inl = verifyBody(p, m, i, j);
         progress::pair(i, j, inl);
         if (inl) {
-            const std::vector<FeatureMatch>& kept = results[p].matches;
+            const MatchList& kept = results[p].matches;
             progress::live_pair(i, j, results[p].config,
                                 &kept[0].idx1, &kept[0].idx2,
                                 sizeof(FeatureMatch), (uint32_t)kept.size());

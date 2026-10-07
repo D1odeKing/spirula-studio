@@ -560,6 +560,38 @@ int main() {
                "... and the camera folders their rig and order");
     }
 
+    // ---- the video behind the frames, for a run that keeps them ---------------
+    {
+        build(ws, made);
+        std::vector<PrepCapture> c = recorded_captures(ws.string(), made.prep);
+        expect(c.size() == 1 && c[0].path == "/captures/walk.insv" && c[0].subdir.empty(),
+               "the frames' fields name the video they were cut from");
+        SfmJob f = made;
+        f.prep.force_external_decode = true;
+        StepRecorder r(ws.string(), read_dataset_record(ws.string()));
+        r.begin(Step::Frames, frames_fields(f.prep));
+        r.finish(Step::Frames);
+        c = recorded_captures(ws.string(), f.prep);
+        expect(c.size() == 1 && c[0].fps == 6.0,
+               "ffmpeg's stems count candidates at the rate times the window");
+        const fs::path video = fs::temp_directory_path() / "spirula_dataset_plan_test.insv";
+        touch(video);
+        r.begin(Step::Frames, frames_fields(made.prep));
+        r.finish(Step::Frames, {{"", video.string(), 7.5, true}});
+        c = recorded_captures(ws.string(), made.prep);
+        expect(c.size() == 1 && c[0].fps == 7.5 && c[0].lockstep,
+               "what the extraction recorded wins over the fields");
+        SfmJob d = dropped_images(ws, made);
+        c = captures_behind(d.prep);
+        expect(c.size() == 1 && c[0].path == video.string() && c[0].subdir.empty(),
+               "the dataset's images/ dropped back in keeps its video");
+        d.prep.inputs[0].subdir = "walk";
+        c = captures_behind(d.prep);
+        expect(c.size() == 1 && c[0].subdir == "walk", "... under the folder it is gathered into");
+        fs::remove(video);
+        expect(captures_behind(d.prep).empty(), "... while the video is still there");
+    }
+
     // ---- "the same as above" chains down the list; every frame is a rate ------
     {
         PrepJob j;

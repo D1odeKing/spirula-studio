@@ -805,6 +805,54 @@ DatasetRecord read_plan_record(const std::string& workspace, const PrepJob& job)
     return rec;
 }
 
+std::vector<PrepCapture> recorded_captures(const std::string& workspace, const PrepJob& job) {
+    const StepRecord fr = read_plan_record(workspace, job).step(Step::Frames);
+    if (!fr.present || !fr.captures.empty()) return fr.captures;
+    // frames_fields back onto a job, as far as the stems depend on it.
+    PrepJob j = job;
+    j.inputs.clear();
+    for (const StepField& f : fr.fields)
+        if (f.key == "input" && is_video_path(f.value)) {
+            PrepInput in;
+            in.path = f.value;
+            in.is_video = true;
+            in.subdir = f.scope == "." ? "" : f.scope;
+            for (const StepField& r : fr.fields)
+                if (r.key == "fps" && r.scope == f.scope)
+                    in.fps = r.value == "every" ? kFpsEveryFrame : to_float(r.value);
+            j.inputs.push_back(std::move(in));
+        }
+    for (const StepField& f : fr.fields) {
+        if (f.key == "decoder") j.force_external_decode = f.value == "ffmpeg";
+        else if (f.key == "sharp_window") j.sharp_window = (int)to_float(f.value);
+        else if (f.key == "adaptive_fps") j.adaptive_fps = f.value == "on";
+        else if (f.key == "adaptive_range") j.adaptive_range = to_float(f.value);
+        else if (f.key == "sync_tracks") j.sync_tracks = f.value == "on";
+    }
+    std::vector<PrepCapture> out;
+    for (const PrepInput& in : j.inputs) out.push_back(video_capture(j, in));
+    return out;
+}
+
+std::vector<PrepCapture> captures_behind(const PrepJob& job) {
+    std::vector<PrepCapture> out;
+    for (const PrepInput& in : job.inputs) {
+        if (in.is_video) continue;
+        std::error_code ec;
+        const fs::path dir = fs::absolute(in.path, ec).lexically_normal();
+        const fs::path images = dir.has_filename() ? dir : dir.parent_path();
+        if (images.filename() != "images") continue;
+        for (PrepCapture c : recorded_captures(images.parent_path().string(), job)) {
+            if (!fs::is_regular_file(c.path, ec)) continue;
+            c.subdir = in.subdir.empty() ? c.subdir
+                       : c.subdir.empty() ? in.subdir
+                                          : in.subdir + "/" + c.subdir;
+            out.push_back(std::move(c));
+        }
+    }
+    return out;
+}
+
 DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
                          const DatasetRecord& rec, const PlanRequest& req,
                          const DatasetPlan* done, Step from) {
@@ -1176,10 +1224,11 @@ void StepRecorder::begin(Step s, StepFields fields, std::vector<std::string> mad
     write_step_record(_ws, s, r);
 }
 
-void StepRecorder::finish(Step s) {
+void StepRecorder::finish(Step s, std::vector<PrepCapture> captures) {
     StepRecord& r = _open[(int)s];
     if (!r.present) return;
     r.complete = true;
+    r.captures = std::move(captures);
     write_step_record(_ws, s, r);
     r = StepRecord{};
 }

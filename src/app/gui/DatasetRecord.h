@@ -41,6 +41,9 @@ struct StepRecord {
     StepFields fields;
     // Geometry: the kinds of map it finished, "normal" / "depth".
     std::vector<std::string> made;
+    // Frames: the videos they were cut from. Not a field: how the stems were
+    // numbered follows from the fields, it does not decide a reuse.
+    std::vector<PrepCapture> captures;
 };
 
 struct DatasetRecord {

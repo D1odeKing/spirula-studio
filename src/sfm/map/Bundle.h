@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -463,18 +464,21 @@ struct BundleRun {
     double t_init = 0, t_solve = 0;
 };
 
-// Solve `P` in place, moving to the host if the device fails. The device solve
-// checkpoints `P` every few seconds (SolverOptions::checkpoint), so the host
-// picks up where it stopped instead of from the start.
-inline BundleRun solveBundle(BAProblem& P, SolverOptions sopt, VkContext* shared) {
+// Solve `P` in place, on the host from the device's last checkpoint if the
+// device fails. With `rebuild` (makes `P` anew) the device solve frees P's
+// tables once uploaded, and a host solve takes a rebuilt copy.
+inline BundleRun solveBundle(BAProblem& P, SolverOptions sopt, VkContext* shared,
+                             const std::function<BAProblem()>& rebuild = {}) {
     BundleRun r;
     if (P.num_obs >= baHostObsThreshold().load()) sopt.real = RealCfg::CPU;
     SolverCheckpoint ck;
     sopt.checkpoint = &ck;
+    bool released = false;
     auto attempt = [&] {
         auto t0 = std::chrono::steady_clock::now();
         BundleSolver solver(P, sopt, shared);
         solver.init();
+        if (rebuild) released = solver.releaseHostTables() || released;
         auto t1 = std::chrono::steady_clock::now();
         solver.solve();
         auto t2 = std::chrono::steady_clock::now();
@@ -489,6 +493,15 @@ inline BundleRun solveBundle(BAProblem& P, SolverOptions sopt, VkContext* shared
     } catch (const VkError& e) {
         if (!vkErrorIsResourceFailure(e.result)) throw;
         noteBaDeviceFailure(e, P.num_obs);
+        if (released) {
+            BAProblem fresh = rebuild();
+            fresh.poses = std::move(P.poses);
+            fresh.exts = std::move(P.exts);
+            fresh.intr = std::move(P.intr);
+            fresh.points = std::move(P.points);
+            fresh.priors = P.priors;
+            P = std::move(fresh);
+        }
         sopt.real = RealCfg::CPU;
         sopt.checkpoint = nullptr;
         if (ck.iterations > 0) {
@@ -520,7 +533,8 @@ inline double runGlobalBA(Reconstruction& rec, const BundleOptions& bopt) {
     if (P.num_images < 2) return 0;
     double t_build = prof_lap();
 
-    const BundleRun run = solveBundle(P, bundleSolverOptions(bopt), bopt.shared_ctx);
+    const BundleRun run = solveBundle(P, bundleSolverOptions(bopt), bopt.shared_ctx,
+                                      [&] { return buildBundle(rec, bopt).P; });
     const SolverStats& stats = run.stats;
     const double t_init = run.t_init, t_solve = run.t_solve;
     prof_lap();
@@ -540,10 +554,10 @@ inline double runGlobalBA(Reconstruction& rec, const BundleOptions& bopt) {
     if (MapProf::enabled())
         slog::diag(slog::Tag::Map,
                    "[prof] BA #%ld: %u img %u pt %u obs | build %.3f init %.3f solve %.3f "
-                   "write %.3f s | %d LM iters, %s%s | prior %.3f -> %.3f, %d prior-driven, "
+                   "write %.3f s | %d LM iters, %s%s%s | prior %.3f -> %.3f, %d prior-driven, "
                    "final damping %.1e, cost %.6e -> %.6e%s",
                    (long)g_map_prof.n_ba, P.num_images, P.num_points, P.num_obs, t_build, t_init,
-                   t_solve, t_write, stats.iterations, stats.solver,
+                   t_solve, t_write, stats.iterations, stats.solver, stats.jac32 ? " fp32-J" : "",
                    stats.cg_solves ? (" " + std::to_string((int)std::lround(
                                                  stats.cg_iters_total / stats.cg_solves)) +
                                       " its/solve").c_str()

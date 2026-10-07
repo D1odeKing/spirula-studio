@@ -1494,6 +1494,23 @@ static bool lockstep_extraction(const PrepJob& job, const PrepInput& in, bool bu
     return builtin && job.sync_tracks;
 }
 
+// The built-in decoder names a frame by its source index; ffmpeg's fallback
+// numbers the candidates it resampled at the kept rate times the group (every
+// frame is not resampled, so there too the stem is the source index).
+static PrepCapture capture_of(const PrepJob& job, const PrepInput& in, bool builtin) {
+    const double fps = builtin ? 0.0 : (double)input_fps(job, in) * candidate_group(job, in);
+    return {in.subdir, in.path, fps, lockstep_extraction(job, in, builtin)};
+}
+
+PrepCapture video_capture(const PrepJob& job, const PrepInput& in) {
+    return capture_of(job, in, !job.force_external_decode && native_decode_reason().empty());
+}
+
+static bool same_path(const std::string& a, const std::string& b) {
+    std::error_code ec;
+    return fs::absolute(a, ec).lexically_normal() == fs::absolute(b, ec).lexically_normal();
+}
+
 bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
                                 const std::string& images, PrepResult& out,
                                 std::string& error) {
@@ -1508,13 +1525,14 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
             std::error_code ec;
             if (fs::is_directory(fs::path(images) / "cam1", ec))
                 out.per_folder_cameras = true;
-            // Kept frames of unknown provenance: the file's own rate is the
-            // built-in extractor's convention, and a wrong one is refused
-            // downstream by the gyro-against-poses check, not misused.
-            out.captures.push_back(
-                {in.subdir, in.path, 0.0,
-                 lockstep_extraction(job, in, !job.force_external_decode &&
-                                                  native_decode_reason().empty())});
+            // As the record says they were cut; with no record, as this build
+            // would cut them. A wrong rate is refused downstream by the
+            // gyro-against-poses check, not misused.
+            PrepCapture cap = video_capture(job, in);
+            for (const PrepCapture& c : job.recorded_captures)
+                if (c.subdir == in.subdir && same_path(c.path, in.path)) cap = c;
+            cap.path = in.path;
+            out.captures.push_back(cap);
             return split_packed_frames(in, images, out, error);
         }
     }
@@ -1523,7 +1541,7 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
         !job.force_external_decode && native_decode_reason().empty();
     if (want_builtin) {
         if (extract_video_builtin(job, in, images, out, error)) {
-            out.captures.push_back({in.subdir, in.path, 0.0, lockstep_extraction(job, in, true)});
+            out.captures.push_back(capture_of(job, in, true));
             return split_packed_frames(in, images, out, error);
         }
         if (_cancel.load()) return false;
@@ -1534,13 +1552,7 @@ bool DatasetPrep::extract_video(const PrepJob& job, const PrepInput& in,
     const bool ok = in.pano360.valid() && job.pano.mode != app::Pano360Mode::Off
                         ? extract_360_ffmpeg(job, in, images, out, error)
                         : extract_video_ffmpeg(job, in, images, out, error);
-    // The stems are candidate numbers, and the candidates were resampled at
-    // the kept rate times the group -- which is the rate that times them. Every
-    // frame is not resampled, so its stems are source indices as above.
-    if (ok)
-        out.captures.push_back({in.subdir, in.path,
-                                (double)input_fps(job, in) * candidate_group(job, in),
-                                lockstep_extraction(job, in, false)});
+    if (ok) out.captures.push_back(capture_of(job, in, false));
     return ok && split_packed_frames(in, images, out, error);
 }
 

@@ -151,6 +151,7 @@ struct SolverStats {
     double solve_seconds = 0;
     double vram_mb = 0;           // host RAM on the CPU path
     const char* solver = "dense";
+    bool jac32 = false;           // the Jacobians were stored at fp32 (Solver.h)
     double cg_iters_total = 0;    // CG iterations summed over LM solves
     int cg_solves = 0;
     int cg_fallbacks = 0;         // LM iterations re-solved densely

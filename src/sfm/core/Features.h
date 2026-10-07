@@ -14,10 +14,13 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "core/MappedFile.h"
 
 namespace sfm {
 
@@ -65,7 +68,12 @@ struct FeatureSet {
     uint32_t dim = 128;
     DType dtype = DType::U8;
     std::vector<Keypoint> keypoints;
-    std::vector<uint8_t> descriptors;   // count*dim*dtypeSize bytes
+    std::vector<uint8_t> descriptors;   // count*dim*dtypeSize bytes, or empty when mapped
+    // Or the same bytes left in the feature file, mapped (readFeatures with `map`):
+    // pages the OS drops and reads back under pressure rather than heap that
+    // fails, at a gigabyte per thousand images. Read both through descData().
+    std::shared_ptr<const spirula::MappedFile> desc_map;
+    size_t desc_offset = 0;
     // Optional per-keypoint RGB sampled from the source image (count*3 bytes, or
     // empty). Written by `spirula-sfm extract`; the mapper averages them over each 3D
     // point's track to color the point cloud for 3DGS init. Empty for a feature
@@ -73,6 +81,16 @@ struct FeatureSet {
     std::vector<uint8_t> colors;
 
     uint32_t count() const { return (uint32_t)keypoints.size(); }
+    const uint8_t* descData() const {
+        return desc_map ? desc_map->data() + desc_offset : descriptors.data();
+    }
+    size_t descBytes() const {
+        return desc_map ? (size_t)count() * dim * dtypeSize(dtype) : descriptors.size();
+    }
+    void dropDescriptors() {
+        std::vector<uint8_t>().swap(descriptors);
+        desc_map.reset();
+    }
     bool hasColors() const { return colors.size() == (size_t)count() * 3; }
     // Whether any keypoint carries a detection score worth persisting. SIFT
     // leaves response at 0; a learned detector fills it in.
@@ -227,12 +245,11 @@ inline bool peekFeatures(const std::string& path, uint32_t& count) {
     return true;
 }
 
-// `with_descriptors == false` seeks past the descriptor block instead of
-// reading it. Everything downstream of matching -- the mapper, and so the
-// whole `map` subcommand -- wants only keypoints and colors, and the
-// descriptors are the file: a gigabyte per thousand images, read and then
-// never touched.
-inline FeatureSet readFeatures(const std::string& path, bool with_descriptors = true) {
+// `with_descriptors == false` skips the descriptors -- a gigabyte per thousand
+// images, which nothing after matching reads -- and `map` leaves them in the
+// file (FeatureSet::desc_map).
+inline FeatureSet readFeatures(const std::string& path, bool with_descriptors = true,
+                               bool map = false) {
     std::ifstream f(path, std::ios::binary);
     if (!f) throw std::runtime_error("cannot read " + path);
     char magic[4];
@@ -260,7 +277,15 @@ inline FeatureSet readFeatures(const std::string& path, bool with_descriptors = 
     }
     const std::streamsize desc_bytes = (std::streamsize)((size_t)count * dim *
                                                          dtypeSize(fs.dtype));
-    if (with_descriptors) {
+    if (with_descriptors && map && desc_bytes > 0) {
+        auto mf = std::make_shared<spirula::MappedFile>();
+        const size_t at = (size_t)f.tellg();
+        if (mf->open(path).empty() && mf->size() >= at + (size_t)desc_bytes) {
+            fs.desc_map = std::move(mf);
+            fs.desc_offset = at;
+        }
+    }
+    if (with_descriptors && !fs.desc_map) {
         fs.descriptors.resize((size_t)desc_bytes);
         f.read((char*)fs.descriptors.data(), desc_bytes);
     } else {

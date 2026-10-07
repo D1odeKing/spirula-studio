@@ -466,7 +466,7 @@ int cmdGeomSelftest(int, char**) {
             for (size_t i = 0; i < p1.size(); i++) {
                 fs1.keypoints.push_back({(float)p1[i].x, (float)p1[i].y, 1, 0, 0});
                 fs2.keypoints.push_back({(float)p2[i].x, (float)p2[i].y, 1, 0, 0});
-                mm.push_back({(uint32_t)i, (uint32_t)i, 0});
+                mm.push_back({(uint32_t)i, (uint32_t)i});
             }
             std::vector<FeatureSet> feats = {fs1, fs2};
             Camera guess = Camera::defaultFor(1, 1920, 1920, 0, CamModel::ThinPrismFisheye);

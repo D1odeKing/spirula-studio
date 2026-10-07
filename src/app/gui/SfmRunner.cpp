@@ -833,9 +833,18 @@ void SfmRunner::run(SfmJob job) {
                     record.begin(Step::Masks, masks_fields(p));
             };
             auto done = [&](Stage s, const PrepJob&) {
-                record.finish(s == Stage::Frames ? Step::Frames : Step::Masks);
+                if (s == Stage::Frames) record.finish(Step::Frames, prep.captures);
+                else record.finish(Step::Masks);
             };
+            job.prep.recorded_captures = recorded_captures(ws.string(), job.prep);
             if (!dp.run(job.prep, prep, err, refresh, done)) return fail(err);
+        }
+        // Frames a video made, brought back as a folder, still have its sensors.
+        for (PrepCapture& c : captures_behind(job.prep)) {
+            bool have = false;
+            for (const PrepCapture& o : prep.captures)
+                have = have || (o.subdir == c.subdir && o.path == c.path);
+            if (!have) prep.captures.push_back(std::move(c));
         }
         {
             // The folders the previews draw from, published as soon as they

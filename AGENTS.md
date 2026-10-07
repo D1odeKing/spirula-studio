@@ -595,6 +595,13 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   `kernels/bilagrid/BilagridConfig.cuh` for the 3D case) and pass the fold
   factor to the kernel. Related: the bilagrid samplers index cells with
   int32, which `engine_init_bilagrid_*` enforces up front.
+- **An SfM buffer bound past 4 GB is corrupted, not refused.** `src/sfm/`
+  binds storage buffers through descriptors (the other runtimes use device
+  addresses), and NVIDIA's `maxStorageBufferRange` is 4 GB: an access past it
+  wraps. Bundle adjustment's Jacobians reach that at ~10M observations, which
+  stalled every large solve until they were split (`sfm/ba/README.md`,
+  "Buffers past 4 GB"). A new per-observation buffer needs the same split, or
+  the refusal in `BundleSolver::decidePaths` that sends the solve to the host.
 - **Some pool buffers do not own their memory.** A slot listed in
   `POOL_ALIAS_TABLE` (`core/PoolSlots.h`) is a slice of one arena that every
   `PoolPhase` reuses, so the arena costs the largest phase rather than the sum

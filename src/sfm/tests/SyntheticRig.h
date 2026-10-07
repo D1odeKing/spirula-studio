@@ -102,7 +102,7 @@ inline RigScene makeRigScene(int frames = 10, int blind_from = 7,
             tv.image2 = j;
             tv.config = (int)TwoViewConfig::Uncalibrated;
             for (int p = 0; p < sc.N; p++)
-                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p, 0});
+                if (vis[i][p] && vis[j][p]) tv.matches.push_back({(uint32_t)p, (uint32_t)p});
             const bool weak_pair = sc.weak[i % sc.M] || sc.weak[j % sc.M];
             if (tv.matches.size() >= (weak_pair ? 6u : 15u)) sc.db.pairs.push_back(std::move(tv));
         }

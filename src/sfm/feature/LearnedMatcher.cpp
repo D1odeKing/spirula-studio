@@ -53,20 +53,15 @@ public:
             lg_.match(view(a, ka), view(b, kb), mopt_);
 
         out.reserve(m.size());
+        // The cap keeps the smallest distances; LightGlue reports a confidence
+        // in (0, 1], and its complement is a monotone map onto one.
+        std::vector<float> dist;
+        dist.reserve(m.size());
         for (const aliked::Match& x : m) {
-            // FeatureMatch carries a *distance*, and everything downstream that
-            // reads it sorts ascending (the max_num_matches cap). LightGlue
-            // reports a confidence in (0, 1], so the distance is its
-            // complement -- a monotone map, which is all that ordering needs.
-            out.push_back({x.i, x.j, 1.0f - x.score});
+            out.push_back({x.i, x.j});
+            dist.push_back(1.0f - x.score);
         }
-        if (match_.max_num_matches > 0 && out.size() > match_.max_num_matches) {
-            std::partial_sort(out.begin(), out.begin() + match_.max_num_matches, out.end(),
-                              [](const FeatureMatch& p, const FeatureMatch& q) {
-                                  return p.distance < q.distance;
-                              });
-            out.resize(match_.max_num_matches);
-        }
+        keepClosest(out, dist, match_.max_num_matches);
         return out;
     }
 
@@ -94,7 +89,7 @@ private:
         }
         aliked::MatchInput in;
         in.keypoints = xy.data();
-        in.descriptors = reinterpret_cast<const float*>(f.descriptors.data());
+        in.descriptors = reinterpret_cast<const float*>(f.descData());
         in.n = f.count();
         in.width = f.width;
         in.height = f.height;
@@ -136,17 +131,14 @@ public:
         const std::vector<loma::Match> m = m_.match(view(a, ka), view(b, kb), mopt_);
 
         out.reserve(m.size());
-        // FeatureMatch carries a DISTANCE and everything downstream sorts it
-        // ascending; the matcher reports a confidence in (0, 1], so the
-        // distance is its complement -- monotone, which is all ordering needs.
-        for (const loma::Match& x : m) out.push_back({x.i, x.j, 1.0f - x.score});
-        if (match_.max_num_matches > 0 && out.size() > match_.max_num_matches) {
-            std::partial_sort(out.begin(), out.begin() + match_.max_num_matches, out.end(),
-                              [](const FeatureMatch& p, const FeatureMatch& q) {
-                                  return p.distance < q.distance;
-                              });
-            out.resize(match_.max_num_matches);
+        // As LightGlue's above: the confidence's complement is the distance.
+        std::vector<float> dist;
+        dist.reserve(m.size());
+        for (const loma::Match& x : m) {
+            out.push_back({x.i, x.j});
+            dist.push_back(1.0f - x.score);
         }
+        keepClosest(out, dist, match_.max_num_matches);
         return out;
     }
 
@@ -174,7 +166,7 @@ private:
         }
         loma::MatchInput in;
         in.keypoints = xy.data();
-        in.descriptors = reinterpret_cast<const float*>(f.descriptors.data());
+        in.descriptors = reinterpret_cast<const float*>(f.descData());
         in.n = f.count();
         in.width = f.width;
         in.height = f.height;

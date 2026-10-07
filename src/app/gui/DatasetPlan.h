@@ -147,6 +147,15 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
 void restore_record_inputs(const DatasetRecord& rec, PrepJob& job,
                            std::string& camera_model);
 
+// The videos a workspace's frames were cut from: as recorded when the frames
+// were made, or else as their fields (or the legacy stamp) say. `job` fills
+// in what a legacy stamp leaves to probing.
+std::vector<PrepCapture> recorded_captures(const std::string& workspace, const PrepJob& job);
+// Those of every photo input that is a dataset's images/ -- a dataset made
+// from a video dropped back in as its frames -- under the input's subdir.
+// Only videos that are still there.
+std::vector<PrepCapture> captures_behind(const PrepJob& job);
+
 // What a workspace from before the record left in its stamps, onto `job`, with
 // its camera folders' lenses, rigs and sequences as a model step for
 // restore_record_inputs. `present` is false when it left none.
@@ -175,7 +184,8 @@ public:
     // Marks the step started -- an interruption leaves it incomplete -- under
     // a new id that the steps after it are made from.
     void begin(Step s, StepFields fields, std::vector<std::string> made = {});
-    void finish(Step s);
+    // `captures`: the frames step's (StepRecord::captures).
+    void finish(Step s, std::vector<PrepCapture> captures = {});
     const std::string& id(Step s) const { return _ids[(int)s]; }
 
 private:

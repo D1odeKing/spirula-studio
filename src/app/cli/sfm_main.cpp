@@ -861,6 +861,20 @@ static int cmdMap(int argc, char** argv) {
         compaction.reset();
         if (opt.verbose) reportFeatureCompaction(stats);
     }
+    // As `auto` does: the pair lists and the graph past 256 MB go beside the output, mapped.
+    {
+        size_t n = 0;
+        for (const TwoViewMatches& p : db.pairs) n += p.matches.size();
+        fs::path dir = output.empty() ? fs::path(matchesPath).parent_path() : fs::path(output);
+        if (dir.empty()) dir = ".";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        if (fs::is_directory(dir, ec)) {
+            if (n * sizeof(FeatureMatch) > (256ull << 20))
+                spillMatches(db, (dir / ".spirula-matches.spill").string());
+            opt.spill_dir = dir.string();
+        }
+    }
 
     // The camera setup, in order of authority: what the command line asked for,
     // else what verification recorded in matches.bin (D47), else derived here.
@@ -890,7 +904,7 @@ static int cmdMap(int argc, char** argv) {
         size_t stride = std::max<size_t>(1, db.pairs.size() / want);
         for (size_t p = 0; p < db.pairs.size() && sample.size() < want; p += stride) {
             sample.push_back({db.pairs[p].image1, db.pairs[p].image2});
-            sm.push_back(db.pairs[p].matches);
+            sm.push_back(db.pairs[p].matches.toVector());
         }
         bootstrapGroupFocals(feats, cs.ids, sample, sm, cs.cameras, cs.focal_given,
                              cs.focal_measured, TwoViewOptions{}, 200, 0, opt.verbose);

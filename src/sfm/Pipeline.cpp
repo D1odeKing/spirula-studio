@@ -601,7 +601,7 @@ void calibrateSensorPriorsFromDatabase(TelemetryPriors& priors, const MatchesDat
         if (p.config != (int)TwoViewConfig::Uncalibrated) continue;
         if (!priors.calibrationPair(p.image1, p.image2)) continue;
         pairs.emplace_back(p.image1, p.image2);
-        matches.push_back(p.matches);
+        matches.push_back(p.matches.toVector());
     }
     calibrateSensorPriorsFrom(priors, feats, pairs, matches, cams, tvopt, threads, verbose, true);
 }
@@ -1817,7 +1817,8 @@ int loadFeatureDir(const std::string& featdir, const SfmConfig& cfg, bool with_d
             pool.emplace_back([&] {
                 for (size_t i = next++; i < files.size(); i = next++) {
                     try {
-                        feats[i] = readFeatures(files[i].string(), with_descriptors);
+                        feats[i] = readFeatures(files[i].string(), with_descriptors,
+                                                /*map=*/true);
                     } catch (const std::exception& e) {
                         std::lock_guard<std::mutex> lk(err_mtx);
                         if (first_error.empty()) first_error = e.what();
@@ -2525,9 +2526,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // a large capture they are the biggest thing in the process: 8k features
     // per image at 128 bytes is a gigabyte per thousand images, held for the
     // whole of mapping for nothing.
-    for (FeatureSet& fs : feats) {
-        std::vector<uint8_t>().swap(fs.descriptors);
-    }
+    for (FeatureSet& fs : feats) fs.dropDescriptors();
     // After writeMatches, never before: the file on disk indexes the feature
     // files, which keep every row.
     if (cfg.compact_unused_features) {
@@ -2538,6 +2537,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         remapMatches(db, plan, feats);
         if (verbose) reportFeatureCompaction(plan.stats);
     }
+    // The pair lists are read a few times a run (seeds, seams, splits) and the
+    // graph built from them constantly, so past 256 MB they go to a file, mapped.
+    if (mstats.inliers * sizeof(FeatureMatch) > (256ull << 20))
+        spillMatches(db, (ws / ".spirula-matches.spill").string());
+    cfg.mapper.spill_dir = ws.string();
 
     // ---- 3. incremental mapping ----
     // The grouping and the focals the two-view stage settled on carry straight
