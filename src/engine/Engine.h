@@ -493,11 +493,11 @@ void engine_resolve_data_error(bool retry);
 int engine_eval_forward(std::string primitive, int sh_degree, bool packed);
 
 // Same, for ONE image by dataset index (the GUI's compare view), rendering one
-// pass of its faces: returns that pass's views, `out_passes` the image's count.
-// Overwrites the GT and camera state a step owns -- BETWEEN steps, under its mutex.
+// pass of its faces as step `cfg` would: returns that pass's views, `out_passes`
+// the image's count. Overwrites a step's GT and camera -- BETWEEN steps, under its mutex.
 int engine_preview_forward(int index, std::string primitive, int sh_degree,
                            bool packed, bool apply_color_correction,
-                           const LossConfig& loss, int pass = 0,
+                           const EngineStepConfig& cfg, int pass = 0,
                            int* out_passes = nullptr);
 
 // --- Debug rendering ---
