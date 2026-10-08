@@ -158,6 +158,19 @@ int main(int argc, char** argv) {
                                         DeviceTensor3D<float3>{}};
     RenderOutput::TensorTuple v_dists{t3f3(d_v_drgb), t3f1(d_v_dd),
                                       DeviceTensor3D<float3>{}};
+    // The RGB distortion gradient as the loss hands it over: a fixed multiple
+    // of the depth one, either spelled out or left for the kernel to derive.
+    const float kDistRatio = 0.6f;
+    std::vector<float> h_v_drgb_tied(n_pix * 3);
+    for (int64_t i = 0; i < n_pix; i++)
+        for (int c = 0; c < 3; c++) h_v_drgb_tied[i * 3 + c] = h_v_dd[i] * kDistRatio;
+    float* d_v_drgb_tied = upload(h_v_drgb_tied);
+    RenderOutput::TensorTuple v_dists_tied{t3f3(d_v_drgb_tied), t3f1(d_v_dd),
+                                           DeviceTensor3D<float3>{}};
+    RenderOutput::TensorTuple v_dists_derived{DeviceTensor3D<float3>{},
+                                              t3f1(d_v_dd),
+                                              DeviceTensor3D<float3>{}};
+    int derived_failures = 0;
 
     std::vector<float> acc;
 
@@ -255,13 +268,13 @@ int main(int argc, char** argv) {
                 cams[cfg.cam], dist_fixture::kTierNames[cfg.dist],
                 dist_tv(cfg.dist), aabb_2d, W, H,
                 tile_offsets, flatten_ids, macro_log2, cfg.dt,
-                cfg.median);
+                cfg.median, true);
         } else {
             rout = rasterize_to_pixels_3dgs_fwd(N, in_splats, splats_s,
                                                 gauss_ids, W, H, tile_offsets,
                                                 flatten_ids,
                                                 macro_log2, cfg.dt,
-                                                cfg.median);
+                                                cfg.median, true);
         }
         backend::device_synchronize();
         if (check_error()) return 1;
@@ -293,7 +306,7 @@ int main(int argc, char** argv) {
                     tile_offsets, flatten_ids, macro_log2,
                     render_Ts, last_ids, renders,
                     dist_fwd_opt, cfg.dt, DeviceTensor3D<float>{}, awmap_t,
-                    cfg.aw, v_renders, t3f1(d_v_T), v_med_t, v_dist_opt,
+                    cfg.aw, v_renders, t3f1(d_v_T), v_med_t, v_dist_opt, 0.0f,
                     std::nullopt, std::nullopt, cfg.vmg);
             backend::device_synchronize();
             if (check_error()) return 1;
@@ -311,7 +324,7 @@ int main(int argc, char** argv) {
                 flatten_ids, macro_log2, render_Ts, last_ids,
                 renders, dist_fwd_opt,
                 cfg.dt, awmap_t, cfg.aw, v_renders, t3f1(d_v_T), v_med_t,
-                v_dist_opt,
+                v_dist_opt, 0.0f,
                 std::nullopt, std::nullopt);
             backend::device_synchronize();
             if (check_error()) return 1;
@@ -320,8 +333,35 @@ int main(int argc, char** argv) {
                              {SCR2_OPAC, 1}, {SCR2_RGB, 3}});
             if (accum_any(cfg.aw))
                 readback(acc, aw_out.data_ptr(), N * accum_lanes(cfg.aw));
+
+            if (cfg.dt == DistortionType::RGB_D) {
+                std::vector<float> got[2];
+                for (int k = 0; k < 2; k++) {
+                    auto [w2, s2, a2] = rasterize_to_pixels_3dgs_bwd(
+                        N, in_splats, splats_s, gauss_ids, W, H, tile_offsets,
+                        flatten_ids, macro_log2, render_Ts, last_ids,
+                        renders, dist_fwd_opt, cfg.dt, awmap_t, cfg.aw,
+                        v_renders, t3f1(d_v_T), v_med_t,
+                        k == 0 ? v_dists_tied : v_dists_derived,
+                        k == 0 ? 0.0f : kDistRatio, std::nullopt, std::nullopt);
+                    backend::device_synchronize();
+                    readback_screen(got[k], s2[0], SCR2_STRIDE,
+                                    {{SCR2_XY, 2}, {SCR2_CONIC, 3},
+                                     {SCR2_OPAC, 1}, {SCR2_RGB, 3}});
+                }
+                double worst = 0.0;
+                for (size_t i = 0; i < got[0].size(); i++)
+                    worst = std::max(worst, std::fabs((double)got[0][i] - got[1][i]) /
+                                                (1e-6 + 1e-4 * std::fabs((double)got[0][i])));
+                if (worst > 1.0) {
+                    std::fprintf(stderr, "derived RGB distortion gradient differs "
+                                 "(%.3g of tolerance)\n", worst);
+                    derived_failures++;
+                }
+            }
         }
     }
+    if (derived_failures) return 1;
 
     if (dumping) {
         std::ofstream f(argv[2], std::ios::binary);

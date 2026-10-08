@@ -83,6 +83,7 @@ struct RasterFwd2dParams {
     uint32_t tile_width;
     uint32_t tile_height;
     uint32_t macro_log2;
+    uint32_t out_depth_on;  // 0: nothing reads the depth, out_depth unbound
 };
 
 [shader("compute")]
@@ -270,7 +271,7 @@ void rasterize_fwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
         p.out_rgb[3 * pix_id_global + 0] = pix_rgb.x;
         p.out_rgb[3 * pix_id_global + 1] = pix_rgb.y;
         p.out_rgb[3 * pix_id_global + 2] = pix_rgb.z;
-        p.out_depth[pix_id_global] = out_depth;
+        if (p.out_depth_on != 0) p.out_depth[pix_id_global] = out_depth;
         // index in bin of last gaussian in this pixel
         p.out_last_ids[pix_id_global] = int(cur_idx);
     }
@@ -321,6 +322,8 @@ struct RasterFwd3dgutParams {
     uint32_t tile_width;
     uint32_t tile_height;
     uint32_t macro_log2;
+    uint32_t out_depth_on;  // 0: nothing reads the depth, out_depth unbound
+    uint32_t _pad0;
 };
 
 #define _rf_ray(D)                                                    \
@@ -526,7 +529,7 @@ void rasterize_fwd_3dgut(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
         p.out_rgb[3 * pix_id_global + 0] = pix_rgb.x;
         p.out_rgb[3 * pix_id_global + 1] = pix_rgb.y;
         p.out_rgb[3 * pix_id_global + 2] = pix_rgb.z;
-        p.out_depth[pix_id_global] = out_depth;
+        if (p.out_depth_on != 0) p.out_depth[pix_id_global] = out_depth;
         p.out_last_ids[pix_id_global] = int(cur_idx);
     }
 }

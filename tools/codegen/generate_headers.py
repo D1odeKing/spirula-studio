@@ -140,6 +140,7 @@ HEADER_SOURCES = dict([
 HEADER_SOURCES["kernels/pixelwise/PixelWise"] = [
     "kernels/pixelwise/ImageConvert.cu",      # uint8/uint16 -> float; rendered -> expected depth
     "kernels/pixelwise/ImageColorOps.cu",     # background blending, log map, overexposure reg
+    "kernels/pixelwise/AppearanceChain.cu",   # blend + PPISP + display encode, fused
     "kernels/pixelwise/DepthGeometry.cu",     # depth -> points/normal, depth-normal loss,
                                               #   ray <-> linear depth
     "kernels/pixelwise/ImageDistort.cu",      # distort / undistort

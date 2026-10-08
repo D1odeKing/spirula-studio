@@ -208,6 +208,33 @@ int main(int argc, char** argv) {
                 ttv(gt_alpha.data(), 1, {C, H, W, 1}), ttv_null(), cfg);
             push_losses(losses);
         }
+
+        // float16 images: the background blend and the sRGB encode write
+        // them, an affine grid reads and writes them, and the loss reads them;
+        // the encode's backward reads the float16 copy of the raw render.
+        const float bg[3] = {0.2f, 0.45f, 0.7f}, off[3] = {0.0f, 0.0f, 0.0f};
+        const std::vector<float> eye = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+        engine_init_color_space(true, 0, true, eye, false, 0, false, {});
+        engine_init_background_color(bg, 0, true);
+        engine_init_bilagrid_rgb(C, "affine", 4, 5, 6, 32, 32, false);
+        EngineStepConfig cfg_h = cfg;
+        cfg_h.optim.image_bits = 16;
+        for (int s = 0; s < 2; s++, step++) {
+            auto losses = engine_train_step(
+                step, max_steps, "3dgs", 3, /*packed=*/false, W, H,
+                "PINHOLE", dist_fixture::kTierNames[0],
+                ttv(vm.data(), 4, {C, 4, 4}), ttv(intr.data(), 4, {C, 4}),
+                ttv(dist.data() + dist_fixture::row_offset(0, C), 4,
+                    {C, kCameraDistortionParams}),
+                ttv(gt_rgb.data(), 1, {C, H, W, 3}),
+                ttv(gt_depth.data(), 2, {C, H, W, 1}),
+                ttv(gt_normal.data(), 1, {C, H, W, 3}),
+                ttv(gt_alpha.data(), 1, {C, H, W, 1}), ttv_null(), cfg_h);
+            push_losses(losses);
+        }
+        engine_init_background_color(off, 0, false);
+        engine_init_color_space(false, 0, false, {}, false, 0, false, {});
+        engine().bilagrid_rgb.enabled = false;
     }
 
     // --- warped steps (fisheye wide + equirectangular) ---------------------
@@ -299,7 +326,7 @@ int main(int argc, char** argv) {
     // --- tight: engine GT buffers after the last (equirect) warped upload --
     {
         auto& gt = engine().gt;
-        readback_dev_f(g_tight, gt.rgb.data_ptr(),
+        readback_dev_f(g_tight, (const float*)std::get<0>(gt.rgb),
                        (int64_t)B_post * out_H * out_W * 3);
         readback_dev_f(g_tight, gt.depth.data_ptr(),
                        (int64_t)B_post * out_H * out_W);

@@ -35,9 +35,9 @@ GPU-exec per run, binning tile 16 / 32 / 64 / 128 px:
 
 | dataset | 16 | 32 | 64 | 128 |
 |---|---|---|---|---|
-| mandeltorus 40M, 7680², `a` = 89 px | 36.0 s | 15.2 | **13.7** | 18.1 |
+| synthetic 40M, 7680², `a` = 89 px | 36.0 s | 15.2 | **13.7** | 18.1 |
 | peak VRAM, same | 56.8 GiB | 28.4 | 19.8 | 17.0 |
-| dye-alley 4M, 3840², `a` = 14 px | 13.9 s | **11.0** | 12.9 | 17.9 |
+| dual-fisheye 4M, 3840², `a` = 14 px | 13.9 s | **11.0** | 12.9 | 17.9 |
 
 On a discrete RTX 5070 (DJI equirect 7680x3840, 1M splats, `a` = 65 px) the
 same ordering holds but the spread is far smaller: 5635 / 5205 / 5295 ms at

@@ -31,6 +31,7 @@ __device__ inline void warp_reduce_and_atomicAdd(int addr, float val, float *bas
 #endif
 
 
+template <int kF = -1>
 #ifdef PATCHED
 __global__ void bilagrid_patched_sample_backward_v2_kernel(
 #else
@@ -38,10 +39,10 @@ __global__ void bilagrid_uniform_sample_backward_v2_kernel(
 #endif
     BilagridReader bilagrid,  // [N,L,H,W,12]
 #ifdef PATCHED
-    const float* __restrict__ rgb,  // [N,m,h,w,3]
+    PixelPtr rgb,  // [N,m,h,w,3]
     const float* __restrict__ v_output,  // [N,m,h,w,3]
 #else
-    const float* __restrict__ rgb,  // [N,h,w,3]
+    PixelPtr rgb,  // [N,h,w,3]
     const float* __restrict__ v_output,  // [N,h,w,3]
 #endif
     float* __restrict__ v_bilagrid,  // [N,L,H,W,12]
@@ -62,6 +63,7 @@ __global__ void bilagrid_uniform_sample_backward_v2_kernel(
     , const int* __restrict__ grid_indices  // [N], or nullptr -> identity
 #endif
 ) {
+    if constexpr (kF >= 0) rgb.f = (PixelFormat)kF;
 #ifdef PATCHED
     // potentially higher cache hit rate
   #if 0

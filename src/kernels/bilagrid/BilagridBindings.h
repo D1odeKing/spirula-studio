@@ -7,6 +7,7 @@
 
 #include <cstdint>
 
+#include "core/PixelFormat.h"
 #include "core/Tensor.h"
 #include "kernels/bilagrid/BilagridReader.cuh"
 
@@ -40,8 +41,8 @@ void bilagrid_sample_backward(
 
 void bilagrid_uniform_sample_forward(
     BilagridReader bilagrid,
-    const float* rgb,
-    float* output,
+    PixelPtr rgb,
+    PixelOut output,
     int N, int L, int H, int W,
     int h, int w,
     backend::Stream stream,
@@ -60,7 +61,7 @@ void bilagrid_patched_sample_forward(
 
 void bilagrid_uniform_sample_backward_v1(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -87,7 +88,7 @@ void bilagrid_patched_sample_backward_v1(
 
 void bilagrid_uniform_sample_backward_v2(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -159,8 +160,8 @@ void bilagrid_ppisp_packed_sample_backward(
 
 void bilagrid_ppisp_uniform_sample_forward(
     BilagridReader bilagrid,
-    const float* rgb,
-    float* output,
+    PixelPtr rgb,
+    PixelOut output,
     int N, int L, int H, int W,
     int h, int w,
     backend::Stream stream,
@@ -179,7 +180,7 @@ void bilagrid_ppisp_patched_sample_forward(
 
 void bilagrid_ppisp_uniform_sample_backward_v1(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -195,7 +196,7 @@ void bilagrid_ppisp_uniform_sample_backward_v1(
 // v_rgb == nullptr skips the image-gradient write (GT-side depth/normal use).
 void bilagrid_ppisp_uniform_sample_backward_v2(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -221,8 +222,8 @@ void bilagrid_ppisp_patched_sample_backward_v1(
 
 void bilagrid_loglinear_uniform_sample_forward(
     BilagridReader bilagrid,
-    const float* rgb,
-    float* output,
+    PixelPtr rgb,
+    PixelOut output,
     int N, int L, int H, int W,
     int h, int w,
     backend::Stream stream,
@@ -241,7 +242,7 @@ void bilagrid_loglinear_patched_sample_forward(
 
 void bilagrid_loglinear_uniform_sample_backward_v1(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -256,7 +257,7 @@ void bilagrid_loglinear_uniform_sample_backward_v1(
 // BilagridBackwardSelection.md.
 void bilagrid_loglinear_uniform_sample_backward_v2(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,

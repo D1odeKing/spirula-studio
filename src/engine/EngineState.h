@@ -5,6 +5,7 @@
 // Sub-structs group related fields (world, camera, fwd, gt, grad, optim,
 // bilagrid_rgb/depth/normal, ppisp). The singleton lives in EngineState.cpp.
 
+#include "core/PixelFormat.h"
 #include "core/Tensor.h"
 
 #include "kernels/background/BackgroundSphericalHarmonics.cuh"
@@ -46,6 +47,7 @@ inline DistortionType engine_distortion_type(
     if (want_rgb)                return DistortionType::RGB_D;
     return DistortionType::D;
 }
+#include "kernels/pixelwise/PixelWise.cuh"
 #include "kernels/projection/ProjectionBwd.cuh"
 #include "kernels/projection/ProjectionFwd.cuh"
 #include "kernels/projection/ProjectionPackedFwd.cuh"
@@ -145,6 +147,21 @@ struct ForwardCache {
     DeviceTensor3D<float>             render_median; // [C,H,W] median depth, empty if not requested
     DeviceTensor3D<int32_t>           last_ids;
     RenderOutput::TensorTuple         renders;
+    // The rasterizer's own colour; renders.rgb is what the appearance stages
+    // made of it, and the raster backward needs the former.
+    DeviceTensor3D<float3>            raw_rgb;
+    // A float16 copy of it, made by the appearance chain of a forward that
+    // stores its images compact; the backward then reads only this one.
+    DeviceTensor3D<float3>            raw_rgb16;
+    // Armed by a training step none of whose terms reads the rendered depth,
+    // and cleared by the forward it applies to.
+    bool                              skip_depth_pending = false;
+    // What the stages after the rasterizer write (armed like the above, by a
+    // training step that stores its images compact), and how renders.rgb is
+    // stored now; its shape holds whatever the format.
+    PixelFormat                       image_fmt_pending = PixelFormat::F32;
+    PixelFormat                       image_fmt = PixelFormat::F32;
+    PixelFormat                       rgb_fmt = PixelFormat::F32;
     RenderOutput::TensorTuple         distortions;  // [C,H,W,...] D=W*S-C^2, only the dist_type channels allocated
     DistortionType                    dist_type = DistortionType::None;  // which distortion channels the forward emitted
     DeviceVector<float>               accum_weight; // [max_num_splats] per-splat score from raster bwd
@@ -165,7 +182,9 @@ struct ForwardCache {
 
 // Training ground truth (re-copied each batch).
 struct GTData {
-    DeviceTensor3D<float3> rgb;
+    // [B, H, W, 3] in the form it was decoded in when that needs no colour
+    // conversion, else float32 (core/PixelFormat.h); never widened in place.
+    TorchTensorView        rgb;
     DeviceTensor3D<float>  depth;
     DeviceTensor3D<float3> normal;
     DeviceTensor3D<bool>   alpha;
@@ -317,6 +336,9 @@ struct BilagridRGB {
     bool        enabled            = false;
     bool        optim_initialized  = false;
     DeviceTensor3D<float3>     fwd_pre;            // pre-bilagrid render
+    PixelFormat                fwd_pre_fmt = PixelFormat::F32;
+    // fwd_pre is the appearance chain's transient output, gone by the backward.
+    bool                       fwd_pre_transient = false;
     std::string type;
     int         C = 0;
 };
@@ -484,6 +506,24 @@ struct PpispState {
     // working->display conversion) and cleared there, so an eval or viewer
     // render never picks the transform up off stale cam indices.
     bool forward_pending = false;
+    // The same for PPISP after the encode and ahead of the bilateral grid,
+    // which only the fused appearance chain takes inside the forward.
+    bool forward_pending_after_encode = false;
+};
+
+// What the fused appearance chain did in this step's forward, for the backward
+// to replay. `fused` false means the per-stage kernels ran instead.
+struct AppearanceState {
+    bool fused = false;
+    // Cleared by a step whose color-shift regularizer reads a stage's input,
+    // which the fused chain never stores.
+    bool allow = true;
+    // Armed by a training step whose bilateral grid reads the chain's float16
+    // output: the output is then a tile-intersect slice of the arena, and the
+    // grid's backward replays the chain from the float16 raw render.
+    bool transient_pending = false;
+    DeviceTensor3D<float3> transient_post;
+    AppearanceChainParams params;
 };
 
 
@@ -638,6 +678,7 @@ struct EngineState {
     EngineBackground background;
     PpispState       ppisp;
     ColorSpaceState  color_space;
+    AppearanceState  appearance;
     ColorShiftRegState color_shift_reg;
 
     // Viewer (BVH + thumbnail cache + dataset camera arrays).

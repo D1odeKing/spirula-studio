@@ -274,6 +274,72 @@ void _engine_background_forward() {
 
 
 // ============================================================================
+// The background's share of the fused appearance chain
+// ============================================================================
+void _engine_background_chain_params(AppearanceChainParams& p) {
+    auto& bg = engine().background;
+    p.bg = AppearanceBg::None;
+    if (!bg.enabled || bg.mode == EngineBackground::Mode::None) return;
+
+    const int C_batch = (int)engine().camera.num;
+    const int H = engine().camera.height;
+    const int W = engine().camera.width;
+    bg.cur_match_luma = bg.match_luma_pending &&
+                        bg.exponent_by_cam.size() > 0 &&
+                        engine().bilagrid_cur_cam_indices.size() >= C_batch;
+    bg.match_luma_pending = false;
+
+    if (bg.mode == EngineBackground::Mode::Color) {
+        p.bg = AppearanceBg::Color;
+        p.bg_color[0] = bg.color.x;
+        p.bg_color[1] = bg.color.y;
+        p.bg_color[2] = bg.color.z;
+        return;
+    }
+    if (bg.mode == EngineBackground::Mode::Sh) {
+        bg.fwd_background.resize(PoolSlot::EngBgSkyImage, C_batch, H, W);
+        BgShViews vs = _engine_bg_sh_views(C_batch);
+        render_background_sh_forward(
+            W, H, engine().camera.model_str, engine().camera.distortion_str,
+            bg.sh_degree, vs.viewmats, vs.intrins, vs.dist_coeffs,
+            vs.sh_coeffs, _dt3d_tv(bg.fwd_background));
+        p.bg = AppearanceBg::Image;
+        p.bg_image = (const float*)bg.fwd_background.data_ptr();
+        return;
+    }
+    bg.cur_block_px = _bg_block_px(bg, H, W);
+    p.bg = AppearanceBg::Noise;
+    p.bg_transfer = bg.splat_transfer;
+    p.bg_is_linear = bg.splat_is_linear ? 1 : 0;
+    p.bg_blocky = bg.mode == EngineBackground::Mode::Pseudorandom ? 1 : 0;
+    p.bg_block_px = bg.cur_block_px;
+    p.bg_seed = bg.cur_seed;
+    p.bg_randomize_weight = bg.cur_randomize_weight;
+    p.bg_exponent_by_cam = _bg_luma_views(bg).exponent;
+}
+
+void _engine_background_sh_backward(const float* v_background) {
+    auto& bg = engine().background;
+    const int C_batch = (int)engine().camera.num;
+    const int H = engine().camera.height;
+    const int W = engine().camera.width;
+    const int64_t sh_n = bg.sh_coeffs.size();
+    float* v_sh_dev = DevicePool::global().acquire<float>(
+        PoolSlot::EngBgSkyVSh, (size_t)sh_n * 3);
+    backend::memset_async(v_sh_dev, 0, sh_n * 3 * sizeof(float),
+                          backend::kDefaultStream);
+    BgShViews vs = _engine_bg_sh_views(C_batch);
+    render_background_sh_backward(
+        W, H, engine().camera.model_str, engine().camera.distortion_str,
+        bg.sh_degree, vs.viewmats, vs.intrins, vs.dist_coeffs, vs.sh_coeffs,
+        _dt3d_tv(bg.fwd_background),
+        TorchTensorView((uint64_t)v_background, 4,
+                        {(int64_t)C_batch, (int64_t)H, (int64_t)W, 3LL}),
+        TorchTensorView((uint64_t)v_sh_dev, 4, {sh_n, 3LL}));
+}
+
+
+// ============================================================================
 // Backward hook
 // ============================================================================
 void _engine_background_backward_hook(

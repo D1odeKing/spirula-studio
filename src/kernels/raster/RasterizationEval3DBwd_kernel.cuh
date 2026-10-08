@@ -96,6 +96,9 @@ __global__ void rasterize_to_pixels_bwd_kernel(
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    // With no RGB distortion gradient buffer, that gradient is this multiple of
+    // the depth channel's (the loss gives both the same mask and normalizer).
+    const float v_dist_rgb_per_depth,
     // grad inputs
     typename SplatPrimitive::WorldBuffer v_splat_wbuffer,
     typename SplatPrimitive::ScreenBuffer v_splat_sbuffer,
@@ -220,7 +223,8 @@ __global__ void rasterize_to_pixels_bwd_kernel(
              : RenderOutput::zero());
         if constexpr (RenderOutput::has_depth(SplatPrimitive::pixelType)) {
             float inv_alpha = 1.0f / fmaxf(1.0f - render_Ts_local, 1e-10f);  // 1/W
-            float exp_depth = (inside ? render_output_buffer.depths[pix_id_image_global] : 0.0f);
+            float exp_depth = (inside && render_output_buffer.depths) ?
+                render_output_buffer.depths[pix_id_image_global] : 0.0f;
             if constexpr (dist_has_depth(dist_type)) {
                 // Log-depth render: depth = exp(m), m = C_logz/W = ln(depth).
                 // dL/dC_logz = v_d * depth / W;  dL/dT = v_d * depth * m / W.
@@ -260,9 +264,18 @@ __global__ void rasterize_to_pixels_bwd_kernel(
                 : RenderOutput::zero());
             float invW = W > 1e-10f ? (1.0f / W) : 0.0f;
             pix2_colors[pix_id_local] = (Dval + C * C) * invW;
-            v_distortion_out[pix_id_local] = (inside ?
-                v_distortions_output_buffer.loadDistortion<dist_type>(pix_id_image_global)
-                : RenderOutput::zero());
+            RenderOutput v_d = RenderOutput::zero();
+            if (inside) {
+                if (dist_has_rgb(dist_type) && v_distortions_output_buffer.rgbs == nullptr) {
+                    constexpr DistortionType no_rgb = dist_has_normal(dist_type) ?
+                        DistortionType::DN : DistortionType::D;
+                    v_d = v_distortions_output_buffer.loadDistortion<no_rgb>(pix_id_image_global);
+                    v_d.rgb = make_float3(v_d.depth * v_dist_rgb_per_depth);
+                } else {
+                    v_d = v_distortions_output_buffer.loadDistortion<dist_type>(pix_id_image_global);
+                }
+            }
+            v_distortion_out[pix_id_local] = v_d;
             dist_W[pix_id_local] = W;
         }
 
@@ -696,6 +709,9 @@ void rasterize_to_pixels_bwd_kernel_wrapper(
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    // With no RGB distortion gradient buffer, that gradient is this multiple of
+    // the depth channel's (the loss gives both the same mask and normalizer).
+    const float v_dist_rgb_per_depth,
     // grad inputs
     typename SplatPrimitive::WorldBuffer v_splat_wbuffer,
     typename SplatPrimitive::ScreenBuffer v_splat_sbuffer,
@@ -743,6 +759,7 @@ void rasterize_to_pixels_bwd_kernel_wrapper(
         v_render_output_buffer, v_render_Ts,
         v_median,
         v_distortions_output_buffer,
+        v_dist_rgb_per_depth,
         v_splat_wbuffer, v_splat_sbuffer,
         o_accum_weight,
         o_accum_weight_den

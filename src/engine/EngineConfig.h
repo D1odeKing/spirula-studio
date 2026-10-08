@@ -137,6 +137,10 @@ struct OptimConfig {
     // (4 B / cell). FPBO-only; the non-FPBO Adam kernel throws when this is
     // non-32. quantization_level 1 sets it to 16.
     int   non_sh_optim_bits               = 32;
+    // The full-resolution images between the rasterizer and the loss
+    // (core/PixelFormat.h): 32, or 16 for float16. quantization_level 1 sets
+    // it to 16.
+    int   image_bits                      = 32;
     // Single SH quantization level. Collapses the FPBO dispatch's
     // (sh_optim_bits, sh_value_bits) axes down to 2 instantiations:
     //   0 = off    : fp32 everywhere

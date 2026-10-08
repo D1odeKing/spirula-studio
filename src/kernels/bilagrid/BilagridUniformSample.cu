@@ -10,8 +10,8 @@
 
 void bilagrid_uniform_sample_forward(
     BilagridReader bilagrid,
-    const float* rgb,
-    float* output,
+    PixelPtr rgb,
+    PixelOut output,
     int N, int L, int H, int W,
     int h, int w,
     cudaStream_t stream,
@@ -53,7 +53,7 @@ void bilagrid_patched_sample_forward(
 
 void bilagrid_uniform_sample_backward_v1(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -81,11 +81,13 @@ void bilagrid_uniform_sample_backward_v1(
             (H*mult_y +block.y-1)/block.y,
             (N*L +block.z-1)/block.z
         };
-        bilagrid_uniform_sample_backward_v1_kernel_bilagrid<<<bounds, block, 0, stream>>>(
-            rgb, v_output, v_bilagrid,
-            N, L, H, W, h, w, mult_x, mult_y,
-            grid_indices
-        );
+        bilagrid_with_format(rgb.f, [&](auto fmt) {
+            bilagrid_uniform_sample_backward_v1_kernel_bilagrid<decltype(fmt)::value><<<bounds, block, 0, stream>>>(
+                rgb, v_output, v_bilagrid,
+                N, L, H, W, h, w, mult_x, mult_y,
+                grid_indices
+            );
+        });
         CHECK_DEVICE_ERROR(cudaGetLastError());
     }
 
@@ -93,12 +95,14 @@ void bilagrid_uniform_sample_backward_v1(
     {
         int total = N * h * w;
         int blocks = (total + kBilagridBwdV1RgbThreads - 1) / kBilagridBwdV1RgbThreads;
-        bilagrid_uniform_sample_backward_v1_kernel_rgb<<<blocks, kBilagridBwdV1RgbThreads, 0, stream>>>(
-            bilagrid, rgb, v_output,
-            v_rgb,
-            N, L, H, W, h, w,
-            grid_indices
-        );
+        bilagrid_with_format(rgb.f, [&](auto fmt) {
+            bilagrid_uniform_sample_backward_v1_kernel_rgb<decltype(fmt)::value><<<blocks, kBilagridBwdV1RgbThreads, 0, stream>>>(
+                bilagrid, rgb, v_output,
+                v_rgb,
+                N, L, H, W, h, w,
+                grid_indices
+            );
+        });
         CHECK_DEVICE_ERROR(cudaGetLastError());
     }
 }
@@ -163,7 +167,7 @@ void bilagrid_patched_sample_backward_v1(
 
 void bilagrid_uniform_sample_backward_v2(
     BilagridReader bilagrid,
-    const float* rgb,
+    PixelPtr rgb,
     const float* v_output,
     float* v_bilagrid,
     float* v_rgb,
@@ -178,11 +182,13 @@ void bilagrid_uniform_sample_backward_v2(
         (h +block.y-1)/block.y,
         (N +block.z-1)/block.z
     };
-    bilagrid_uniform_sample_backward_v2_kernel<<<bounds, block, 0, stream>>>(
-        bilagrid, rgb, v_output,
-        v_bilagrid, v_rgb,
-        N, L, H, W, h, w, grid_indices
-    );
+    bilagrid_with_format(rgb.f, [&](auto fmt) {
+        bilagrid_uniform_sample_backward_v2_kernel<decltype(fmt)::value><<<bounds, block, 0, stream>>>(
+            bilagrid, rgb, v_output,
+            v_bilagrid, v_rgb,
+            N, L, H, W, h, w, grid_indices
+        );
+    });
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
 

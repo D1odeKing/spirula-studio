@@ -558,6 +558,7 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.optim.sh_optim_bits      = c.quantization_level == 0 ? 32 : 8;
     cfg.optim.sh_value_bits      = c.quantization_level == 0 ? 32 : 16;
     cfg.optim.non_sh_optim_bits  = c.quantization_level == 0 ? 32 : 16;
+    cfg.optim.image_bits         = c.quantization_level == 0 ? 32 : 16;
     cfg.optim.use_per_splat_bias_correction = c.use_per_splat_bias_correction;
     cfg.optim.reg_rendered_only             = c.reg_rendered_only;
     cfg.optim.use_fused_proj_bwd_optim      = c.use_fused_proj_bwd_optim;

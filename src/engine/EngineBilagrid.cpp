@@ -329,11 +329,16 @@ void engine_bilagrid_forward(TorchTensorView cam_indices) {
         // pre = current renders.rgb (pointer alias, no D2D copy). The bilagrid
         // kernels already accept distinct in/out pointers, so we read pre and
         // write into a fresh "post" buffer, then re-point engine state.
+        auto& fwd = engine().fwd;
         engine().bilagrid_rgb.fwd_pre = fwd_rgb_tensor;
-        DeviceTensor3D<float3> post_rgb;
-        post_rgb.resize(PoolSlot::EngBgRgbPost, C_batch, H, W);
-        const float* in_ptr  = (const float*)engine().bilagrid_rgb.fwd_pre.data_ptr();
-        float*       out_ptr = (float*)post_rgb.data_ptr();
+        engine().bilagrid_rgb.fwd_pre_fmt = fwd.rgb_fmt;
+        engine().bilagrid_rgb.fwd_pre_transient =
+            fwd_rgb_tensor.data_ptr() != nullptr &&
+            fwd_rgb_tensor.data_ptr() == engine().appearance.transient_post.data_ptr();
+        DeviceTensor3D<float3> post_rgb =
+            _engine_image(PoolSlot::EngBgRgbPost, C_batch, H, W, fwd.image_fmt);
+        const PixelPtr in_ptr(fwd_rgb_tensor.data_ptr(), fwd.rgb_fmt);
+        const PixelOut out_ptr(post_rgb.data_ptr(), fwd.image_fmt);
 
         int L = (int)engine().bilagrid_rgb.grids.size<1>();
         int gH = (int)engine().bilagrid_rgb.grids.size<2>();
@@ -358,6 +363,7 @@ void engine_bilagrid_forward(TorchTensorView cam_indices) {
                 kBilagridStream, cam_idx_dev);
         }
         fwd_rgb_tensor = post_rgb;
+        fwd.rgb_fmt = fwd.image_fmt;
     }
 
     // --- Depth (gt side) ---
@@ -507,7 +513,13 @@ void _engine_bilagrid_backward_hook(
         // v_render_rgb is the gradient w.r.t. POST-bilagrid rgb (what entered loss).
         // The backward overwrites it with the gradient w.r.t. PRE-bilagrid rgb.
         float* v_rgb_ptr = (float*)std::get<0>(v_render_rgb);
-        const float* rgb_pre_ptr = (const float*)engine().bilagrid_rgb.fwd_pre.data_ptr();
+        if (engine().bilagrid_rgb.fwd_pre_transient) {
+            pool_begin_phase(PoolPhase::ImageBwd);
+            engine().bilagrid_rgb.fwd_pre = _engine_appearance_replay();
+            engine().bilagrid_rgb.fwd_pre_transient = false;
+        }
+        const PixelPtr rgb_pre_ptr(engine().bilagrid_rgb.fwd_pre.data_ptr(),
+                                   engine().bilagrid_rgb.fwd_pre_fmt);
 
         const std::string& bg_type = engine().bilagrid_rgb.type;
         spirula::bilagrid::ContextKey bg_key_rgb{

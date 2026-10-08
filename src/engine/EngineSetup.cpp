@@ -111,6 +111,21 @@ void set_camera_params(
 }
 
 
+// An 8-bit image the loss can read as it is stays 8-bit on the device, a
+// quarter of the float copy. A device source is copied too: the data
+// manager may reuse its buffer for the next batch while this one trains.
+static TorchTensorView _upload_gt_rgb(const TorchTensorView& src) {
+    const uint64_t ptr = std::get<0>(src);
+    if (ptr == 0) return TorchTensorView();
+    if (std::get<1>(src) != 1 || engine().color_space.image_enabled)
+        return _dt3d_tv(_hv_to_dt3d_gt<float3>(src, PoolSlot::GtRgb, "rgb"));
+    size_t n = 1;
+    for (int64_t d : std::get<2>(src)) n *= (size_t)d;
+    uint8_t* dst = DevicePool::global().acquire<uint8_t>(PoolSlot::GtRgb, n);
+    backend::memcpy_sync(dst, (const void*)ptr, n, backend::MemcpyKind::Auto);
+    return TorchTensorView((uint64_t)dst, 1, std::get<2>(src));
+}
+
 void set_training_data(
     TorchTensorView gt_rgb,
     TorchTensorView gt_depth,
@@ -118,7 +133,7 @@ void set_training_data(
     TorchTensorView gt_alpha,
     bool input_depth_is_ray_depth
 ) {
-    engine().gt.rgb    = _hv_to_dt3d_gt<float3>(gt_rgb,    PoolSlot::GtRgb,    "rgb");
+    engine().gt.rgb    = _upload_gt_rgb(gt_rgb);
     engine().gt.depth  = _hv_to_dt3d_gt<float>(gt_depth,   PoolSlot::GtDepth,  "depth");
     engine().gt.normal = _hv_to_dt3d_gt<float3>(gt_normal, PoolSlot::GtNormal, "normal");
     // gt_alpha: small bool/uint8 buffer (the external mask). No conversion;

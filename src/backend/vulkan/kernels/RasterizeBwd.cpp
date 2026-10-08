@@ -27,8 +27,10 @@ struct Raster2dBwdParams {
     uint64_t v_s_screen;
     uint64_t o_accum_weight, o_accum_weight_den;
     uint32_t I, N, n_isects, width, height, tile_width, tile_height, macro_log2;
+    float v_dist_rgb_per_depth;
+    uint32_t state_flags;
 };
-static_assert(sizeof(Raster2dBwdParams) == 20 * 8 + 8 * 4,
+static_assert(sizeof(Raster2dBwdParams) == 20 * 8 + 10 * 4,
               "params layout must match the slang struct");
 
 // Mirrors Raster3dgutBwdParams.
@@ -42,8 +44,10 @@ struct Raster3dgutBwdParams {
     uint64_t v_means, v_quats, v_scales, v_s_screen;
     uint64_t o_accum_weight, o_accum_weight_den, v_viewmats;
     uint32_t I, N, n_isects, width, height, tile_width, tile_height, macro_log2;
+    float v_dist_rgb_per_depth;
+    uint32_t state_flags;
 };
-static_assert(sizeof(Raster3dgutBwdParams) == 31 * 8 + 8 * 4,
+static_assert(sizeof(Raster3dgutBwdParams) == 31 * 8 + 10 * 4,
               "params layout must match the slang struct");
 
 uint32_t dist_spec_bwd(DistortionType dist_type) {
@@ -56,6 +60,21 @@ uint32_t dist_spec_bwd(DistortionType dist_type) {
                 "rasterize_to_pixels_bwd: distortion type not instantiated "
                 "(normal needs a normal-rendering primitive)");
     }
+}
+
+// rasterize_bwd.slang's kRbDepthBound / kRbDistRgbFromDepth.
+uint32_t raster_bwd_state_flags(
+    const RenderOutput::TensorTuple& render_outputs,
+    const RenderOutput::TensorTuple& v_render_outputs,
+    const std::optional<RenderOutput::TensorTuple>& v_distortion_outputs) {
+    uint32_t f = 0;
+    if (std::get<1>(render_outputs).data_ptr() &&
+        std::get<1>(v_render_outputs).data_ptr())
+        f |= 1u;
+    if (v_distortion_outputs.has_value() &&
+        !std::get<0>(v_distortion_outputs.value()).data_ptr())
+        f |= 2u;
+    return f;
 }
 
 }  // namespace
@@ -86,6 +105,7 @@ std::tuple<
     const DeviceTensor3D<float> v_render_Ts,
     const DeviceTensor3D<float> v_median,
     std::optional<RenderOutput::TensorTuple> v_distortion_outputs,
+    float v_dist_rgb_per_depth,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_w,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_s
 ) {
@@ -129,7 +149,7 @@ std::tuple<
         p.render_Ts = (uint64_t)render_Ts.data_ptr();
         p.last_ids = (uint64_t)last_ids.data_ptr();
         p.out_rgb = (uint64_t)std::get<0>(render_outputs_tuple).data_ptr();
-        p.out_depth = (uint64_t)std::get<1>(render_outputs_tuple).data_ptr();
+        p.out_depth = vkk::or_fallback(std::get<1>(render_outputs_tuple).data_ptr());
         if (distortion_fwd_outputs.has_value()) {
             p.dist_rgb = vkk::or_fallback(
                 std::get<0>(distortion_fwd_outputs.value()).data_ptr());
@@ -141,7 +161,7 @@ std::tuple<
         }
         p.awmap = vkk::or_fallback(accum_weight_map.data_ptr());
         p.v_out_rgb = (uint64_t)std::get<0>(v_render_outputs).data_ptr();
-        p.v_out_depth = (uint64_t)std::get<1>(v_render_outputs).data_ptr();
+        p.v_out_depth = vkk::or_fallback(std::get<1>(v_render_outputs).data_ptr());
         p.v_render_Ts = (uint64_t)v_render_Ts.data_ptr();
         p.v_median = vkk::or_fallback(v_median.data_ptr());
         if (v_distortion_outputs.has_value()) {
@@ -153,6 +173,10 @@ std::tuple<
             p.v_dist_rgb = vkk::null_fallback();
             p.v_dist_depth = vkk::null_fallback();
         }
+        p.v_dist_rgb_per_depth = v_dist_rgb_per_depth;
+        p.state_flags = raster_bwd_state_flags(render_outputs_tuple,
+                                               v_render_outputs,
+                                               v_distortion_outputs);
         p.v_s_screen = (uint64_t)vsb.raw_data();
         p.o_accum_weight = vkk::or_fallback(o_accum_weight.data_ptr());
         p.o_accum_weight_den = vkk::or_fallback(
@@ -215,6 +239,7 @@ std::tuple<
     const DeviceTensor3D<float> v_render_Ts,
     const DeviceTensor3D<float> v_median,
     std::optional<RenderOutput::TensorTuple> v_distortion_outputs,
+    float v_dist_rgb_per_depth,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_w,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_s,
     bool need_viewmat_grad
@@ -278,7 +303,7 @@ std::tuple<
         p.render_Ts = (uint64_t)render_Ts.data_ptr();
         p.last_ids = (uint64_t)last_ids.data_ptr();
         p.out_rgb = (uint64_t)std::get<0>(render_outputs).data_ptr();
-        p.out_depth = (uint64_t)std::get<1>(render_outputs).data_ptr();
+        p.out_depth = vkk::or_fallback(std::get<1>(render_outputs).data_ptr());
         if (distortion_fwd_outputs.has_value()) {
             p.dist_rgb = vkk::or_fallback(
                 std::get<0>(distortion_fwd_outputs.value()).data_ptr());
@@ -290,7 +315,7 @@ std::tuple<
         }
         p.awmap = vkk::or_fallback(accum_weight_map.data_ptr());
         p.v_out_rgb = (uint64_t)std::get<0>(v_render_outputs).data_ptr();
-        p.v_out_depth = (uint64_t)std::get<1>(v_render_outputs).data_ptr();
+        p.v_out_depth = vkk::or_fallback(std::get<1>(v_render_outputs).data_ptr());
         p.v_render_Ts = (uint64_t)v_render_Ts.data_ptr();
         p.v_median = vkk::or_fallback(v_median.data_ptr());
         if (v_distortion_outputs.has_value()) {
@@ -302,6 +327,10 @@ std::tuple<
             p.v_dist_rgb = vkk::null_fallback();
             p.v_dist_depth = vkk::null_fallback();
         }
+        p.v_dist_rgb_per_depth = v_dist_rgb_per_depth;
+        p.state_flags = raster_bwd_state_flags(render_outputs,
+                                               v_render_outputs,
+                                               v_distortion_outputs);
         p.v_means = (uint64_t)vwb.raw_data(0);
         p.v_quats = (uint64_t)vwb.raw_data(1);
         p.v_scales = (uint64_t)vwb.raw_data(2);

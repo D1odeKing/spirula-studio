@@ -227,7 +227,6 @@ enum class SaveClass : uint8_t {
   X(MeshingRenderRadii             , "meshing.render.radii",              Splat    , Never) \
   /* ---- per-pixel-loss scratch ---- */ \
   X(PplLosses                      , "ppl.losses",                        Image    , Never) \
-  X(PplLossMapScale                , "ppl.loss_map_scale",                Image    , Never) \
   X(PplRawLosses                   , "ppl.raw_losses",                    Image    , Never) \
   X(PplTotalLosses                 , "ppl.total_losses",                  Image    , Never) \
   X(PplVRawLosses                  , "ppl.v_raw_losses",                  Image    , Never) \
@@ -287,6 +286,9 @@ enum class SaveClass : uint8_t {
   X(ColorSpaceSplatMatrix          , "color_space.splat_matrix",          Appearance, Always) \
   X(ColorSpaceImageMatrix          , "color_space.image_matrix",          Appearance, Always) \
   X(ColorSpaceFwdPost              , "color_space.fwd_post",              Image    , Never) \
+  X(EngAppearancePost              , "eng.appearance.post",               Image    , Never) \
+  X(EngAppearanceLinear            , "eng.appearance.linear",             Image    , Never) \
+  X(EngAppearanceRaw16             , "eng.appearance.raw16",              Image    , Never) \
   X(ColorSpaceBgSrgb               , "color_space.bg_srgb",               Image    , Never) \
   /* ---- ground-truth staging ---- */ \
   X(GtRgb                          , "gt.rgb",                            Image    , Never) \
@@ -315,7 +317,6 @@ enum class SaveClass : uint8_t {
   X(SemiOffloadedAdamBuf           , "semi_offloaded_adam_buf",           Other    , Never) \
   X(SsimScalar                     , "ssim_scalar",                       Other    , Never) \
   X(SsimMaskWeight                 , "ssim.mask_weight",                  Image    , Never) \
-  X(SsimMaskWeightTmp              , "ssim.mask_weight_tmp",              Image    , Never) \
   /* ---- densify scratch ---- */ \
   X(DensifyQuantileTemp            , "densify_quantile_temp",             Other    , Never) \
   X(DensifyMapNorm                 , "densify_map_norm",                  Other    , Never) \
@@ -473,6 +474,8 @@ constexpr const char* to_string(SaveClass s) {
 enum class PoolPhase : uint8_t {
     None = 0,   // owns its allocation -- every slot not listed below
     TileIsect,  // scratch that dies inside do_intersect_tile_generic
+    Loss,       // the loss pyramid and its scratch, dead once the loss returns
+    ImageBwd,   // what the image stages' backward rebuilds after the loss
     RasterBwd,  // raster backward -> projection backward / fused optim step
     Count
 };
@@ -581,6 +584,8 @@ constexpr const char* to_string(PoolPhase p) {
     switch (p) {
         case PoolPhase::None:      return "none";
         case PoolPhase::TileIsect: return "tile-isect";
+        case PoolPhase::Loss:      return "loss";
+        case PoolPhase::ImageBwd:  return "image-bwd";
         case PoolPhase::RasterBwd: return "raster-bwd";
         default:                   return "?";
     }

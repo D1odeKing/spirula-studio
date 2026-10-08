@@ -148,8 +148,14 @@ void forward_3dgs(
     engine().packed = packed;
     // Read-and-clear up front so a throw below cannot leave it armed for the
     // next render, which has no reason to want the transform.
+    const bool output_depth = !engine().fwd.skip_depth_pending;
+    engine().fwd.skip_depth_pending = false;
+    engine().fwd.image_fmt = engine().fwd.image_fmt_pending;
+    engine().fwd.image_fmt_pending = PixelFormat::F32;
     const bool ppisp_in_forward = engine().ppisp.forward_pending;
+    const bool ppisp_after_encode = engine().ppisp.forward_pending_after_encode;
     engine().ppisp.forward_pending = false;
+    engine().ppisp.forward_pending_after_encode = false;
 
     // The stashed screen gradients live in the arena the intersect below
     // reuses, so this view is already dead. Dropping it turns a stale
@@ -388,7 +394,7 @@ void forward_3dgs(
             in_splats, engine().fwd.splats_s, engine().fwd.gaussian_ids,
             (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
             tile_offsets, flatten_ids, engine().fwd.macro_log2,
-            dist_type, output_median);
+            dist_type, output_median, output_depth);
         renders = r; render_Ts = rTs; last_ids = lids; render_median = med; distortions = dist;
     } else if (primitive == "mip") {
         auto [r, rTs, lids, dist, med] = rasterize_to_pixels_mip_fwd(
@@ -396,7 +402,7 @@ void forward_3dgs(
             in_splats, engine().fwd.splats_s, engine().fwd.gaussian_ids,
             (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
             tile_offsets, flatten_ids, engine().fwd.macro_log2,
-            dist_type, output_median);
+            dist_type, output_median, output_depth);
         renders = r; render_Ts = rTs; last_ids = lids; render_median = med; distortions = dist;
     } else if (primitive == "3dgut") {
         auto [r, rTs, lids, dist, med] = rasterize_to_pixels_3dgut_fwd(
@@ -408,36 +414,32 @@ void forward_3dgs(
             engine().fwd.aabb,
             (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
             tile_offsets, flatten_ids, engine().fwd.macro_log2,
-            dist_type, output_median);
+            dist_type, output_median, output_depth);
         renders = r; render_Ts = rTs; last_ids = lids; render_median = med; distortions = dist;
     }
 
     engine().fwd.renders = renders;
+    engine().fwd.rgb_fmt = PixelFormat::F32;
+    engine().fwd.raw_rgb = std::get<0>(renders);
+    engine().fwd.raw_rgb16 = DeviceTensor3D<float3>();
     engine().fwd.distortions = distortions;
     engine().fwd.dist_type = dist_type;
     engine().fwd.render_Ts = render_Ts;
     engine().fwd.render_median = render_median;
     engine().fwd.last_ids = last_ids;
 
-    // Background blend (in-place on fwd.renders.rgb). No-op when no
-    // engine_init_background_* was called. Folded into the forward path so
-    // both training (via engine_train_step) and eval/viewer renders (via
-    // direct calls to engine_forward_3dgs) see the blend. The blend reads
-    // its per-iter (seed, randomize_weight) from engine state — training
-    // sets them via engine_set_background_step_params before each call.
-    if (engine().background.enabled) {
-        _engine_background_forward();
+    // render -> bg -> [PPISP] -> encode -> [PPISP] -> bilagrid -> [PPISP] ->
+    // loss. The stages before the grid run here, so eval and viewer renders get
+    // them too; only the arming flags let PPISP in.
+    const AppearancePpisp fused_ppisp =
+        ppisp_in_forward     ? AppearancePpisp::BeforeEncode
+        : ppisp_after_encode ? AppearancePpisp::AfterEncode
+                             : AppearancePpisp::Off;
+    if (!_engine_appearance_forward(fused_ppisp)) {
+        if (engine().background.enabled) _engine_background_forward();
+        if (ppisp_in_forward) _engine_ppisp_forward_current();
+        _engine_color_space_forward();
     }
-
-    // PPISP ahead of the display encode, when the step asked for it: this is
-    // the only place between the blend and the conversion, and the arming
-    // flag is what keeps eval / viewer renders out of it.
-    if (ppisp_in_forward) _engine_ppisp_forward_current();
-
-    // Linear / wide-gamut -> sRGB. Done AFTER the background blend so the
-    // blend operates in the splat working color space:
-    // render -> bg -> [PPISP] -> display encode -> bilagrid -> [PPISP] -> loss.
-    _engine_color_space_forward();
 
     // Results stay in pool — use engine_copy_render_to_host to fetch
 }

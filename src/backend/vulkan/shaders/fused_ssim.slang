@@ -13,12 +13,17 @@
 
 #include "int8_compat.slang"
 #include "atomic_float.slang"
+#include "rgb_format.slang"
 
 // The double halo makes the tile edge expensive: 16 loads 36x36 per 256
 // pixels, 24 (the CUDA block) 44x44 per 576. 24 needs 47712 B of groupshared,
 // so the 32 KB floor keeps llvmpipe at 16 -- PerPixelLoss.cpp picks.
 [SpecializationConstant]
 const int kSsimTile = 16;
+// img1's format | img2's << 2 (core/PixelFormat.h), fixed per pipeline: read
+// per load from the params instead, the formats cost ssim_bwd_inplace ~55%.
+[SpecializationConstant]
+const int kSsimFmts = 0;
 
 static const int BX = kSsimTile;
 static const int BY = kSsimTile;
@@ -44,10 +49,11 @@ static const uint kSsimHasVal = 1u << 1;
 static const uint kSsimWriteGrad = 1u << 2;
 static const uint kSsimHasLossMap = 1u << 3;
 static const uint kSsimHasCov = 1u << 4;
+// The images' core/PixelFormat.h formats, two bits each.
 
 struct SsimParams {
-    float* img1;      // [B,H,W,3]
-    float* img2;      // [B,H,W,3]
+    uint* img1;       // [B,H,W,3], read as the flags' formats
+    uint* img2;       // [B,H,W,3]
     uint* masks;      // [Bm,Hm,Wm] bool bytes
     float* mask_w;    // [B,H,W] gaussian window coverage, or fallback
     float* dL_dimg1;  // [B,H,W,3], accumulated (+=)
@@ -63,9 +69,9 @@ struct SsimParams {
 };
 
 [ForceInline]
-float _fs_pix(float* img, int b, int y, int x, int ci, int H, int W) {
+float _fs_pix(uint* img, uint fmt, int b, int y, int x, int ci, int H, int W) {
     if (uint(x) >= uint(W) || uint(y) >= uint(H)) return 0.0f;
-    return img[(((b * H) + y) * W + x) * 3 + ci];
+    return rgb_load1(img, (((b * H) + y) * W + x) * 3 + ci, fmt);
 }
 
 // Nearest-sample the mask at ITS resolution, as core/Interpolation.cuh's
@@ -91,13 +97,14 @@ bool _fs_mask_at(uint* masks, int Bm, int Hm, int Wm, int H, int W,
 // of the window sums the way a masked one does. Out-of-image taps read
 // unclipped, matching _fs_mask_at.
 [ForceInline]
-bool _fs_unclipped(float* img1, float* img2, float sat, int H, int W,
+bool _fs_unclipped(uint* img1, uint* img2, uint fmts, float sat, int H, int W,
                    int b, int y, int x) {
     if (sat <= 0.0f) return true;
     if (uint(x) >= uint(W) || uint(y) >= uint(H)) return true;
-    int i = (((b * H) + y) * W + x) * 3;
-    return min(min(img1[i], img1[i + 1]), img1[i + 2]) <= sat ||
-           min(min(img2[i], img2[i + 1]), img2[i + 2]) <= sat;
+    int pix = ((b * H) + y) * W + x;
+    float3 a = rgb_load3(img1, pix, fmts & 3u);
+    float3 c = rgb_load3(img2, pix, (fmts >> 2) & 3u);
+    return min(min(a.x, a.y), a.z) <= sat || min(min(c.x, c.y), c.z) <= sat;
 }
 
 [ForceInline]
@@ -105,7 +112,7 @@ bool _fs_mask(SsimParams p, int b, int y, int x) {
     if ((p.flags & kSsimHasMask) != 0 &&
             !_fs_mask_at(p.masks, p.Bm, p.Hm, p.Wm, p.H, p.W, b, y, x))
         return false;
-    return _fs_unclipped(p.img1, p.img2, p.sat, p.H, p.W, b, y, x);
+    return _fs_unclipped(p.img1, p.img2, uint(kSsimFmts), p.sat, p.H, p.W, b, y, x);
 }
 
 
@@ -116,58 +123,64 @@ static const float kGaussSum = 0.9999999f;
 
 struct SsimCovParams {
     uint* masks;
-    float* img1;
-    float* img2;
-    float* tmp;
+    uint* img1;
+    uint* img2;
     float* out;
     int B, H, W;
     int Bm, Hm, Wm;
     float sat;
-    int _pad0;
+    uint fmts;    // img1's format | img2's << 2
 };
 
 // Bm is 0 when there is no mask buffer, which _fs_mask_at reads as unmasked.
 [ForceInline]
 float _fs_cov_mask(SsimCovParams p, int b, int y, int x) {
     bool keep = _fs_mask_at(p.masks, p.Bm, p.Hm, p.Wm, p.H, p.W, b, y, x) &&
-                _fs_unclipped(p.img1, p.img2, p.sat, p.H, p.W, b, y, x);
+                _fs_unclipped(p.img1, p.img2, p.fmts, p.sat, p.H, p.W, b, y, x);
     return keep ? 1.0f : 0.0f;
 }
 
-[shader("compute")]
-[numthreads(256, 1, 1)]
-void ssim_mask_cov_x(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
-                     uniform SsimCovParams p) {
-    int x = int(wg.x) * 16 + int(tid % 16u);
-    int y = int(wg.y) * 16 + int(tid / 16u);
-    int b = int(wg.z);
-    if (x >= p.W || y >= p.H) return;
-    float acc = 0.0f;
-    [ForceUnroll]
-    for (int d = 1; d <= HALO; d++)
-        acc += kGauss[HALO - d] *
-            (_fs_cov_mask(p, b, y, x - d) + _fs_cov_mask(p, b, y, x + d));
-    acc += kGauss[HALO] * _fs_cov_mask(p, b, y, x);
-    p.tmp[(b * p.H + y) * p.W + x] = acc;
-}
+// One pass: the mask tile and its halo go through groupshared memory, so the
+// horizontal sums never reach global memory.
+static const int COV_T = 16;
+static const int COV_S = COV_T + 2 * HALO;
+groupshared float _fs_cov_m[COV_S * COV_S];
+groupshared float _fs_cov_x[COV_S * COV_T];
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
-void ssim_mask_cov_y(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
-                     uniform SsimCovParams p) {
-    int x = int(wg.x) * 16 + int(tid % 16u);
-    int y = int(wg.y) * 16 + int(tid / 16u);
+void ssim_mask_cov(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
+                   uniform SsimCovParams p) {
     int b = int(wg.z);
+    int x0 = int(wg.x) * COV_T - HALO;
+    int y0 = int(wg.y) * COV_T - HALO;
+    for (int i = int(tid); i < COV_S * COV_S; i += 256)
+        _fs_cov_m[i] = _fs_cov_mask(p, b, y0 + i / COV_S, x0 + i % COV_S);
+    GroupMemoryBarrierWithGroupSync();
+    for (int i = int(tid); i < COV_S * COV_T; i += 256) {
+        int ly = i / COV_T, lx = i % COV_T + HALO;
+        float acc = 0.0f;
+        [ForceUnroll]
+        for (int d = 1; d <= HALO; d++)
+            acc += kGauss[HALO - d] * (_fs_cov_m[ly * COV_S + lx - d] +
+                                       _fs_cov_m[ly * COV_S + lx + d]);
+        acc += kGauss[HALO] * _fs_cov_m[ly * COV_S + lx];
+        _fs_cov_x[i] = acc;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    int tx = int(tid % 16u), ty = int(tid / 16u);
+    int x = int(wg.x) * COV_T + tx;
+    int y = int(wg.y) * COV_T + ty;
     if (x >= p.W || y >= p.H) return;
     float acc = 0.0f;
     [ForceUnroll]
     for (int d = 1; d <= HALO; d++) {
         int lo = y - d, hi = y + d;
-        float a = uint(lo) < uint(p.H) ? p.tmp[(b * p.H + lo) * p.W + x] : kGaussSum;
-        float c = uint(hi) < uint(p.H) ? p.tmp[(b * p.H + hi) * p.W + x] : kGaussSum;
+        float a = uint(lo) < uint(p.H) ? _fs_cov_x[(ty + HALO - d) * COV_T + tx] : kGaussSum;
+        float c = uint(hi) < uint(p.H) ? _fs_cov_x[(ty + HALO + d) * COV_T + tx] : kGaussSum;
         acc += kGauss[HALO - d] * (a + c);
     }
-    acc += kGauss[HALO] * p.tmp[(b * p.H + y) * p.W + x];
+    acc += kGauss[HALO] * _fs_cov_x[(ty + HALO) * COV_T + tx];
     p.out[(b * p.H + y) * p.W + x] = acc;
 }
 
@@ -193,6 +206,8 @@ void ssim_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 
     const bool lm_active = p.mode != 0 && (p.flags & kSsimHasLossMap) != 0;
     const bool has_val = (p.flags & kSsimHasVal) != 0;
+    const uint fmt1 = uint(kSsimFmts) & 3u;
+    const uint fmt2 = (uint(kSsimFmts) >> 2) & 3u;
 
     const float grad =
         p.dL_dmap / (3.0f * float(p.B) * float(p.W) * float(p.H));
@@ -210,8 +225,8 @@ void ssim_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                 int lx = t % LX;
                 int gy = startY + ly - 2 * HALO;
                 int gx = startX + lx - 2 * HALO;
-                float X = _fs_pix(p.img1, bIdx, gy, gx, ci, p.H, p.W);
-                float Y = _fs_pix(p.img2, bIdx, gy, gx, ci, p.H, p.W);
+                float X = _fs_pix(p.img1, fmt1, bIdx, gy, gx, ci, p.H, p.W);
+                float Y = _fs_pix(p.img2, fmt2, bIdx, gy, gx, ci, p.H, p.W);
                 if (!_fs_mask(p, bIdx, gy, gx)) { X = 0.0f; Y = 0.0f; }
                 sTile(ly, lx, 0) = X;
                 sTile(ly, lx, 1) = Y;
@@ -400,8 +415,8 @@ void ssim_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                 sum2 += sScratch(ly, lx, 2) * wc;
             }
 
-            float p1 = _fs_pix(p.img1, bIdx, pix_y, pix_x, ci, p.H, p.W);
-            float p2 = _fs_pix(p.img2, bIdx, pix_y, pix_x, ci, p.H, p.W);
+            float p1 = _fs_pix(p.img1, fmt1, bIdx, pix_y, pix_x, ci, p.H, p.W);
+            float p2 = _fs_pix(p.img2, fmt2, bIdx, pix_y, pix_x, ci, p.H, p.W);
             bool mask = _fs_mask(p, bIdx, pix_y, pix_x);
             float dL_dpix = sum0 + (2.0f * p1) * sum1 + p2 * sum2;
             // The scalar already counted masked pixels as a perfect match,

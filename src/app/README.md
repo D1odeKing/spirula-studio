@@ -259,7 +259,7 @@ agree. Only the C++ exists now, so the table said nothing the code does not.
   Python — nerfstudio c2w/points/order/train_frame_scale AND the full warp
   expansion (K, offsets, 2000×viewmats/intrins/dist, input intrins) all
   match to float32 precision.
-- **Metashape parser** (2026-07-10, dye_alley 732-frame dual-fisheye rig):
+- **Metashape parser** (2026-07-10, 732-frame dual-fisheye rig):
   all 732 cameras match the Python metashape path to float32 precision
   (c2w, intrins, dist incl. p1/p2 swap + b1/b2 scaling, points, order,
   train_frame_scale); `.psx` camera-table disambiguation exercised (labels

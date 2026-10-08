@@ -203,7 +203,7 @@ void set_training_data_warped(
     {
         TorchTensorView dv((uint64_t)d_rgb_float, 4,
                            {(int64_t)B_post, (int64_t)out_H, (int64_t)out_W, 3LL});
-        engine().gt.rgb = DeviceTensor3D<float3>(dv);
+        engine().gt.rgb = dv;
     }
 
     // ---- Mask byte warp ---------------------------------------------------

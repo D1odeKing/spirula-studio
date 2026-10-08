@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
         std::vector<float> v0(PIX * 3);
         fill(v0, -0.5f, 0.5f);
         float* d_v = upload(v0);
-        overexposure_grad_add(t3(d_rgb), 0.25f, t3(d_v));
+        overexposure_grad_add(ttv(d_rgb, {B, H, W, 3}), 0.25f, t3(d_v));
         backend::device_synchronize();
         readback_f(acc, d_v, PIX * 3);
     }

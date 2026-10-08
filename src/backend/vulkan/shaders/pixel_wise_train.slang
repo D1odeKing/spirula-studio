@@ -11,6 +11,8 @@
 #include "int64_compat.slang"
 #include "shaders/pixel_wise.slang"
 #undef CudaDeviceExport
+#include "background_noise.slang"
+#include "rgb_format.slang"
 
 #include "atomic_float.slang"
 #include "dist_spec.slang"
@@ -72,64 +74,8 @@ void blend_bg_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 }
 
 // ---------------------------------------------------------------------------
-// blend_background_noise_backward (hash matches the noise forward)
+// blend_background_noise_backward (the draw is background_noise.slang)
 // ---------------------------------------------------------------------------
-
-[ForceInline]
-uint _pwt_hash_uint3(uint a, uint b, uint c) {
-    uint hash = a;
-    hash *= 0x01000193u;
-    hash = (hash << 16) | (hash >> 16);
-    hash ^= b;
-    hash *= 0x01000193u;
-    hash = (hash << 16) | (hash >> 16);
-    hash ^= c;
-    hash *= 0x01000193u;
-    hash ^= hash >> 15;
-    hash *= 0x85ebca6bu;
-    hash ^= hash >> 13;
-    hash *= 0xc2b2ae35u;
-    hash ^= hash >> 16;
-    return hash;
-}
-
-// Murmur-style finalizer. The whole background is computed, never stored.
-[ForceInline]
-uint _bg_mix(uint x) {
-    x ^= x >> 16; x *= 0x7feb352du;
-    x ^= x >> 15; x *= 0x846ca68bu;
-    x ^= x >> 16;
-    return x;
-}
-
-// The unit sample the background is built from, twin of
-// kernels/pixelwise/ImageColorOps.cu. `blocky` draws a cube corner per cell --
-// the extremes -- and `block_px` is the cell side, 0 being one cell per image.
-[ForceInline]
-float3 _bg_sample(uint blocky, uint block_px, uint seed, uint gid, uint bid,
-                  uint W) {
-    uint cx = 0u, cy = 0u, cells_w = 1u;
-    if (block_px != 0u) {
-        // The cell grid shifts every step, so no pixel keeps its colour and
-        // the pattern cannot be baked into the splats.
-        cx = ((gid % W) + _bg_mix(seed * 2u + 1u) % block_px) / block_px;
-        cy = ((gid / W) + _bg_mix(seed * 2u + 7u) % block_px) / block_px;
-        cells_w = W / block_px + 2u;
-    }
-    if (blocky != 0u) {
-        uint h = _bg_mix(cx * 2654435761u ^ cy * 40503u
-                         ^ (seed + bid * 0x9e3779b9u));
-        return float3((h & 1u) != 0u ? 1.0f : -1.0f,
-                      (h & 2u) != 0u ? 1.0f : -1.0f,
-                      (h & 4u) != 0u ? 1.0f : -1.0f);
-    }
-    uint cid = cy * cells_w + cx;
-    // 2u-1: without it the plain path lands in [0.5, 0.5+w/2) instead of
-    // straddling 0.5, so every channel sits in the same bright half.
-    return float3(float(_pwt_hash_uint3(seed + 0, cid, bid)) * exp2(-31.0f) - 1.0f,
-                  float(_pwt_hash_uint3(seed + 1, cid, bid)) * exp2(-31.0f) - 1.0f,
-                  float(_pwt_hash_uint3(seed + 2, cid, bid)) * exp2(-31.0f) - 1.0f);
-}
 
 struct BlendBgNoiseBwdParams {  // 96 bytes: pushed directly
     float* rgb;            // PRE-blend
@@ -151,12 +97,6 @@ struct BlendBgNoiseBwdParams {  // 96 bytes: pushed directly
     uint32_t match_luma;
 };
 
-// Mirrors _bg_exponent in kernels/pixelwise/ImageColorOps.cu.
-float _pwt_bg_exponent(uint bid, uint match_luma, float* exponent_by_cam,
-                       int* cam_indices) {
-    return match_luma != 0u ? exponent_by_cam[uint(cam_indices[bid])] : 1.0f;
-}
-
 [shader("compute")]
 [numthreads(128, 1, 1)]
 void blend_bg_noise_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
@@ -173,7 +113,7 @@ void blend_bg_noise_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     float3 background = _bg_sample(p.blocky, p.block_px, p.seed, gid, bid, p.W);
     background = 0.5f + 0.5f * p.randomize_weight * background;
     background = background_apply_exponent(background,
-        _pwt_bg_exponent(bid, p.match_luma, p.exponent_by_cam, p.cam_indices));
+        _bg_exponent(bid, p.match_luma, p.exponent_by_cam, p.cam_indices));
     background = display_to_working3(background, kTransfer, kIsLinear != 0);
 
     float3 v_out = float3(p.v_out_rgb[3 * idx], p.v_out_rgb[3 * idx + 1],
@@ -269,11 +209,12 @@ void working_to_display_bwd_k(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // ---------------------------------------------------------------------------
 
 struct OverexposureParams {  // 32 bytes: pushed directly
-    float* rgb;    // [B,H,W,3]
+    uint* rgb;     // [B,H,W,3], read as rgb_fmt
     float* v_rgb;  // [B,H,W,3] in/out
     float scale;   // 2 * weight / (B*H*W*3)
     uint32_t total;
     uint32_t wgs_per_row;
+    uint32_t rgb_fmt;
 };
 
 [shader("compute")]
@@ -282,7 +223,7 @@ void overexposure_add(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                       uniform OverexposureParams p) {
     uint idx = (wg.y * p.wgs_per_row + wg.x) * 128 + tid;
     if (idx >= p.total) return;
-    float3 c = float3(p.rgb[3 * idx], p.rgb[3 * idx + 1], p.rgb[3 * idx + 2]);
+    float3 c = rgb_load3(p.rgb, idx, p.rgb_fmt);
     float3 g = overexposure_grad(c, p.scale);
     p.v_rgb[3 * idx] += g.x;
     p.v_rgb[3 * idx + 1] += g.y;

@@ -11803,47 +11803,60 @@ SS_MSG(quantization_level,
     NL("Precisie van de kleuropslag"), RU("Точность хранения цвета"),
     TR("Renk saklama duyarlığı"));
 SS_MSG(quantization_level_help,
-    EN("How compactly splat colors are stored during training. 1 roughly halves "
-       "the memory spent on view-dependent color with little visible difference; "
-       "0 keeps full precision."),
-    JA("学習中にスプラットの色をどれだけコンパクトに保存するかです。1 なら視点"
-       "依存の色に使うメモリがおおよそ半分になり、見た目の違いはほとんどありま"
-       "せん。0 なら完全な精度を保ちます。"),
-    ZH_HANS("训练期间泼溅颜色存储得有多紧凑。1 大致把视角相关颜色占用的内存减"
-            "半，肉眼几乎看不出差别；0 则保持完整精度。"),
-    ZH_HANT("訓練期間潑濺顏色儲存得有多緊湊。1 大致把視角相關顏色佔用的記憶體"
-            "減半，肉眼幾乎看不出差別；0 則保持完整精度。"),
-    KO("학습 중 스플랫 색을 얼마나 압축해 저장할지입니다. 1이면 시점 의존 색에"
-       " 쓰는 메모리가 대략 절반이 되고 눈에 띄는 차이는 거의 없습니다. 0이면"
-       " 완전한 정밀도를 유지합니다."),
-    DE("Wie kompakt Splatfarben während des Trainings gespeichert werden. 1 halbiert "
-       "den Speicher für blickabhängige Farbe ungefähr, bei kaum sichtbarem Unterschied; "
-       "0 behält volle Genauigkeit."),
-    FR("À quel point les couleurs des splats sont stockées de façon compacte "
-       "pendant l'entraînement. 1 divise à peu près par deux la mémoire consacrée "
-       "à la couleur dépendante de la vue, sans différence visible ; 0 conserve "
-       "la pleine précision."),
-    ES("Con cuánta compacidad se almacenan los colores de los splats durante "
-       "el entrenamiento. 1 reduce a la mitad, más o menos, la memoria dedicada "
-       "al color dependiente de la vista, con poca diferencia visible; 0 conserva "
-       "la precisión completa."),
-    PT("Com quanta compactação as cores dos splats são armazenadas durante o "
-       "treinamento. 1 reduz pela metade, mais ou menos, a memória gasta com "
-       "a cor dependente da vista, com pouca diferença visível; 0 mantém a precisão "
-       "total."),
-    IT("Con quanta compattezza vengono memorizzati i colori degli splat durante "
+    EN("How compactly colors are stored during training. 1 roughly halves the "
+       "memory spent on view-dependent color, and keeps the full-size images "
+       "between rendering and the loss at half precision, with little visible "
+       "difference; 0 keeps full precision."),
+    JA("学習中に色をどれだけコンパクトに保存するかです。1 なら視点依存の色に使う"
+       "メモリがおおよそ半分になり、描画から損失までのフルサイズ画像も半精度で"
+       "保持しますが、見た目の違いはほとんどありません。0 なら完全な精度を保ち"
+       "ます。"),
+    ZH_HANS("训练期间颜色存储得有多紧凑。1 大致把视角相关颜色占用的内存减半，"
+            "并以半精度保存从渲染到损失之间的全尺寸图像，肉眼几乎看不出差别；"
+            "0 则保持完整精度。"),
+    ZH_HANT("訓練期間顏色儲存得有多緊湊。1 大致把視角相關顏色佔用的記憶體減半，"
+            "並以半精度保存從渲染到損失之間的全尺寸圖像，肉眼幾乎看不出差別；"
+            "0 則保持完整精度。"),
+    KO("학습 중 색을 얼마나 압축해 저장할지입니다. 1이면 시점 의존 색에 쓰는"
+       " 메모리가 대략 절반이 되고, 렌더링부터 손실까지의 전체 크기 이미지를"
+       " 반정밀도로 유지하며, 눈에 띄는 차이는 거의 없습니다. 0이면 완전한"
+       " 정밀도를 유지합니다."),
+    DE("Wie kompakt Farben während des Trainings gespeichert werden. 1 halbiert "
+       "den Speicher für blickabhängige Farbe ungefähr und hält die Bilder in "
+       "voller Größe zwischen Rendern und Loss in halber Genauigkeit, bei kaum "
+       "sichtbarem Unterschied; 0 behält volle Genauigkeit."),
+    FR("À quel point les couleurs sont stockées de façon compacte pendant "
+       "l'entraînement. 1 divise à peu près par deux la mémoire consacrée à la "
+       "couleur dépendante de la vue et garde en demi-précision les images en "
+       "pleine taille entre le rendu et la perte, sans différence visible ; 0 "
+       "conserve la pleine précision."),
+    ES("Con cuánta compacidad se almacenan los colores durante el "
+       "entrenamiento. 1 reduce a la mitad, más o menos, la memoria dedicada al "
+       "color dependiente de la vista y guarda en media precisión las imágenes "
+       "a tamaño completo entre el renderizado y la pérdida, con poca diferencia "
+       "visible; 0 conserva la precisión completa."),
+    PT("Com quanta compactação as cores são armazenadas durante o treinamento. "
+       "1 reduz pela metade, mais ou menos, a memória gasta com a cor dependente "
+       "da vista e mantém em meia precisão as imagens em tamanho completo entre "
+       "a renderização e a perda, com pouca diferença visível; 0 mantém a "
+       "precisão total."),
+    IT("Con quanta compattezza vengono memorizzati i colori durante "
        "l'addestramento. 1 dimezza all'incirca la memoria spesa per il colore "
-       "dipendente dalla vista, con differenza appena visibile; 0 mantiene la "
-       "piena precisione."),
-    NL("Hoe compact splatkleuren tijdens de training worden opgeslagen. 1 halveert "
-       "ruwweg het geheugen voor kijkrichtingafhankelijke kleur, met nauwelijks "
-       "zichtbaar verschil; 0 behoudt volledige precisie."),
-    RU("Насколько компактно хранятся цвета сплатов во время обучения. 1 примерно "
-       "вдвое сокращает память под цвет, зависящий от вида, почти без видимой "
-       "разницы; 0 сохраняет полную точность."),
-    TR("Eğitim sırasında splat renklerinin ne kadar sıkışık saklandığı. 1, bakışa "
-       "bağlı renge harcanan belleği kabaca yarıya indirir ve gözle görülür bir "
-       "fark bırakmaz; 0 tam duyarlığı korur."));
+       "dipendente dalla vista e tiene a mezza precisione le immagini a "
+       "dimensione piena tra il rendering e la loss, con differenza appena "
+       "visibile; 0 mantiene la piena precisione."),
+    NL("Hoe compact kleuren tijdens de training worden opgeslagen. 1 halveert "
+       "ruwweg het geheugen voor kijkrichtingafhankelijke kleur en houdt de "
+       "beelden op volle grootte tussen rendering en loss op halve precisie, met "
+       "nauwelijks zichtbaar verschil; 0 behoudt volledige precisie."),
+    RU("Насколько компактно хранятся цвета во время обучения. 1 примерно вдвое "
+       "сокращает память под цвет, зависящий от вида, и держит полноразмерные "
+       "изображения между рендерингом и функцией потерь с половинной точностью, "
+       "почти без видимой разницы; 0 сохраняет полную точность."),
+    TR("Eğitim sırasında renklerin ne kadar sıkışık saklandığı. 1, bakışa bağlı "
+       "renge harcanan belleği kabaca yarıya indirir ve işleme ile kayıp "
+       "arasındaki tam boyutlu görüntüleri yarım duyarlıkta tutar; gözle görülür "
+       "bir fark bırakmaz. 0 tam duyarlığı korur."));
 
 SS_MSG(preallocate_splat_tensors,
     EN("Reserve memory up front"), JA("メモリを先に確保"),

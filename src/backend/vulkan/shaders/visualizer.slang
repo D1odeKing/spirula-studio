@@ -28,6 +28,7 @@
 
 #include "int64_compat.slang"
 #include "int8_compat.slang"
+#include "rgb_format.slang"
 #include "dist_spec.slang"
 
 // generate_ray taking the full 8-float storage row: the callers keep their
@@ -1154,8 +1155,8 @@ void vis_pack_rgb8(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // a byte mask written via InterlockedOr on its containing word.
 // ---------------------------------------------------------------------------
 
-struct VisThumbParams {  // 5 ptrs + 8 scalars = 72 bytes: pushed directly
-    float* rgb_float;    // [B_post, H_rgb, W_rgb] float3
+struct VisThumbParams {  // 5 ptrs + 10 scalars = 80 bytes: pushed directly
+    uint* rgb;           // [B_post, H_rgb, W_rgb, 3], read as rgb_fmt
     int* cam_indices;    // [B_post]
     uint* thumbnails;    // [N,S,S] RGBA words
     uint* done_mask;     // [ceil(N/4)] byte-per-camera words
@@ -1168,11 +1169,14 @@ struct VisThumbParams {  // 5 ptrs + 8 scalars = 72 bytes: pushed directly
     int32_t H_alpha;
     int32_t W_alpha;
     int32_t has_alpha;  // alpha_mask valid (flag, not ptr-null)
+    uint rgb_fmt;       // core/PixelFormat.h
+    int32_t _pad0;
 };
 
 [ForceInline]
-float3 thumb_bilinear_sample_f3(float* src, int b, int x_dst, int y_dst,
-                                int W_dst, int H_dst, int W_src, int H_src) {
+float3 thumb_bilinear_sample_f3(uint* src, uint fmt, int b, int x_dst,
+                                int y_dst, int W_dst, int H_dst, int W_src,
+                                int H_src) {
     // Mirrors Interpolation.cuh resolve_taps + bilinear_sample_f3.
     float u = (float(x_dst) + 0.5f) * float(W_src) / float(W_dst) - 0.5f;
     float v = (float(y_dst) + 0.5f) * float(H_src) / float(H_dst) - 0.5f;
@@ -1187,10 +1191,7 @@ float3 thumb_bilinear_sample_f3(float* src, int b, int x_dst, int y_dst,
     float w01 = (1.0f - fx) * fy;
     float w11 = fx * fy;
     gindex_t plane = gindex_t(b) * gindex_t(H_src) * gindex_t(W_src);
-    #define _LD(yy, xx) \
-        float3(src[3 * (plane + gindex_t(yy) * W_src + (xx))], \
-               src[3 * (plane + gindex_t(yy) * W_src + (xx)) + 1], \
-               src[3 * (plane + gindex_t(yy) * W_src + (xx)) + 2])
+    #define _LD(yy, xx) rgb_load3(src, plane + gindex_t(yy) * W_src + (xx), fmt)
     float3 v00 = _LD(y0, x0), v10 = _LD(y0, x1), v01 = _LD(y1, x0),
            v11 = _LD(y1, x1);
     #undef _LD
@@ -1228,8 +1229,8 @@ void vis_update_thumbnails(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     for (int px = int(tid); px < s_total; px += 128) {
         int sy = px / S;
         int sx = px % S;
-        float3 c = thumb_bilinear_sample_f3(p.rgb_float, b, sx, sy, S, S,
-                                            p.W_rgb, p.H_rgb);
+        float3 c = thumb_bilinear_sample_f3(p.rgb, p.rgb_fmt, b, sx, sy, S,
+                                            S, p.W_rgb, p.H_rgb);
         if (p.has_alpha != 0) {
             bool inside = thumb_nearest_sample_b(p.alpha_mask, b, sx, sy, S,
                                                  S, p.W_alpha, p.H_alpha);

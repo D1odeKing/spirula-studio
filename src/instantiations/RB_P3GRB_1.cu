@@ -37,6 +37,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -77,6 +78,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -117,6 +119,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -157,6 +160,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -197,6 +201,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -237,6 +242,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -277,6 +283,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -317,6 +324,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,
@@ -357,6 +365,7 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     const float *__restrict__ v_render_Ts, // [..., image_height, image_width, 1]
     const float *__restrict__ v_median, // [..., image_height, image_width, 1], optional
     RenderOutput::Buffer v_distortions_output_buffer,
+    const float v_dist_rgb_per_depth,
     // grad inputs
     Vanilla3DGS<0>::WorldBuffer v_splat_wbuffer,
     Vanilla3DGS<0>::ScreenBuffer v_splat_sbuffer,

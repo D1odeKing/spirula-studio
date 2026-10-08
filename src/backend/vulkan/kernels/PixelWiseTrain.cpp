@@ -7,6 +7,7 @@
 #include <kernels/pixelwise/PixelWise.cuh>
 #include <engine/EngineInternal.h>
 #include <core/Common.cuh>
+#include <core/PixelFormat.h>
 
 #include "backend/vulkan/kernels/KernelCommon.h"
 
@@ -50,10 +51,9 @@ static_assert(sizeof(RgbToSrgbBwdParams) == 4 * 8 + 2 * 4, "layout");
 struct OverexposureParams {
     uint64_t rgb, v_rgb;
     float scale;
-    uint32_t total, wgs_per_row;
+    uint32_t total, wgs_per_row, rgb_fmt;
 };
-static_assert(sizeof(OverexposureParams) == 2 * 8 + 3 * 4 + 4 /*pad*/,
-              "layout");
+static_assert(sizeof(OverexposureParams) == 2 * 8 + 4 * 4, "layout");
 
 // Mirrors DepthToNormalBwdParams.
 struct DepthToNormalBwdParams {
@@ -220,14 +220,15 @@ void working_to_display_backward(
 }
 
 void overexposure_grad_add(
-    DeviceTensor3D<float3> rgb,
+    TorchTensorView rgb,
     float weight,
     DeviceTensor3D<float3> v_rgb
 ) {
-    int64_t b = rgb.size<0>(), h = rgb.size<1>(), w = rgb.size<2>();
+    int64_t b = v_rgb.size<0>(), h = v_rgb.size<1>(), w = v_rgb.size<2>();
     if (b <= 0 || h <= 0 || w <= 0 || weight == 0.0f) return;
     OverexposureParams p{};
-    p.rgb = (uint64_t)rgb.data_ptr();
+    p.rgb = std::get<0>(rgb);
+    p.rgb_fmt = (uint32_t)pixel_format(rgb);
     p.v_rgb = (uint64_t)v_rgb.data_ptr();
     p.scale = overexposure_scale(b, h, w, weight);
     p.total = (uint32_t)(b * h * w);

@@ -51,6 +51,7 @@ std::tuple<
     const DeviceTensor3D<float> v_render_Ts, // [..., image_height, image_width, 1]
     const DeviceTensor3D<float> v_median, // [..., image_height, image_width], optional
     std::optional<RenderOutput::TensorTuple> v_distortion_outputs,
+    float v_dist_rgb_per_depth,  // used when v_distortion_outputs has no rgb
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_w,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_s,
     bool need_viewmat_grad

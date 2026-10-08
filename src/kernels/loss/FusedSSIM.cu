@@ -8,10 +8,12 @@
 
 #include "kernels/loss/FusedSSIM.cuh"
 #include "kernels/loss/PerPixelLoss.cuh"  // SsimLossMapMode
+#include "core/PixelFormat.h"
 
 
 #include <cooperative_groups.h>
 #include <algorithm>
+#include <type_traits>
 #include <iostream>
 
 namespace cg = cooperative_groups;
@@ -125,11 +127,28 @@ __device__ __forceinline__ bool get_pix_value(
     return img[b * H_mask * W_mask + ys * W_mask + xs];
 }
 
+// An image the memory-efficient kernel reads, in the form it is stored in.
+struct SsimImg {
+    const void* p;
+    PixelFormat f;
+};
+
+__device__ __forceinline__ float get_pix_value(
+    SsimImg img,
+    int b, int y, int x, int c,
+    int H, int W
+) {
+    if ((unsigned)x >= (unsigned)W || (unsigned)y >= (unsigned)H) {
+        return 0.0f;
+    }
+    return pixel_load1(img.p, img.f, ((size_t)(b * H + y) * W + x) * 3 + c);
+}
+
 // The mask every stage below reads: the image mask, plus (when `sat` is
 // positive) a pixel both images clip above, which carries no recoverable
 // error. Out-of-image taps read unmasked, as the mask fetch does.
 __device__ __forceinline__ bool get_pix_mask(
-    const float3* img1, const float3* img2, float sat,
+    SsimImg img1, SsimImg img2, float sat,
     const bool* masks,
     int b, int y, int x,
     int B_mask, int H_mask, int W_mask,
@@ -141,8 +160,8 @@ __device__ __forceinline__ bool get_pix_mask(
         return true;
     if ((unsigned)x >= (unsigned)W || (unsigned)y >= (unsigned)H)
         return true;
-    float3 a = img1[(b * H + y) * W + x];
-    float3 c = img2[(b * H + y) * W + x];
+    float3 a = pixel_load3(img1.p, img1.f, (size_t)(b * H + y) * W + x);
+    float3 c = pixel_load3(img2.p, img2.f, (size_t)(b * H + y) * W + x);
     return fminf(fminf(a.x, a.y), a.z) <= sat ||
            fminf(fminf(c.x, c.y), c.z) <= sat;
 }
@@ -157,36 +176,43 @@ __device__ __forceinline__ bool get_pix_mask(
 
 __constant__ float cGaussSum = 0.9999999f;
 
-__global__ void _ssim_mask_coverage_x_kernel(
+// One pass: the mask tile and its halo go through shared memory, so the
+// horizontal sums never reach global memory.
+#define COV_T 16
+#define COV_S (COV_T + 2 * HALO)
+
+__global__ void _ssim_mask_coverage_kernel(
     int B, int H, int W,
-    const float3* __restrict__ img1,
-    const float3* __restrict__ img2,
+    const SsimImg img1,
+    const SsimImg img2,
     float sat,
     const bool* __restrict__ masks,
     int B_mask, int H_mask, int W_mask,
-    float* __restrict__ tmp  // [B, H, W]
-) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int b = blockIdx.z;
-    if (x >= W || y >= H) return;
-    float acc = 0.0f;
-    #pragma unroll
-    for (int d = -HALO; d <= HALO; ++d)
-        acc += cGauss[HALO - abs(d)] *
-            (float)get_pix_mask(img1, img2, sat, masks, b, y, x + d,
-                                B_mask, H_mask, W_mask, H, W);
-    tmp[((size_t)b * H + y) * W + x] = acc;
-}
-
-__global__ void _ssim_mask_coverage_y_kernel(
-    int B, int H, int W,
-    const float* __restrict__ tmp,
     float* __restrict__ out  // [B, H, W]
 ) {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-    int b = blockIdx.z;
+    __shared__ float sm[COV_S][COV_S];
+    __shared__ float sx[COV_S][COV_T];
+    const int b = blockIdx.z;
+    const int x0 = blockIdx.x * COV_T - HALO;
+    const int y0 = blockIdx.y * COV_T - HALO;
+    const int tid = threadIdx.y * COV_T + threadIdx.x;
+    for (int i = tid; i < COV_S * COV_S; i += COV_T * COV_T) {
+        int ly = i / COV_S, lx = i % COV_S;
+        sm[ly][lx] = (float)get_pix_mask(img1, img2, sat, masks, b, y0 + ly,
+                                         x0 + lx, B_mask, H_mask, W_mask, H, W);
+    }
+    __syncthreads();
+    for (int i = tid; i < COV_S * COV_T; i += COV_T * COV_T) {
+        int ly = i / COV_T, lx = i % COV_T;
+        float acc = 0.0f;
+        #pragma unroll
+        for (int d = -HALO; d <= HALO; ++d)
+            acc += cGauss[HALO - abs(d)] * sm[ly][lx + HALO + d];
+        sx[ly][lx] = acc;
+    }
+    __syncthreads();
+    const int x = blockIdx.x * COV_T + threadIdx.x;
+    const int y = blockIdx.y * COV_T + threadIdx.y;
     if (x >= W || y >= H) return;
     float acc = 0.0f;
     #pragma unroll
@@ -195,7 +221,7 @@ __global__ void _ssim_mask_coverage_y_kernel(
         // A row off the top or bottom of the image is entirely outside the mask
         // buffer, so its horizontal pass would have summed all-unmasked taps.
         float row = ((unsigned)yy < (unsigned)H)
-            ? tmp[((size_t)b * H + yy) * W + x] : cGaussSum;
+            ? sx[threadIdx.y + HALO + d][threadIdx.x] : cGaussSum;
         acc += cGauss[HALO - abs(d)] * row;
     }
     out[((size_t)b * H + y) * W + x] = acc;
@@ -205,17 +231,14 @@ __global__ void _ssim_mask_coverage_y_kernel(
 // and reproduces the unmasked result bit for bit.
 static float* _ssim_mask_coverage(
     int B, int H, int W,
-    const float3* img1, const float3* img2, float sat,
+    SsimImg img1, SsimImg img2, float sat,
     const bool* masks, int B_mask, int H_mask, int W_mask
 ) {
     if (masks == nullptr && sat <= 0.0f) return nullptr;
     const size_t n = (size_t)B * H * W;
     float* out = DevicePool::global().acquire<float>(PoolSlot::SsimMaskWeight, n);
-    float* tmp = DevicePool::global().acquire<float>(PoolSlot::SsimMaskWeightTmp, n);
-    _ssim_mask_coverage_x_kernel<<<_LAUNCH_ARGS_3D(W, H, B, 32, 8, 1)>>>(
-        B, H, W, img1, img2, sat, masks, B_mask, H_mask, W_mask, tmp);
-    _ssim_mask_coverage_y_kernel<<<_LAUNCH_ARGS_3D(W, H, B, 32, 8, 1)>>>(
-        B, H, W, tmp, out);
+    _ssim_mask_coverage_kernel<<<_LAUNCH_ARGS_3D(W, H, B, COV_T, COV_T, 1)>>>(
+        B, H, W, img1, img2, sat, masks, B_mask, H_mask, W_mask, out);
     CHECK_DEVICE_ERROR(cudaGetLastError());
     return out;
 }
@@ -662,11 +685,13 @@ __global__ void ssim_backward_kernel(
 #define LOAD_X_ME (BLOCK_X_ME + 4 * HALO)
 #define LOAD_Y_ME (BLOCK_Y_ME + 4 * HALO)
 
-template<bool inplace>
+// kF1 / kF2 >= 0 fix the images' formats at compile time: a format switch
+// on every tap made this kernel ~65% slower.
+template<bool inplace, int kF1 = -1, int kF2 = -1>
 __global__ void memory_efficient_ssim_backward_kernel(
     int B, int H, int W,
-    const float3* __restrict__ img1,   // [B, H, W, 3]
-    const float3* __restrict__ img2,   // [B, H, W, 3]
+    SsimImg img1,                      // [B, H, W, 3]
+    SsimImg img2,                      // [B, H, W, 3]
     const bool* __restrict__ masks,  // [B_mask, H_mask, W_mask, 1]
     int B_mask, int H_mask, int W_mask,
     float sat,                       // clip threshold, or <= 0 to disable
@@ -678,6 +703,8 @@ __global__ void memory_efficient_ssim_backward_kernel(
     float* __restrict__ ssim_loss_map,
     int ssim_loss_map_mode  // SsimLossMapMode: 0=skip, 1=LCS, 2=CS, 3=structure
 ) {
+    if constexpr (kF1 >= 0) img1.f = (PixelFormat)kF1;
+    if constexpr (kF2 >= 0) img2.f = (PixelFormat)kF2;
     auto block = cg::this_thread_block();
     // Materialize the loss-map write target up front -- when the mode is
     // SsimNone (0) we treat ssim_loss_map as null even if the caller passed
@@ -1142,8 +1169,8 @@ void fused_ssim_backward(
         (inplace ? memory_efficient_ssim_backward_kernel<true> : memory_efficient_ssim_backward_kernel<false>)
         <<<_LAUNCH_ARGS_3D(W, H, B, BLOCK_X_ME, BLOCK_Y_ME, 1)>>>(
             B, H, W,
-            (float3*)std::get<0>(img1),
-            (float3*)std::get<0>(img2),
+            SsimImg{(const void*)std::get<0>(img1), PixelFormat::F32},
+            SsimImg{(const void*)std::get<0>(img2), PixelFormat::F32},
             nullptr,
             /*B_mask=*/0, /*H_mask=*/0, /*W_mask=*/0,
             /*sat=*/-1.0f,
@@ -1187,27 +1214,41 @@ static inline void _launch_fused_ssim_inplace(
         }
     }
 
-    const float3* p_img1 = (const float3*)std::get<0>(img1);
-    const float3* p_img2 = (const float3*)std::get<0>(img2);
+    const SsimImg p_img1{(const void*)std::get<0>(img1), pixel_format(img1)};
+    const SsimImg p_img2{(const void*)std::get<0>(img2), pixel_format(img2)};
     const float* mask_w =
         _ssim_mask_coverage(B, H, W, p_img1, p_img2, saturation_threshold,
                             mask_ptr, B_mask, H_mask, W_mask);
 
-    memory_efficient_ssim_backward_kernel<true><<<_LAUNCH_ARGS_3D(W, H, B, BLOCK_X_ME, BLOCK_Y_ME, 1)>>>(
-        B, H, W,
-        (float3*)std::get<0>(img1),
-        (float3*)std::get<0>(img2),
-        mask_ptr,
-        B_mask, H_mask, W_mask,
-        saturation_threshold,
-        mask_w,
-        dL_dmap,
-        (float3*)std::get<0>(dL_dimg1),
-        ssim_buf,
-        ssim_loss_map_weight,
-        _nullable_f(ssim_loss_map),
-        ssim_loss_map_mode
-    );
+    auto launch = [&](auto f1, auto f2) {
+        memory_efficient_ssim_backward_kernel<true, decltype(f1)::value, decltype(f2)::value>
+            <<<_LAUNCH_ARGS_3D(W, H, B, BLOCK_X_ME, BLOCK_Y_ME, 1)>>>(
+            B, H, W,
+            p_img1,
+            p_img2,
+            mask_ptr,
+            B_mask, H_mask, W_mask,
+            saturation_threshold,
+            mask_w,
+            dL_dmap,
+            (float3*)std::get<0>(dL_dimg1),
+            ssim_buf,
+            ssim_loss_map_weight,
+            _nullable_f(ssim_loss_map),
+            ssim_loss_map_mode
+        );
+    };
+    using F32 = std::integral_constant<int, (int)PixelFormat::F32>;
+    using U8 = std::integral_constant<int, (int)PixelFormat::U8>;
+    using F16 = std::integral_constant<int, (int)PixelFormat::F16>;
+    auto with_f2 = [&](auto f1) {
+        if (p_img2.f == PixelFormat::U8) launch(f1, U8{});
+        else if (p_img2.f == PixelFormat::F16) launch(f1, F16{});
+        else launch(f1, F32{});
+    };
+    if (p_img1.f == PixelFormat::U8) with_f2(U8{});
+    else if (p_img1.f == PixelFormat::F16) with_f2(F16{});
+    else with_f2(F32{});
 }
 
 /*[AutoHeaderGeneratorExport]*/

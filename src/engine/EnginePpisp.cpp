@@ -81,6 +81,8 @@ void _engine_ppisp_forward_current() {
     if (C_batch <= 0) return;
     if (std::get<0>(engine().fwd.renders).data_ptr() == nullptr)
         throw std::runtime_error("engine_ppisp_forward: forward_3dgs must run first");
+    if (engine().fwd.rgb_fmt != PixelFormat::F32)
+        throw std::logic_error("engine_ppisp_forward: the render is not float32");
 
     // pre = current renders.rgb (pointer alias, no D2D copy). ppisp_forward
     // already accepts distinct in/out tensors, so we read pre and write a
