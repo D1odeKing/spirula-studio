@@ -194,6 +194,7 @@ expectation, one executable. Neither exists yet.
 | the home screen's recent list, or how `gui.conf` stores it | `recent_list_test` |
 | a per-cell optimizer launcher (Vulkan) | `SS_OPTIM_SLICE_CELLS=2048` on `optim_parity` / `optimgeo_parity`, which forces the multi-slice path only an SH buffer past ~24M splats would otherwise take ([SH layouts](notes/sh-quant-layout.md)) |
 | H.265 reference handling | `hevc_reference_retention_test` on a non-NVIDIA Vulkan video-decode device with `SS_ENABLE_PATENTED=ON` |
+| H.265 encode dimensions or HEIF image correctness | `hevc_sps_crop_test` (CPU) and `heif_test` (non-NVIDIA Vulkan encode/decode); fixtures are generated at runtime |
 | anything | one short training run per backend on a public scene |
 
 ## H.265 retained-reference regression
@@ -223,6 +224,33 @@ current picture; following pictures use them. The second GOP exercises
 retirement and slot reuse. The Main10 test failed before the correction
 (frame 22: 10.53 dB PSNR against software) and passes with retained references;
 the threshold is 28 dB to allow host/GPU color-conversion differences.
+
+## H.265 encode cropping and HEIF round trips
+
+These regressions generate their inputs at runtime; no downloaded images,
+binary fixtures, or FFmpeg installation are needed.
+
+```bat
+build_develop.bat -DSS_BACKEND=vulkan -DSS_ENABLE_PATENTED=ON
+build_vulkan\hevc_sps_crop_test.exe
+build_vulkan\heif_test.exe
+```
+
+On Linux, use `bash build_develop.bash` with the same options and run the
+executables under `build_vulkan/` without `.exe`.
+`hevc_sps_crop_test` is CPU-only and is also registered with CTest's
+`headless` label. It checks crop arithmetic, preserved SPS syntax, sub-layer
+profile/level records, emulation prevention, and rejected malformed inputs.
+`heif_test` requires a supported non-NVIDIA Vulkan H.265 encode/decode device;
+a skipped round trip is not GPU acceptance.
+
+Keep the HEIF fixture's 256×160 tiles and its 32 dB PSNR threshold. On AMD
+Radeon AI PRO R9700, the encoder's minimum width is 384: applying a 128-pixel
+conformance crop before encoding produced a 256-wide CTB grid while the SPS
+advertised 384. Encoding uncropped and setting the display crop only in the
+returned SPS preserves the coded grid. The grid/rotated-tile checks measured
+8.0/13.7 dB before this correction and 47.9/47.5 dB afterward. The same test
+also checks grid assembly, crop, rotation, mirroring, dimensions, and EXIF.
 
 ## Profiling
 

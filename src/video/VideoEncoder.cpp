@@ -7,6 +7,8 @@
 #include "nn/vk/Memory.h"
 #include "nn/vk/Stream.h"
 #include "video/Common.h"
+#include "video/H265Crop.h"
+#include "video/Mp4Writer.h"
 #include "video/VideoApi.h"
 
 #include <algorithm>
@@ -640,11 +642,8 @@ bool VideoEncoder::Impl::create_parameters(std::string& error) {
     sps.log2_diff_max_min_luma_transform_block_size = (uint8_t)(log2u(tb_max) - log2u(tb_min));
     sps.max_transform_hierarchy_depth_inter = 3;
     sps.max_transform_hierarchy_depth_intra = 3;
-    if ((int)coded.width != o.width || (int)coded.height != o.height) {
-        sps.flags.conformance_window_flag = 1;
-        sps.conf_win_right_offset = (coded.width - (uint32_t)o.width) / 2;
-        sps.conf_win_bottom_offset = (coded.height - (uint32_t)o.height) / 2;
-    }
+    // AMD can encode the cropped CTB grid but advertise the padded one.
+    // Encode the full picture; apply display cropping only to the returned SPS.
     sps.pProfileTierLevel = &ptl;
     sps.pDecPicBufMgr = &dpbm;
     sps.pSequenceParameterSetVui = &vui;
@@ -675,8 +674,7 @@ bool VideoEncoder::Impl::create_parameters(std::string& error) {
     return true;
 }
 
-// The driver may have overridden fields it cannot honour, so the parameter
-// sets written into the file are the ones it reports, not the ones asked for.
+// Driver overrides define the coded layout; display cropping must preserve it.
 bool VideoEncoder::Impl::fetch_headers(std::string& error) {
     const VideoApi& api = video_api();
     VkVideoEncodeH264SessionParametersGetInfoKHR g264{
@@ -704,6 +702,32 @@ bool VideoEncoder::Impl::fetch_headers(std::string& error) {
         return false;
     }
     headers.resize(n);
+    if (h265()) {
+        std::vector<uint8_t> cropped, sps;
+        cropped.reserve(headers.size() + 16);
+        bool found_sps = false;
+        for (const auto& [nal, size] : split_annexb(headers.data(), headers.size())) {
+            if (size < 2) {
+                error = "the encoder returned a truncated H.265 parameter set";
+                return false;
+            }
+            cropped.insert(cropped.end(), {0, 0, 0, 1});
+            if (((nal[0] >> 1) & 0x3f) == 33) {
+                if (!crop_h265_sps(nal, size, align_up((uint32_t)o.width, 2),
+                                   align_up((uint32_t)o.height, 2), sps, error))
+                    return false;
+                cropped.insert(cropped.end(), sps.begin(), sps.end());
+                found_sps = true;
+            } else {
+                cropped.insert(cropped.end(), nal, nal + size);
+            }
+        }
+        if (!found_sps) {
+            error = "the encoder returned no H.265 SPS";
+            return false;
+        }
+        headers.swap(cropped);
+    }
     return true;
 }
 

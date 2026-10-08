@@ -400,6 +400,7 @@ void test_round_trip() {
         return;
     }
     Spec s;
+    // Keep 256-pixel tiles: padding to a device minimum can add whole CTB columns.
     video::EncodeOptions eo;
     eo.codec = video::Codec::H265;
     eo.width = s.tw;

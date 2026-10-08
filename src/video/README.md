@@ -215,9 +215,12 @@ The shape of the stream is fixed and simple on purpose: a key frame every two
 seconds, P frames each referencing the one before, two DPB slots (an image
 each where the device allows), constant QP where the driver offers it
 (`RATE_CONTROL_MODE_DISABLED`), a VBR target where it does not. AV1 is the
-exception to "the one before" -- see 3 below. The parameter sets written into the file are the ones
-`vkGetEncodedVideoSessionParametersKHR` returns, overrides included, never the
-ones asked for.
+exception to "the one before" -- see 3 below. The parameter sets come from
+`vkGetEncodedVideoSessionParametersKHR`, retaining the driver's overrides.
+H.265 encodes the uncropped padded picture, then changes only the returned
+SPS's conformance window to the requested display size. Applying that crop
+before encoding can make AMD emit fewer CTB columns than its SPS advertises.
+The coded dimensions and the remaining driver-returned syntax stay unchanged.
 
 Two things the drivers taught, both on NVIDIA 595:
 
