@@ -21,6 +21,7 @@
 #include "i18n/catalog/Log.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -335,7 +336,10 @@ std::map<std::string, float> engine_train_step_managed(
         engine().dm->set_view_stats(std::move(sum), std::move(cnt));
     }
 
+    const auto wait_start = std::chrono::steady_clock::now();
     const TrainStep& stp = engine().dm->next_train_step();
+    engine().data_wait_seconds +=
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - wait_start).count();
     if (stp.subs.empty())
         throw std::runtime_error("engine_train_step_managed: empty training step");
 
@@ -447,6 +451,16 @@ std::map<std::string, float> engine_train_step_managed(
         hsubs, cfg);
 }
 
+
+double engine_take_data_wait_seconds() {
+    const double s = engine().data_wait_seconds;
+    engine().data_wait_seconds = 0.0;
+    return s;
+}
+
+int engine_train_resolution_divisor() {
+    return engine().dm ? engine().dm->last_train_divisor() : 1;
+}
 
 void engine_resolve_data_error(bool retry) {
     if (engine().dm) engine().dm->resolve_data_error(retry);

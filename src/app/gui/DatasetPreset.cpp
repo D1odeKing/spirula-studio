@@ -3,6 +3,7 @@
 #include "app/gui/DatasetPreset.h"
 
 #include "data/JsonField.h"
+#include "dense/ConfigFields.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -17,6 +18,10 @@ namespace {
 // clicks, the fitted borders, the tool paths and the redo-a-step flags.
 #define SS_DATASET_PRESET_FIELDS(X)                                           \
     X("engine_colmap",              colmap_engine)                            \
+    X("dense_enable",               sfm.dense.enable)                         \
+    X("dense_use_for_training",     sfm.dense.use_for_training)               \
+    X("dense_log_performance",      sfm.dense.log_performance)                \
+    X("dense_config",               sfm.dense.config)                         \
     /* ---- input handling and frame extraction ---- */                       \
     X("resume",                     sfm.prep.resume)                          \
     X("photo_import",               sfm.prep.photo_import)                    \
@@ -210,6 +215,7 @@ bool dataset_apply_preset(DatasetSettings& s, const std::string& name) {
 
 
 void sanitize_dataset_settings(DatasetSettings& s) {
+    s.colmap.dense = s.sfm.dense;
     PrepJob& p = s.sfm.prep;
     clamp_enum(p.photo_import, 0, kNumPhotoImports - 1);
     clamp_enum(p.pano.mode, 0, (int)app::Pano360Mode::Equirect);

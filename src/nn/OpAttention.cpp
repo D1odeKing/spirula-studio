@@ -25,6 +25,7 @@ struct CombineParams {
 struct RopeParams {
     uint64_t x, freqs;
     uint32_t n, n_heads, head_dim, batch, row_stride, groups_per_row;
+    uint32_t split_half;
 };
 
 // BR in attention.slang: one workgroup owns this many queries, whatever the
@@ -128,7 +129,7 @@ void attention_one(const Tensor& out, const Tensor& q, const Tensor& k, const Te
     // models is 16, 32, 64 or 256. attention_coop.slang says why P @ V stays on
     // the scalar path.
     const vk::Context& ctx = vk::Context::get();
-    const bool coop = coop_matrix_enabled() && o.head_dim % 16 == 0;
+    const bool coop = o.allow_coop && coop_matrix_enabled() && o.head_dim % 16 == 0;
     const char* entry = coop ? "attention_coop.flash_attn_coop" : "attention.flash_attn";
     vk::SpecList espec = spec;
     if (coop) espec.values[espec.count++] = 256u / ctx.preferredSubgroupSize();
@@ -214,9 +215,10 @@ void attention(const Tensor& out, const Tensor& q, const Tensor& k, const Tensor
 }
 
 void rope(const Tensor& x, const Tensor& freqs, int n_heads, int head_dim, int64_t n,
-          int batch, int64_t row_stride) {
+          int batch, int64_t row_stride, bool split_half) {
     NN_CHECK(x.dtype == DType::F32, "rope operates in place on f32");
-    NN_CHECK((head_dim & 1) == 0, "rope: head_dim must be even");
+    NN_CHECK(head_dim > 0 && n_heads > 0 && n > 0 && batch > 0 && (head_dim & 1) == 0,
+             "rope: dimensions must be positive and head_dim even");
     NN_CHECK(freqs.numel() >= n * (head_dim / 2) * 2,
                "rope: frequency table is too small for %lld tokens", (long long)n);
     RopeParams p{};
@@ -227,8 +229,10 @@ void rope(const Tensor& x, const Tensor& freqs, int n_heads, int head_dim, int64
     p.head_dim = (uint32_t)head_dim;
     p.batch = (uint32_t)batch;
     p.row_stride = (uint32_t)(row_stride > 0 ? row_stride : (int64_t)n_heads * head_dim);
+    p.split_half = split_half ? 1u : 0u;
     const int64_t total = (int64_t)batch * n * n_heads * (head_dim / 2);
-    vk::Stream::get().dispatchFlat("misc.rope_apply", {0u, 0u}, total, 256, &p, sizeof(p),
+    const KernelName entry = span_entry("misc.rope_apply", {x, freqs});
+    vk::Stream::get().dispatchFlat(entry, {0u, 0u}, total, 256, &p, sizeof(p),
                                    &p.groups_per_row);
 }
 

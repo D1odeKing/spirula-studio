@@ -230,6 +230,9 @@ struct ParsedDataset {
     std::array<double, 3>    center{0.0, 0.0, 0.0};
     std::string              center_mode = "none";
 
+    // Pre-applied raw frame -> stored file frame; identity except transforms.json's applied_transform.
+    std::array<double, 16>   raw_to_file{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+
     // 1 / scale_factor of the would-be normalized frame. Computed over ALL
     // frames, before the eval_mode subset is dropped.
     float                    train_frame_scale = 1.0f;

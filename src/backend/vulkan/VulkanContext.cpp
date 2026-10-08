@@ -12,7 +12,9 @@
 #include <thread>
 #include <vector>
 #include "core/Env.h"
+#include "core/GpuStall.h"
 #include "core/VulkanDeviceSelection.h"
+#include "core/VulkanMemoryBudget.h"
 
 namespace backend {
 
@@ -600,8 +602,8 @@ void Context::init() {
 
     // Poll-based waits by default on real GPUs; SS_VK_POLL_WAIT=0/1
     // forces either mode (mainly for A/B timing).
-    _poll_waits =
-        probe.props.deviceType != VK_PHYSICAL_DEVICE_TYPE_CPU;
+    _cpu_device = probe.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU;
+    _poll_waits = !_cpu_device;
     if (const char* env = spirula::env("VK_POLL_WAIT"); env && env[0])
         _poll_waits = env[0] != '0';
 
@@ -697,12 +699,27 @@ bool Context::wait(uint64_t value) {
     wi.semaphoreCount = 1;
     wi.pSemaphores = &_timeline;
     wi.pValues = &value;
-    VkResult r = vkWaitSemaphores(_device, &wi, UINT64_MAX);
-    if (r != VK_SUCCESS) {
-        set_error("vkWaitSemaphores failed", r);
-        return false;
+    spirula::GpuStallWatch watch(_cpu_device);
+    for (;;) {
+        VkResult r = vkWaitSemaphores(_device, &wi, spirula::GpuStallWatch::kSliceNs);
+        if (r == VK_SUCCESS) return true;
+        if (r != VK_TIMEOUT) {
+            set_error("vkWaitSemaphores failed", r);
+            return false;
+        }
+        uint64_t current = 0;
+        r = vkGetSemaphoreCounterValue(_device, _timeline, &current);
+        if (r != VK_SUCCESS) {
+            set_error("vkGetSemaphoreCounterValue failed", r);
+            return false;
+        }
+        if (watch.stalled(current)) {
+            set_error("the GPU stopped responding: no work finished for a minute (the driver may have "
+                      "reset it, often after running out of GPU memory; SS_GPU_STALL_SECONDS sets the wait)",
+                      VK_ERROR_DEVICE_LOST);
+            return false;
+        }
     }
-    return true;
 }
 
 uint32_t Context::find_memory_type(uint32_t type_bits,
@@ -837,30 +854,10 @@ MemoryUsage memory_usage() {
     m.process_bytes = vk::g_device_bytes.load(std::memory_order_relaxed);
     m.has_process = true;
 
-    // System-wide "in use" needs a live device with VK_EXT_memory_budget.
-    // heapBudget already discounts memory held by other applications, so
-    //   system_free ~= sum(budget - usage) over device-local heaps
-    //   system_used  = total - system_free
-    // (an estimate; Vulkan exposes no exact system-wide counter). Never call
-    // Context::get() before it exists — that would create the device just to
-    // read a status number.
+    // heapBudget discounts other applications; querying must not create a device.
     if (vk::g_context_created.load() && vk::Context::get().ok() &&
         vk::Context::get().caps().memory_budget && m.has_total) {
-        VkPhysicalDeviceMemoryBudgetPropertiesEXT budget{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT};
-        VkPhysicalDeviceMemoryProperties2 mp2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2};
-        mp2.pNext = &budget;
-        vkGetPhysicalDeviceMemoryProperties2(vk::Context::get().physical(),
-                                             &mp2);
-        uint64_t free_head = 0;
-        const auto& mp = mp2.memoryProperties;
-        for (uint32_t i = 0; i < mp.memoryHeapCount; i++) {
-            if (!(mp.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT))
-                continue;
-            const uint64_t b = budget.heapBudget[i], u = budget.heapUsage[i];
-            if (b > u) free_head += b - u;
-        }
+        const uint64_t free_head = spirula::vkmemory::queryBudget(vk::Context::get().physical()).available_bytes;
         if (free_head <= m.total_bytes) {
             m.used_bytes = m.total_bytes - free_head;
             m.has_used = true;

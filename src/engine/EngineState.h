@@ -647,6 +647,8 @@ struct EngineState {
     // batching). Set by engine_setup_data_manager(); when present, the new
     // engine_train_step_managed() entrypoint pulls per-step inputs from it.
     std::unique_ptr<DataManager> dm;
+    // Seconds managed steps spent blocked on dm->next_train_step(), since last taken.
+    double data_wait_seconds = 0.0;
 
     // Mean sRGB luma per input camera, filled lazily by the photometric weight
     // normalization (EngineDataManager.cpp) and NaN until measured. An image's

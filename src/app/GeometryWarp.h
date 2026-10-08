@@ -13,6 +13,7 @@
 #include "core/CameraModel.h"
 
 #include <cstdint>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -42,13 +43,18 @@ struct GeometryCamera {
 // measured gain (src/metric3d/README.md, "Face size").
 enum class FaceRes { Output, Source };
 
+// Ring: the overlapping faces a monocular network needs to cross-fade. Cube: upright
+// front, side and back faces, each cropped to what the lens holds -- fewer views to match.
+enum class FaceLayout { Ring, Cube };
+
 class GeometryWarp {
 public:
     // Split faces: `res`'s density, raised toward `min_face_px` pixels (never
     // past the frame's own), capped at `max_face`; sides land on a multiple of
     // `patch`. Throws std::runtime_error when nothing is visible.
     void plan(const GeometryCamera& cam, int out_w, int out_h, bool split, int patch,
-              int max_face, FaceRes res = FaceRes::Output, int64_t min_face_px = 0);
+              int max_face, FaceRes res = FaceRes::Output, int64_t min_face_px = 0,
+              bool source_indices = false, FaceLayout layout = FaceLayout::Ring);
 
     bool split() const { return faces_.size() > 1; }
     int  faces() const { return (int)faces_.size(); }
@@ -81,6 +87,16 @@ public:
     // border reads as an edge to the network.
     void sampleFace(int k, const float* src, std::vector<float>& dst) const;
 
+    // Borrowed [H,W,2] sample-grid coordinates and [H,W] validity until the next plan().
+    const std::vector<float>& faceSourcePixels(int k) const { return faces_.at((size_t)k).to_src; }
+    const std::vector<float>& faceValidity(int k) const { return faces_.at((size_t)k).valid; }
+    const std::vector<int64_t>& faceSourceIndices(int k) const { return faces_.at((size_t)k).source_indices; }
+    uint64_t bytes() const;
+    // Face pixel centers use 0.5; rays are in the original CV camera frame.
+    std::array<double, 3> faceRay(int k, double px, double py) const;
+    // Exact projection to original-resolution source pixels, including panorama seams.
+    bool faceToSource(int k, double px, double py, double source[2]) const;
+
     // Per face: [fh*fw] depth in ONE unit across faces, [fh*fw*3] normals in its
     // own frame, [fh*fw] the chance the model answered; any list may be empty.
     // 0 where no face reaches or ANY face masked: "no ground truth here".
@@ -97,6 +113,7 @@ private:
         // camera has no ray at all, and [fh*fw] of how much is in frame.
         std::vector<float> to_src;
         std::vector<float> valid;
+        std::vector<int64_t> source_indices;
     };
 
     // One face's claim on one output pixel.
@@ -110,6 +127,7 @@ private:
     std::vector<double> alignFaces(const std::vector<std::vector<float>>& depth) const;
 
     std::vector<Face>   faces_;
+    GeometryCamera camera_;
     std::vector<double> axes_;   // [faces, 3, 3], empty for one face
     int out_w_ = 0, out_h_ = 0, sw_ = 0, sh_ = 0;
     // Which faces reach each output pixel. Row offsets rather than a fixed

@@ -10,6 +10,7 @@
 #include "app/gui/ColmapRunner.h"
 #include "app/gui/CommandRunner.h"
 #include "app/gui/CompareView.h"
+#include "app/gui/DenseMemoryView.h"
 #include "app/gui/Fonts.h"
 #include "app/gui/ConfigUI.h"
 #include "app/gui/FileDialog.h"
@@ -32,6 +33,7 @@
 #include "app/gui/SfmRunner.h"
 #include "app/gui/SourceList.h"
 #include "app/gui/SourceProbe.h"
+#include "app/gui/StageEta.h"
 #include "app/gui/TelemetryProbe.h"
 #include "app/gui/TrainPreset.h"
 #include "app/gui/TrainRunner.h"
@@ -122,7 +124,7 @@ private:
         MeshSource, MeshPhotos, MeshOutput, AddSplatFile, SplatFolder,
         EditSaveFile, EditSaveFolder, RenderProjectSave, RenderProjectOpen,
         RenderOutput, RenderAddModel, StencilFile, SeedPointcloud,
-        ConfigPath, LidarSource
+        ConfigPath, LidarSource, ResumeRun
     };
     // Which reconstruction back end the New Dataset screen runs.
     enum class Engine { BuiltIn, Colmap };
@@ -403,6 +405,7 @@ private:
     void draw_dataset_preview(float height);
     bool preview_has_content() const;
     void poll_sfm_progress();
+    void poll_dense_progress();
     // Which of the three the running step implies, or -1 for none.
     int preview_for_stage();
     // Release everything the preview holds -- GL buffers, the watcher thread,
@@ -577,6 +580,9 @@ private:
     // The splitter and then the panel. Call after the body child has ended.
     void draw_log_panel(float height);
     void draw_confirm_modal();
+    // A stopped run, continued: its own config.json, as `spirula train --resume` builds it.
+    void open_resume(const std::string& path);
+    void draw_resume_error();
     void draw_data_error_modal();
     void handle_dialog_result(const std::vector<std::string>& paths);
     // Take paths onto the input list; `replace` clears a fresh pick's inputs.
@@ -616,6 +622,13 @@ private:
         bool mask_flipped = false;
     };
     DatasetFolders _sparse_edit_src;
+    bool _force_dense_seed = false;
+    // Progressive splat budget: the mode and one box per resolution stage.
+    void draw_splat_budget(float w);
+    int64_t starting_points();
+    std::string _seed_count_path;
+    int64_t _seed_count = -1;
+    std::filesystem::file_time_type _seed_count_time{};   // the next open trains from the dense cloud just edited
     // A dataset already in the output folder, read the way a run would read it.
     DatasetFolders workspace_folders(const WorkspaceState& prior) const;
     // Open in trainer / edit reconstruction / correct masks, for one dataset.
@@ -782,6 +795,26 @@ private:
     // Snapshot files already read, by their write time; 0 means "not yet".
     int64_t _model_mtime = 0, _pairs_mtime = 0, _matches_mtime = 0;
     double _sfm_polled_at = -1.0;
+    // The dense step's own model.bin (dense::progress_dir), shown in the same view.
+    int64_t _dense_model_mtime = 0;
+    double _dense_polled_at = -1.0;
+    double _dense_refresh_seconds = 0.5;
+    struct DenseLiveRead {
+        LiveModel model;
+        int64_t stamp = 0;
+        double seconds = 0;
+        bool updated = false, during_run = false;
+        std::string error;
+    };
+    std::future<DenseLiveRead> _dense_model_read;
+    std::string _dense_preview_error;
+    bool _dense_live = false;
+    DenseMemoryView _dense_memory;
+    bool _dense_memory_active = false;
+    StageEta _dense_eta;
+    std::string _resume_error;
+    bool _open_resume_error = false;
+    double _dense_started_at = 0.0;
     bool _show_preview = true;
     // Which view the panel shows: -1 follows the running step, otherwise the
     // one the user picked and wants to keep.
@@ -796,6 +829,8 @@ private:
     // to skip. Separate from GeometryJob::overwrite so pressing the button
     // does not leave the option ticked for every run after it.
     bool _redo_geometry = false;
+    bool _redo_dense = false;
+    bool _dense_rebuild = false;   // this run matches again, ignoring saved pair predictions
     // Panel-level state, copied into whichever job runs. The inputs are kept as
     // the struct both runners take (PrepInput), so the panel edits the thing
     // that runs instead of a parallel copy of it: a video file or photo folder
@@ -874,6 +909,22 @@ private:
     // One job for both engines (SfmJob / ColmapJob carry a copy), the panel
     // that tries it on one frame, and the checkpoint fetch.
     GeometryJob _geometry;
+    DenseJob _dense;
+    FileDownload _dense_download;
+    std::string _dense_selected_seed;
+    std::string _dense_config_error;   // why the last advanced edit is invalid
+    void draw_dense_options();
+    void draw_dense_advanced();
+    void draw_train_mask_mode(float width);
+    void draw_seed_cloud(TrainRunner::Phase ph);
+    void draw_dataset_geometry();
+    bool dense_cloud_present();
+    std::string _dense_probe_data;     // dense_cloud_present()'s cache
+    double _dense_probe_time = -1.0;
+    bool _dense_probe_found = false;
+    bool _seed_other = false;          // "Other PLY file" picked, no file yet
+    void request_dense_download();
+    bool dense_model_missing() const;
     GeometryPanel _geometry_panel;
     PartitionPanel _partition_panel;
     void open_partition_panel(const DatasetFolders& f);

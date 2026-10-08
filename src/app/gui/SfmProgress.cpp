@@ -25,8 +25,7 @@ namespace gui {
 
 namespace {
 
-// Whole file, or empty when it is not there. A snapshot is at most ~1 MB and
-// arrives by rename, so there is no partial read to guard against.
+// Snapshot metadata arrives by rename; dense point files are read separately.
 std::string slurp_if_newer(const fs::path& p, int64_t& mtime) {
     std::error_code ec;
     const auto t = fs::last_write_time(p, ec);
@@ -56,6 +55,11 @@ struct Reader {
     uint32_t u32() { uint32_t v = 0; take(&v, 4); return v; }
     uint64_t u64() { uint64_t v = 0; take(&v, 8); return v; }
     float f32() { float v = 0; take(&v, 4); return v; }
+    std::string text() {
+        const uint32_t n = u32();
+        if (!ok || n > (size_t)(end - p)) { ok = false; return {}; }
+        std::string s(p, n); p += n; return s;
+    }
 };
 
 }  // namespace
@@ -92,22 +96,27 @@ float mapping_fraction(int64_t done, int64_t total) {
     return (float)(kMappingBarFull * x * std::sqrt(x));
 }
 
-bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out) {
-    const std::string b = slurp_if_newer(fs::path(dir) / "model.bin", mtime);
+bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out, uint64_t point_memory_budget) {
+    int64_t stamp = mtime;
+    const std::string b = slurp_if_newer(fs::path(dir) / "model.bin", stamp);
     if (b.size() < 24 || std::memcmp(b.data(), "VKPM", 4) != 0) return false;
 
     Reader r{b.data() + 4, b.data() + b.size()};
     const uint32_t version = r.u32();
-    if (version < 2 || version > 4) return false;
+    if (version < 2 || version > 7) return false;
     LiveModel m;
+    uint32_t flags = 0;
     if (version >= 3) {
-        const uint32_t flags = r.u32();
+        flags = r.u32();
         m.ds.gauge_oriented = (flags & 1u) != 0;
         m.ds.gauge_metric = (flags & 2u) != 0;
+        m.provisional = version >= 6 && (flags & 16u) != 0;
+        m.filtered = version >= 7 && (flags & 32u) != 0;
     }
     m.n_images = r.u32();
     m.n_registered = r.u32();
     m.n_points = r.u64();
+    if (!r.ok || m.n_registered > b.size() / 64) return false;
 
     ParsedDataset& ds = m.ds;
     ds.num_cameras = (int64_t)m.n_registered;
@@ -131,6 +140,17 @@ bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out) {
         const int w = (int)r.u32(), h = (int)r.u32();
         ds.widths[i] = (int32_t)w;
         ds.heights[i] = (int32_t)h;
+        if (version >= 6) {
+            const uint32_t model = r.u32(), distortion = r.u32();
+            if (model > (uint32_t)CameraModelType::EQUIRECTANGULAR ||
+                distortion > (uint32_t)CameraDistortionType::ThinPrism) return false;
+            ds.camera_models[i] = (int32_t)model;
+            ds.camera_distortions[i] = (int32_t)distortion;
+            for (int k = 0; k < 4; ++k) ds.intrins[(size_t)i * 4 + k] = r.f32();
+            for (int k = 0; k < kCameraDistortionParams; ++k)
+                ds.dist_coeffs[(size_t)i * kCameraDistortionParams + k] = r.f32();
+            continue;
+        }
         const int model_id = (int)r.u32();
         const uint32_t np = r.u32();
         if (!r.ok || np > 16) return false;
@@ -165,11 +185,43 @@ bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out) {
                 ds.intrins[(size_t)i * 4 + k] = (float)params[k];
         }
     }
-    const uint32_t n_pts = r.u32();
+    const uint64_t n_pts = version >= 5 ? m.n_points : r.u32();
     if (!r.ok) return false;
+    if (n_pts > ds.points.xyz.max_size() / 3 || n_pts > ds.points.rgb.max_size() / 3) return false;
+    const uint64_t working_bytes = 3 * (sizeof(double) + 4 * sizeof(float) + sizeof(uint8_t));
+    if (point_memory_budget && n_pts > point_memory_budget / working_bytes)
+        throw std::runtime_error("full point checkpoint exceeds available host memory");
+    std::ifstream points;
+    if (version >= 5) {
+        const std::string name = r.text(), error = r.text();
+        if (!r.ok) return false;
+        if (flags & 8u) throw std::runtime_error(error);
+        if (name.empty() || fs::path(name).filename().string() != name || name == "." || name == "..") return false;
+        if (version == 5) m.provisional = name.size() >= 20 && name.compare(name.size() - 20, 20, "-observations.points") == 0;
+        const fs::path file = fs::path(dir) / name;
+        std::error_code ec;
+        const uint64_t bytes = fs::file_size(file, ec);
+        if (ec || n_pts > bytes / 15) return false;
+        points.open(file, std::ios::binary);
+        if (!points) return false;
+    } else if (n_pts > (uint64_t)(r.end - r.p) / 15) return false;
     ds.points.xyz.resize((size_t)n_pts * 3);
     ds.points.rgb.resize((size_t)n_pts * 3);
-    for (uint32_t i = 0; i < n_pts; i++) {
+    if (version >= 5) {
+        std::array<char, 4096 * 15> chunk;
+        for (uint64_t begin = 0; begin < n_pts;) {
+            const size_t count = (size_t)std::min<uint64_t>(chunk.size() / 15, n_pts - begin);
+            points.read(chunk.data(), (std::streamsize)(count * 15));
+            if (!points) return false;
+            for (size_t i = 0; i < count; ++i) {
+                float xyz[3];
+                std::memcpy(xyz, chunk.data() + i * 15, sizeof xyz);
+                for (int k = 0; k < 3; ++k) ds.points.xyz[(size_t)(begin + i) * 3 + k] = xyz[k];
+                std::memcpy(&ds.points.rgb[(size_t)(begin + i) * 3], chunk.data() + i * 15 + 12, 3);
+            }
+            begin += count;
+        }
+    } else for (uint64_t i = 0; i < n_pts; i++) {
         for (int k = 0; k < 3; k++) ds.points.xyz[(size_t)i * 3 + k] = r.f32();
         r.take(&ds.points.rgb[(size_t)i * 3], 3);
     }
@@ -199,7 +251,7 @@ bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out) {
     // One or two cameras have no spread to measure; the points are all there
     // is to frame by until the third arrives.
     if (radius <= 1e-6f && n_pts) {
-        for (uint32_t i = 0; i < n_pts; i++) {
+        for (uint64_t i = 0; i < n_pts; i++) {
             float d = 0.0f;
             for (int k = 0; k < 3; k++) {
                 const float v = ds.points.xyz[(size_t)i * 3 + k] - centre[k];
@@ -223,6 +275,7 @@ bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out) {
     m.post.c2w_flip = ds.c2w;
 
     out = std::move(m);
+    mtime = stamp;
     return true;
 }
 

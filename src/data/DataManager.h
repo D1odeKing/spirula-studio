@@ -34,6 +34,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 
@@ -113,6 +114,12 @@ struct DataManagerConfig {
     bool  deficit_sampling  = false;
     float deficit_power     = 0.5f;
     float deficit_max_ratio = 8.0f;
+
+    // (first step, divisor) stages for training batches (data/ResolutionSchedule.h);
+    // empty trains at the loaded size. `first_step` is the step a resumed run
+    // continues from. Validation and fetch_one always use divisor 1.
+    std::vector<std::pair<int64_t, int>> resolution_stages;
+    int64_t first_step = 0;
 };
 
 
@@ -155,6 +162,9 @@ struct DecodedBatch {
     int32_t                width  = 0;     // post-split W (= input W when K=1)
     int32_t                height = 0;     // post-split H
     int32_t                num    = 0;     // post-split B (= input B * K)
+    // Progressive-resolution divisor this batch was scaled by (1 = loaded size).
+    // Its RGB is the group's input image area-filtered to input_width x input_height.
+    int32_t                resolution_divisor = 1;
     CameraModelType        model  = (CameraModelType)-1;   // PINHOLE when K>1
     CameraDistortionType   distortion = CameraDistortionType::None;  // None when K>1
 
@@ -400,6 +410,9 @@ public:
 
     // Most render passes one input image costs: 1 unless faces differ in size.
     int max_face_passes() const;
+
+    // The progressive-resolution divisor of the last training step handed out.
+    int last_train_divisor() const;
 
 private:
     std::unique_ptr<DataManagerImpl> _impl;

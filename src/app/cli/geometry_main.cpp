@@ -208,9 +208,41 @@ int self_check() {
         // bilinear interpolation of a curve, and that error falls with the
         // square of the face's pixels.
         warp.plan(cam, c.w / patch * patch, c.h / patch * patch, c.split, patch, 0,
-                  app::FaceRes::Source);
+                  app::FaceRes::Source, 0, true);
 
         const double* axes = warp.faceAxes();
+        int64_t map_failures = 0, mapped = 0;
+        for (int k = 0; k < warp.faces(); ++k) {
+            const int fw = warp.faceWidth(k), fh = warp.faceHeight(k);
+            const auto& mapping = warp.faceSourcePixels(k);
+            const auto& validity = warp.faceValidity(k);
+            for (int y = 0; y < fh; y += std::max(1, fh / 17))
+                for (int x = 0; x < fw; x += std::max(1, fw / 19)) {
+                    const size_t i = (size_t)y * fw + x;
+                    double source[2];
+                    const bool valid = warp.faceToSource(k, x + 0.5, y + 0.5, source);
+                    const bool in_bounds = valid && source[0] < c.w && source[1] < c.h;
+                    const int64_t index = in_bounds ? (int64_t)source[1] * c.w + (int64_t)source[0] : -1;
+                    if (warp.faceSourceIndices(k)[i] != index) ++map_failures;
+                    if (valid != (validity[i] > 0)) { ++map_failures; continue; }
+                    if (!valid) continue;
+                    ++mapped;
+                    const double dx = source[0] - mapping[2 * i] * (double)c.w / warp.sampleWidth();
+                    const double dy = source[1] - mapping[2 * i + 1] * (double)c.h / warp.sampleHeight();
+                    double unit[3];
+                    const auto ray = warp.faceRay(k, x + 0.5, y + 0.5);
+                    const double length = std::sqrt(ray[0] * ray[0] + ray[1] * ray[1] + ray[2] * ray[2]);
+                    if (std::hypot(dx, dy) > 1e-3 ||
+                        !camhost::generate_ray((source[0] - cam.cx) / cam.fx, (source[1] - cam.cy) / cam.fy,
+                                                cam.model, cam.distortion, cam.dist, unit)) { ++map_failures; continue; }
+                    for (int m = 0; m < 3; ++m)
+                        if (std::fabs(unit[m] - ray[m] / length) > 1e-6) ++map_failures;
+                }
+        }
+        if (map_failures || mapped == 0) ++failures;
+        std::printf("  %s %-30s source mapping: %lld valid, %lld failures\n",
+                    map_failures == 0 && mapped > 0 ? "ok  " : "FAIL", c.name,
+                    (long long)mapped, (long long)map_failures);
         // The plane as each face would see it: `fd` its own z-depth, `fn` its
         // own frame's normal.
         auto face_gt = [&](const double nn3[3], std::vector<std::vector<float>>& fd,

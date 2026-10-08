@@ -118,10 +118,10 @@ struct Fetched {
 CacheMode g_mode = CacheMode::CPU;
 
 Fetched fetch(const std::string& image, const std::string& mask, bool alpha,
-              bool flip, const float* over = nullptr) {
+              bool flip, const float* over = nullptr, bool load_masks = true) {
     DataManagerConfig cfg;
     cfg.cache_mode = g_mode;
-    cfg.load_masks = true;
+    cfg.load_masks = load_masks;
     cfg.load_depths = cfg.load_normals = false;
     cfg.flip_mask = flip;
     if (alpha) cfg.alpha_masks = {1};
@@ -143,6 +143,10 @@ Fetched fetch(const std::string& image, const std::string& mask, bool alpha,
 
 void run_cases(const std::string& rgba, const std::string& small_image,
                const std::string& large_image) {
+    {
+        const auto m = fetch(rgba, small_image, true, false, nullptr, false);
+        check(m.mask.empty(), "masks disabled: neither alpha nor sidecar creates a training mask");
+    }
     {
         Fetched m = fetch(rgba, "", true, false);
         bool ok = m.w == W && m.h == H;

@@ -3,6 +3,7 @@
 #include "app/gui/edit/PointsDoc.h"
 
 #include "i18n/catalog/Edit.h"
+#include "dense/Generation.h"
 
 #include <cstddef>
 #include <algorithm>
@@ -316,10 +317,23 @@ void PointsDoc::save(int target, const std::string& path,
     spirula::Sim3 shift;
     for (int i = 0; i < 3; i++) shift.t[i] = _ds.center[(size_t)i];
     const spirula::Sim3 moved = file_placement() * shift;
-    spirula::write_ply_points(
-        path, _ds.points.xyz.data(),
-        _ds.points.rgb.empty() ? nullptr : _ds.points.rgb.data(),
-        _ds.points.num(), alive_of(kPoints).data(), &moved);
+    const std::vector<uint8_t>& keep = alive_of(kPoints);
+    auto write = [&](const std::string& to, spirula::PlyCoordinates coordinates) {
+        spirula::write_ply_points(
+            to, _ds.points.xyz.data(),
+            _ds.points.rgb.empty() ? nullptr : _ds.points.rgb.data(),
+            _ds.points.num(), keep.data(), &moved, coordinates);
+    };
+    // A dense cloud is re-signed after the edit, or training refuses it.
+    std::string dense_dataset;
+    spirula::dense::ArtifactFiles dense;
+    if (spirula::dense::edited_artifact(path, dense_dataset, dense)) {
+        const fs::path part = dense.cloud.parent_path() / "roma-edit.part";
+        write(part.string(), spirula::PlyCoordinates::Float64);
+        spirula::dense::commit_edit(dense_dataset, dense, part, alive_count_of(kPoints));
+    } else {
+        write(path, spirula::PlyCoordinates::Float32);
+    }
     if (progress) (*progress)++;
 }
 

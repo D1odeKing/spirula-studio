@@ -54,6 +54,7 @@ struct Outcome {
     float ssim;
     float rgb_loss;
     std::vector<float> v_render_rgb;
+    std::vector<float> v_render_Ts;
 };
 
 // One loss evaluation. `mask` empty means no mask buffer at all (has_mask=0);
@@ -82,13 +83,16 @@ Outcome run(const std::vector<uint8_t>& mask, bool zero_depth, float w_alpha,
 
     std::vector<float> v_losses((size_t)LossIndex::length, 0.0f);
     v_losses[(int)LossIndex::RgbLoss] = 1.0f;
+    v_losses[(int)LossIndex::AlphaSup] = 1.0f;
     float* d_v_losses = upload(v_losses);
 
     std::vector<bool> needs(13, false);
     needs[0] = true;
+    needs[7] = true;
     PerPixelGrads grads = {};
     grads.v_render_rgb =
         ttv(upload(std::vector<float>((size_t)3 * NP, 0.0f)), {B, H, W, 3});
+    grads.v_render_Ts = ttv(upload(std::vector<float>((size_t)NP, 0.0f)), {B, H, W, 1});
 
     auto once = [&]() {
         return compute_multi_scale_per_pixel_losses(
@@ -108,7 +112,8 @@ Outcome run(const std::vector<uint8_t>& mask, bool zero_depth, float w_alpha,
     LossValues lv = once();
     backend::device_synchronize();
     return {lv.alpha_sup, lv.ssim, lv.rgb_loss,
-            download((const float*)std::get<0>(grads.v_render_rgb), 3 * NP)};
+            download((const float*)std::get<0>(grads.v_render_rgb), 3 * NP),
+            download((const float*)std::get<0>(grads.v_render_Ts), NP)};
 }
 
 // Left half masked out (0 = "not the subject"), right half kept.
@@ -136,6 +141,12 @@ int main() {
     // GT depth map exists has nothing to do with it.
     Outcome cut = run(half_mask(), /*zero_depth=*/false, 1.0f);
     check(cut.alpha_sup > 0.0f, "cut-out: masked pixels get alpha supervision");
+    bool transparent_gradient = true;
+    for (int64_t y = 0; y < H; ++y) for (int64_t x = 0; x < W; ++x) {
+        const float gradient = cut.v_render_Ts[(size_t)(y * W + x)];
+        transparent_gradient &= x < W / 2 ? gradient < 0 : gradient == 0;
+    }
+    check(transparent_gradient, "cut-out: gradient drives masked pixels to transparent");
     Outcome cut_zd = run(half_mask(), /*zero_depth=*/true, 1.0f);
     check(std::fabs(cut_zd.alpha_sup - cut.alpha_sup) < 1e-5f,
           "cut-out: an all-sentinel GT depth map changes nothing");

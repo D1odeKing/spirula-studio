@@ -585,6 +585,7 @@ struct WorkspaceState {
     // dataset that arrived finished. A run pointed at one ADDS to it.
     bool model = false;
     bool geometry = false;  // normals/ or depths/, which a run adds to
+    bool dense = false;
     // The folder says what built it (DatasetRecord.h).
     bool record = false;
     // features/ and matches.bin under the signatures `spirula sfm` checks

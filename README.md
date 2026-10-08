@@ -62,6 +62,21 @@ If you are training on remote/cloud GPUs, you may use the CLI &ndash; Run `spiru
 
 A reconstruction too large for one training run can be split into parts that train one at a time and merge back into one model: the **Partition** button on the dataset screen, or `spirula partition split <dataset>` / `spirula partition merge <partition.json>` on the command line (see `docs/notes/scene-partition.md`).
 
+An optional **RoMa v2 dense reconstruction** step creates a colored seed cloud
+from registered cameras: enable it on the dataset screen, or run
+`spirula dense DATASET --checkpoint CHECKPOINT --preset precise`.
+See [dense reconstruction](docs/dense.md) for model setup, controls, training
+handoff, and the current validation limits.
+
+A training run can be stopped with **Stop and Save** and continued later with
+**File > Resume Training...**, or `spirula train --resume <run folder>` on the
+command line. See [stopping and resuming training](docs/training-resume.md).
+
+**Progressive resolution** starts training on smaller images and steps up to
+full size as the run goes on, switching only between full passes over the
+dataset so every image trains equally often at each size. See
+[progressive training resolution](docs/progressive-resolution.md).
+
 
 ## Build from source
 

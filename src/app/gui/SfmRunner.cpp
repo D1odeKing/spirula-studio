@@ -258,6 +258,11 @@ void SfmRunner::take_geometry(SfmJob& job) {
     job.geometry = _live.geometry;
 }
 
+void SfmRunner::take_dense(SfmJob& job) {
+    std::lock_guard<std::mutex> lk(_mu);
+    job.dense = _live.dense;
+}
+
 void SfmRunner::take_masking(PrepJob& prep) {
     std::lock_guard<std::mutex> lk(_mu);
     prep.mask_enable = _live.prep.mask_enable;
@@ -1034,6 +1039,22 @@ void SfmRunner::run(SfmJob job) {
             if (!run_lidar_step(job.lidar, ws.string(), prep.image_dir, _prog,
                                 _films.geometry, _cancel, err))
                 return fail(err);
+        }
+
+        take_dense(job);
+        plan = plan_dataset(plan_job(job), prior, rec, req, &plan, Step::Dense);
+        verify_dense_reuse(plan,ws.string(),_cancel);
+        say(Step::Dense);
+        if (makes(plan[Step::Dense].act)) {
+            record.begin(Step::Dense, dense_fields(job.dense), {"roma.ply"});
+            std::string error;
+            auto dense = job.dense;
+            if (dense.config.mask_dir == "masks" && !prep.mask_dir_cfg.empty()) {
+                dense.config.mask_dir = prep.mask_dir_cfg;
+                dense.config.invert_masks = dense.config.invert_masks != prep.mask_dir_flipped;
+            }
+            if (!run_dense_step(dense, ws.string(), prep.image_dir, _prog, _cancel, error)) return fail(error);
+            record.finish(Step::Dense);
         }
 
         // ---- 4. depth and normals -------------------------------------------

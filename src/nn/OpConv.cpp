@@ -45,7 +45,7 @@ struct PatchifyParams {
 
 struct ConvTScatterParams {
     uint64_t out, packed, bias;
-    uint32_t Hi, Wi, Co, groups_per_row, _pad0;
+    uint32_t Hi, Wi, Co, groups_per_row, patch;
 };
 
 // Column-buffer budget. A full im2col of the seg head's 288x288x256 3x3 conv is
@@ -263,18 +263,24 @@ void conv2d_depthwise(const Tensor& out, const Tensor& in, const Tensor& w_in, i
 
 void conv_transpose2x2(vk::Arena& arena, const Tensor& out, const Tensor& in,
                        const Tensor& w_packed, const Tensor& bias, Act act) {
-    NN_CHECK(out.ndim == 3 && in.ndim == 3, "conv_transpose2x2 expects [H, W, C]");
+    conv_transpose_patch(arena, out, in, w_packed, bias, 2, act);
+}
+
+void conv_transpose_patch(vk::Arena& arena, const Tensor& out, const Tensor& in,
+                          const Tensor& w_packed, const Tensor& bias, int patch, Act act) {
+    NN_CHECK(out.ndim == 3 && in.ndim == 3, "conv_transpose_patch expects [H, W, C]");
+    NN_CHECK(patch > 0 && patch <= 16, "conv_transpose_patch: patch must be 1..16");
     const int64_t Hi = in.shape[0], Wi = in.shape[1], Ci = in.shape[2];
     const int64_t Co = out.shape[2];
-    NN_CHECK(out.shape[0] == Hi * 2 && out.shape[1] == Wi * 2,
-               "conv_transpose2x2: output must be exactly 2x the input");
-    NN_CHECK(w_packed.rows() == Co * 4 && w_packed.cols() == Ci,
-               "conv_transpose2x2: packed weight must be [Cout*4, Cin]");
+    const int64_t taps = (int64_t)patch * patch;
+    NN_CHECK(out.shape[0] == Hi * patch && out.shape[1] == Wi * patch,
+             "conv_transpose_patch: output shape differs from patch scaling");
+    NN_CHECK(w_packed.rows() == Co * taps && w_packed.cols() == Ci,
+             "conv_transpose_patch: packed weight must be [Cout*patch*patch, Cin]");
 
     vk::ArenaScope scope(arena);
-    Tensor packed = arena_tensor(arena, DType::F32, Hi * Wi, Co * 4);
-    // Bias and activation belong to the scatter, not the GEMM: one bias entry
-    // serves all four taps of a channel.
+    Tensor packed = arena_tensor(arena, DType::F32, Hi * Wi, Co * taps);
+    // One bias serves every tap of a channel, so it belongs to the scatter.
     linear(packed, in.view(Hi * Wi, Ci), w_packed);
 
     const KernelName entry = span_entry("misc.convt_scatter", {out, packed});
@@ -285,6 +291,7 @@ void conv_transpose2x2(vk::Arena& arena, const Tensor& out, const Tensor& in,
     p.Hi = (uint32_t)Hi;
     p.Wi = (uint32_t)Wi;
     p.Co = (uint32_t)Co;
+    p.patch = (uint32_t)patch;
     vk::SpecList spec{0u, (uint32_t)act};
     vk::Stream::get().dispatchFlat(entry, spec, out.numel(), 256, &p, sizeof(p),
                                    &p.groups_per_row);

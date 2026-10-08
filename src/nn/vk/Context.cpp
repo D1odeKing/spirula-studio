@@ -528,6 +528,10 @@ void Context::pickPhysicalDevice(const ContextOptions& opts) {
     vkGetPhysicalDeviceMemoryProperties(physical_, &mem_props_);
 }
 
+spirula::vkmemory::Budget Context::memoryBudget() const {
+    return memory_budget_ ? spirula::vkmemory::queryBudget(physical_) : spirula::vkmemory::Budget{};
+}
+
 void Context::createDevice(const ContextOptions& opts) {
     uint32_t nq = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_, &nq, nullptr);
@@ -569,6 +573,8 @@ void Context::createDevice(const ContextOptions& opts) {
     };
 
     std::vector<const char*> exts;
+    memory_budget_ = has(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
+    if (memory_budget_) exts.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     // Mandatory where advertised: the spec forbids creating a device from a
     // portability physical device without it. Spelled out rather than using
     // the macro, which is behind VK_ENABLE_BETA_EXTENSIONS.

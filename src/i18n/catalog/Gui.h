@@ -1894,7 +1894,8 @@ SS_MSG(opt_mask_mode_help,
        "captures. Don't use masks: the mask folder is not read at all. Has no "
        "effect on a dataset without masks. Transparent pixels in the images "
        "count as masked out; with no mask files beside them, the default is "
-       "Cut out background."),
+       "Cut out background. "
+       "Dense point-cloud seeds also default to cut out."),
     JA("マスクがある場合の意味です。「邪魔物を無視」ではマスクされた画素を損"
        "失から外します。通行人、車、撮影者の影、魚眼の円外といったものに向き"
        "ます。「背景を切り抜く」ではマスクされた画素を空として学習するので、"
@@ -1902,24 +1903,28 @@ SS_MSG(opt_mask_mode_help,
        "向けです。「マスクを使わない」ではマスクを一切読み込みません。マスク"
        "のないデータセットでは効果はありません。画像の透明な画素もマスクされ"
        "たものとして扱います。マスクファイルがなければ、既定は「背景を切り抜"
-       "く」です。"),
+       "く」です。 "
+       "密な点群を初期値に使う場合も、既定は切り抜きです。"),
     ZH_HANS("有蒙版时蒙版的含义。“忽略干扰物”：被遮住的像素不计入损失——用于行"
             "人、汽车、摄影者的影子、鱼眼圆之外的区域。“裁掉背景”：被遮住的像"
             "素按空白训练，于是背景被裁掉，只重建被蒙版选中的主体——用于物体拍"
             "摄。“不使用蒙版”：完全不读取蒙版。数据集没有蒙版时不起作用。图像"
-            "中的透明像素也算作被遮住；没有蒙版文件时，默认为“裁掉背景”。"),
+            "中的透明像素也算作被遮住；没有蒙版文件时，默认为“裁掉背景”。 "
+       "使用稠密点云初始化时也默认裁掉背景。"),
     ZH_HANT("有遮罩時遮罩的含意。「忽略干擾物」：被遮住的像素不計入損失——用於"
             "行人、汽車、攝影者的影子、魚眼圓之外的區域。「裁掉背景」：被遮住"
             "的像素按空白訓練，於是背景被裁掉，只重建被遮罩選中的主體——用於物"
             "體拍攝。「不使用遮罩」：完全不讀取遮罩。資料集沒有遮罩時不起作用。"
-            "影像中的透明像素也算作被遮住；沒有遮罩檔案時，預設為「裁掉背景」。"),
+            "影像中的透明像素也算作被遮住；沒有遮罩檔案時，預設為「裁掉背景」。 "
+       "使用稠密點雲初始化時也預設裁掉背景。"),
     KO("마스크가 있을 때 마스크의 의미입니다. 방해물 무시: 가려진 픽셀을 손실"
        "에서 뺍니다 — 지나가는 사람, 차, 촬영자의 그림자, 어안 원 바깥에 씁니"
        "다. 배경 잘라내기: 가려진 픽셀을 빈 곳으로 학습해 배경을 잘라내고 마"
        "스크된 피사체만 재구성합니다 — 물체 촬영용입니다. 마스크 사용 안 함: "
        "마스크를 전혀 읽지 않습니다. 마스크가 없는 데이터셋에서는 아무 효과가"
        " 없습니다. 이미지의 투명한 픽셀도 가려진 것으로 봅니다. 마스크 파일이"
-       " 없으면 기본값은 배경 잘라내기입니다."),
+       " 없으면 기본값은 배경 잘라내기입니다. "
+       "밀집 포인트 클라우드로 초기화할 때도 기본값은 배경 잘라내기입니다."),
     DE("Was eine Maske bedeutet, wo eine vorliegt. Störendes ignorieren: "
        "maskierte Pixel bleiben aus der Verlustfunktion heraus -- für "
        "Passanten, Autos, den eigenen Schatten oder den Bereich außerhalb des "
@@ -1928,7 +1933,8 @@ SS_MSG(opt_mask_mode_help,
        "wird rekonstruiert -- für Objektaufnahmen. Masken nicht verwenden: die "
        "Masken werden gar nicht erst gelesen. Ohne Masken im Datensatz ohne "
        "Wirkung. Transparente Pixel der Bilder gelten ebenfalls als maskiert; "
-       "ohne Maskendateien daneben ist Hintergrund freistellen voreingestellt."),
+       "ohne Maskendateien daneben ist Hintergrund freistellen voreingestellt. "
+       "Bei einer dichten Startpunktwolke ist Ausschneiden ebenfalls die Vorgabe."),
     FR("Ce que signifie un masque, là où il y en a un. Ignorer les gêneurs : "
        "les pixels masqués sont retirés de la fonction de coût -- pour les "
        "passants, les voitures, votre propre ombre ou la zone hors du cercle "
@@ -1938,7 +1944,8 @@ SS_MSG(opt_mask_mode_help,
        "les masques ne sont pas lus du tout. Sans effet sur un jeu de données "
        "sans masques. Les pixels transparents des images comptent aussi comme "
        "masqués ; sans fichiers de masque à côté, Détourer l'arrière-plan est "
-       "le réglage par défaut."),
+       "le réglage par défaut. "
+       "Les nuages denses utilisés pour initialiser choisissent aussi le détourage par défaut."),
     ES("Qué significa una máscara, donde la hay. Ignorar los elementos "
        "molestos: los píxeles enmascarados quedan fuera de la función de "
        "pérdida -- para transeúntes, coches, la sombra del fotógrafo o la zona "
@@ -1948,7 +1955,8 @@ SS_MSG(opt_mask_mode_help,
        "máscaras: las máscaras no se leen en absoluto. Sin efecto en un "
        "conjunto sin máscaras. Los píxeles transparentes de las imágenes "
        "también cuentan como enmascarados; sin archivos de máscara junto a "
-       "ellas, lo predeterminado es Recortar el fondo."),
+       "ellas, lo predeterminado es Recortar el fondo. "
+       "La inicialización con nube densa también recorta por defecto."),
     PT("O que uma máscara significa, onde houver uma. Ignorar o que atrapalha: "
        "os pixels mascarados ficam de fora da função de perda -- para pessoas "
        "passando, carros, a sombra do fotógrafo ou a área fora do círculo olho "
@@ -1957,7 +1965,8 @@ SS_MSG(opt_mask_mode_help,
        "para capturas de objetos. Não usar máscaras: as máscaras não são lidas "
        "de todo. Sem efeito num conjunto sem máscaras. Os pixels transparentes "
        "das imagens também contam como mascarados; sem arquivos de máscara ao "
-       "lado, o padrão é Recortar o fundo."),
+       "lado, o padrão é Recortar o fundo. "
+       "A inicialização com nuvem densa também recorta por padrão."),
     IT("Che cosa significa una maschera, dove ce n'è una. Ignorare i disturbi: "
        "i pixel mascherati restano fuori dalla funzione di perdita -- per "
        "passanti, automobili, l'ombra del fotografo o l'area fuori dal cerchio "
@@ -1967,7 +1976,8 @@ SS_MSG(opt_mask_mode_help,
        "maschere non vengono lette affatto. Senza effetto su un set di dati "
        "senza maschere. Anche i pixel trasparenti delle immagini contano come "
        "mascherati; senza file di maschera accanto, l'impostazione predefinita "
-       "è Ritagliare lo sfondo."),
+       "è Ritagliare lo sfondo. "
+       "Anche l’inizializzazione con nuvola densa usa il ritaglio come predefinito."),
     NL("Wat een masker betekent, waar er een is. Storende dingen negeren: "
        "gemaskeerde pixels tellen niet mee in het verlies -- voor "
        "voorbijgangers, auto's, de schaduw van de fotograaf of het gebied "
@@ -1977,7 +1987,8 @@ SS_MSG(opt_mask_mode_help,
        "object. Maskers niet gebruiken: de maskers worden helemaal niet "
        "gelezen. Zonder maskers in de dataset zonder effect. Transparante "
        "pixels in de beelden tellen ook als gemaskeerd; zonder maskerbestanden "
-       "ernaast is Achtergrond uitsnijden de standaard."),
+       "ernaast is Achtergrond uitsnijden de standaard. "
+       "Initialisatie met een dichte puntenwolk kiest standaard ook uitsnijden."),
     RU("Что означает маска там, где она есть. Игнорировать помехи: закрытые "
        "маской пиксели не входят в функцию потерь -- для прохожих, машин, тени "
        "фотографа или области вне круга «рыбьего глаза». Вырезать фон: "
@@ -1986,7 +1997,8 @@ SS_MSG(opt_mask_mode_help,
        "использовать маски: маски вообще не читаются. Без масок в наборе ни на "
        "что не влияет. Прозрачные пиксели изображений тоже считаются закрытыми "
        "маской; если файлов масок рядом нет, по умолчанию выбрано «Вырезать "
-       "фон»."),
+       "фон». "
+       "При инициализации плотным облаком по умолчанию также вырезается фон."),
     TR("Maske varsa maskenin ne anlama geldiği. Rahatsız edicileri yok say: "
        "maskelenen pikseller yitim işlevine girmez -- yoldan geçenler, "
        "arabalar, fotoğrafçının gölgesi ya da balıkgözü dairesinin dışı için. "
@@ -1995,7 +2007,8 @@ SS_MSG(opt_mask_mode_help,
        "çekimleri için. Maskeleri kullanma: maskeler hiç okunmaz. Maskesiz bir "
        "veri kümesinde etkisi yoktur. Görüntülerdeki saydam pikseller de "
        "maskelenmiş sayılır; yanlarında maske dosyası yoksa varsayılan Arka "
-       "planı ayır olur."));
+       "planı ayır olur. "
+       "Yoğun nokta bulutuyla başlatmada da varsayılan arka planı kesmektir."));
 
 SS_MSG(opt_sh_degree,
     EN("Color detail (SH)"),
@@ -2058,6 +2071,70 @@ SS_MSG(opt_sh_degree_help,
        "harmonik derecesi. 3 standarttır; 0 düz renkler ve en küçük modeli "
        "verir; 4 yaygın görüntüleyicilerde çalışmayabilir."));
 
+SS_MSG(opt_dataset_depths,
+    EN("Use dataset depth maps"), JA("データセットの深度マップを使う"), ZH_HANS("使用数据集深度图"),
+    ZH_HANT("使用資料集深度圖"), KO("데이터셋 깊이 맵 사용"), DE("Tiefenkarten des Datensatzes verwenden"),
+    FR("Utiliser les cartes de profondeur du jeu de données"),
+    ES("Usar los mapas de profundidad del conjunto de datos"),
+    PT("Usar os mapas de profundidade do conjunto de dados"), IT("Usa le mappe di profondità del set di dati"),
+    NL("Dieptekaarten van de dataset gebruiken"), RU("Использовать карты глубины набора данных"),
+    TR("Veri kümesinin derinlik haritalarını kullan"));
+SS_MSG(opt_dataset_depths_help,
+    EN("Let the depth maps in this dataset guide the geometry. Helps plain, textureless areas; a "
+       "badly wrong map can pull quality down."),
+    JA("データセットの深度マップで形状を導きます。模様の少ない領域に効きますが、大きく誤った"
+       "マップは品質を下げることがあります。"),
+    ZH_HANS("用数据集中的深度图引导几何。对无纹理区域有帮助；明显错误的深度图可能降低质量。"),
+    ZH_HANT("用資料集中的深度圖引導幾何。對無紋理區域有幫助；明顯錯誤的深度圖可能降低品質。"),
+    KO("데이터셋의 깊이 맵으로 형상을 안내합니다. 무늬 없는 영역에 도움이 되지만, 크게 틀린 맵은 "
+       "품질을 떨어뜨릴 수 있습니다."),
+    DE("Die Tiefenkarten des Datensatzes führen die Geometrie. Hilft in texturlosen Bereichen; eine "
+       "stark falsche Karte kann die Qualität senken."),
+    FR("Les cartes de profondeur du jeu de données guident la géométrie. Utile sur les zones sans "
+       "texture ; une carte très fausse peut dégrader la qualité."),
+    ES("Los mapas de profundidad del conjunto de datos guían la geometría. Ayuda en zonas sin textura; "
+       "un mapa muy erróneo puede empeorar la calidad."),
+    PT("Os mapas de profundidade do conjunto de dados guiam a geometria. Ajuda em áreas sem textura; "
+       "um mapa muito errado pode piorar a qualidade."),
+    IT("Le mappe di profondità del set di dati guidano la geometria. Aiuta nelle zone senza texture; "
+       "una mappa molto errata può peggiorare la qualità."),
+    NL("De dieptekaarten van de dataset sturen de geometrie. Helpt bij textuurloze vlakken; een sterk "
+       "foute kaart kan de kwaliteit verlagen."),
+    RU("Карты глубины набора данных направляют геометрию. Помогает на участках без текстуры; сильно "
+       "ошибочная карта может ухудшить качество."),
+    TR("Veri kümesindeki derinlik haritaları geometriye yön verir. Dokusuz alanlarda yardımcı olur; çok "
+       "hatalı bir harita kaliteyi düşürebilir."));
+SS_MSG(opt_dataset_normals,
+    EN("Use dataset normal maps"), JA("データセットの法線マップを使う"), ZH_HANS("使用数据集法线图"),
+    ZH_HANT("使用資料集法線圖"), KO("데이터셋 노멀 맵 사용"), DE("Normalenkarten des Datensatzes verwenden"),
+    FR("Utiliser les cartes de normales du jeu de données"),
+    ES("Usar los mapas de normales del conjunto de datos"),
+    PT("Usar os mapas de normais do conjunto de dados"), IT("Usa le mappe delle normali del set di dati"),
+    NL("Normaalkaarten van de dataset gebruiken"), RU("Использовать карты нормалей набора данных"),
+    TR("Veri kümesinin normal haritalarını kullan"));
+SS_MSG(opt_dataset_normals_help,
+    EN("Let the normal maps in this dataset guide which way surfaces face. Helps flat surfaces come "
+       "out flat."),
+    JA("データセットの法線マップで面の向きを導きます。平らな面が平らに仕上がりやすくなります。"),
+    ZH_HANS("用数据集中的法线图引导表面朝向，让平面更平整。"),
+    ZH_HANT("用資料集中的法線圖引導表面朝向，讓平面更平整。"),
+    KO("데이터셋의 노멀 맵으로 표면 방향을 안내합니다. 평평한 면이 평평하게 나오도록 돕습니다."),
+    DE("Die Normalenkarten des Datensatzes geben die Ausrichtung der Flächen vor. Ebene Flächen "
+       "werden so eben."),
+    FR("Les cartes de normales du jeu de données guident l'orientation des surfaces. Les surfaces "
+       "planes restent planes."),
+    ES("Los mapas de normales del conjunto de datos guían la orientación de las superficies. Ayuda a "
+       "que las superficies planas salgan planas."),
+    PT("Os mapas de normais do conjunto de dados guiam a orientação das superfícies. Ajuda as "
+       "superfícies planas a saírem planas."),
+    IT("Le mappe delle normali del set di dati guidano l'orientamento delle superfici. Aiuta le "
+       "superfici piane a restare piane."),
+    NL("De normaalkaarten van de dataset sturen de richting van oppervlakken. Vlakke oppervlakken "
+       "worden zo vlak."),
+    RU("Карты нормалей набора данных задают ориентацию поверхностей. Плоские поверхности получаются "
+       "плоскими."),
+    TR("Veri kümesindeki normal haritaları yüzeylerin yönüne rehberlik eder. Düz yüzeylerin düz "
+       "çıkmasına yardımcı olur."));
 SS_MSG(opt_bilateral_grid,
     EN("Bilateral Grid color correction"),
     JA("バイラテラルグリッドによる色補正"),
@@ -2410,32 +2487,19 @@ SS_MSG(stopping,
     NL("Bezig met stoppen…"), RU("Останавливается…"), TR("Durduruluyor…"));
 
 SS_MSG(stop_and_save_help,
-    EN("Finish the current step, save a checkpoint, and keep the result "
-       "loaded for viewing."),
-    JA("いまのステップを終えてチェックポイントを保存し、結果は表示用に"
-       "読み込んだままにします。"),
-    ZH_HANS("完成当前这一步，保存一个检查点，并把结果留在内存中以便查看。"),
-    ZH_HANT("完成目前這一步，儲存一個檢查點，並把結果留在記憶體中以便檢視。"),
-    KO("현재 단계를 마치고 체크포인트를 저장한 뒤, 결과는 볼 수 있도록 그대로 "
-       "둡니다."),
-    DE("Den laufenden Schritt zu Ende bringen, einen Prüfpunkt speichern und "
-       "das Ergebnis zum Betrachten geladen lassen."),
-    FR("Terminer l'étape en cours, enregistrer un point de sauvegarde et "
-       "garder le résultat chargé pour le consulter."),
-    ES("Terminar el paso actual, guardar un punto de control y dejar el "
-       "resultado cargado para verlo."),
-    PT("Terminar o passo atual, salvar um ponto de verificação e deixar o "
-       "resultado carregado para visualização."),
-    IT("Terminare il passo in corso, salvare un punto di controllo e lasciare "
-       "il risultato caricato per poterlo osservare."),
-    NL("De huidige stap afmaken, een controlepunt opslaan en het resultaat "
-       "geladen laten om te bekijken."),
-    RU("Завершить текущий шаг, сохранить контрольную точку и оставить "
-       "результат загруженным для просмотра."),
-    TR("Şu anki adımı bitir, bir denetim noktası kaydet ve sonucu görmek için "
-       "yüklü bırak."));
-
-// ---- status strip ----
+    EN("Finish the current step, save a checkpoint, and keep the result loaded for viewing. A run stopped before its last step saves everything needed to continue it later with File > Resume Training."),
+    JA("いまのステップを終えてチェックポイントを保存し、結果は表示用に読み込んだままにします。最後のステップ前に停止した学習は、後で「ファイル > 学習を再開」で続けるのに必要なものをすべて保存します。"),
+    ZH_HANS("完成当前这一步，保存一个检查点，并把结果留在内存中以便查看。在最后一步之前停止的运行会保存日后通过“文件 > 继续训练”继续所需的全部内容。"),
+    ZH_HANT("完成目前這一步，儲存一個檢查點，並把結果留在記憶體中以便檢視。在最後一步之前停止的執行會儲存日後透過「檔案 > 繼續訓練」繼續所需的全部內容。"),
+    KO("현재 단계를 마치고 체크포인트를 저장한 뒤, 결과는 볼 수 있도록 그대로 둡니다. 마지막 단계 전에 중지한 실행은 나중에 '파일 > 학습 재개'로 이어 가는 데 필요한 모든 것을 저장합니다."),
+    DE("Den laufenden Schritt zu Ende bringen, einen Prüfpunkt speichern und das Ergebnis zum Betrachten geladen lassen. Ein vor dem letzten Schritt gestopptes Training speichert alles, um es später mit Datei > Training fortsetzen weiterzuführen."),
+    FR("Terminer l'étape en cours, enregistrer un point de sauvegarde et garder le résultat chargé pour le consulter. Un entraînement arrêté avant sa dernière étape enregistre tout le nécessaire pour le reprendre plus tard avec Fichier > Reprendre l'entraînement."),
+    ES("Terminar el paso actual, guardar un punto de control y dejar el resultado cargado para verlo. Un entrenamiento detenido antes de su último paso guarda todo lo necesario para continuarlo después con Archivo > Reanudar entrenamiento."),
+    PT("Terminar o passo atual, salvar um ponto de verificação e deixar o resultado carregado para visualização. Um treinamento parado antes do último passo salva tudo o que é preciso para continuá-lo depois com Arquivo > Retomar treinamento."),
+    IT("Terminare il passo in corso, salvare un punto di controllo e lasciare il risultato caricato per la visualizzazione. Un addestramento fermato prima dell'ultimo passo salva tutto il necessario per riprenderlo poi con File > Riprendi addestramento."),
+    NL("De huidige stap afmaken, een checkpoint opslaan en het resultaat geladen houden om te bekijken. Een training die vóór de laatste stap stopt, bewaart alles om later verder te gaan met Bestand > Training hervatten."),
+    RU("Завершить текущий шаг, сохранить контрольную точку и оставить результат загруженным для просмотра. Обучение, остановленное до последнего шага, сохраняет всё нужное, чтобы позже продолжить его через «Файл > Продолжить обучение»."),
+    TR("Geçerli adımı bitir, bir denetim noktası kaydet ve sonucu görüntülemek için yüklü tut. Son adımından önce durdurulan bir eğitim, daha sonra Dosya > Eğitime devam et ile sürdürmek için gereken her şeyi kaydeder."));
 
 SS_MSG(status_step,
     EN("step {0} / {1}  ({2}%)"), JA("ステップ {0} / {1}  ({2}%)"),
@@ -9912,25 +9976,48 @@ SS_MSG(fd_replace_yes,
     TR("Değiştir"));
 
 
-SS_MSG(seed_cloud_restore,
-    EN("Use dataset points"), JA("データセットの点群に戻す"), ZH_HANS("恢复数据集点云"), ZH_HANT("恢復資料集點雲"),
-    KO("데이터셋 점 구름 복원"), DE("Datensatzpunkte verwenden"), FR("Utiliser les points du jeu de données"),
-    ES("Usar puntos del conjunto de datos"), PT("Usar pontos do conjunto de dados"), IT("Usa i punti del set di dati"),
-    NL("Datasetpunten gebruiken"), RU("Использовать точки набора данных"), TR("Veri kümesi noktalarını kullan"));
-SS_MSG(seed_source_dataset,
-    EN("Point source: dataset point cloud."), JA("点群の読み込み元：データセット。"),
-    ZH_HANS("点云来源：数据集自带点云。"), ZH_HANT("點雲來源：資料集自帶點雲。"), KO("점 구름 출처: 데이터셋."),
-    DE("Punktquelle: Datensatzpunktwolke."), FR("Source des points : nuage du jeu de données."),
-    ES("Origen de puntos: nube del conjunto de datos."), PT("Origem dos pontos: nuvem do conjunto de dados."),
-    IT("Origine dei punti: nuvola del set di dati."), NL("Puntbron: datasetpuntenwolk."),
-    RU("Источник точек: облако набора данных."), TR("Nokta kaynağı: veri kümesi bulutu."));
-SS_MSG(seed_source_external,
-    EN("Point source: external PLY ({0})."), JA("点群の読み込み元：外部 PLY（{0}）。"),
-    ZH_HANS("点云来源：外部 PLY（{0}）。"), ZH_HANT("點雲來源：外部 PLY（{0}）。"), KO("점 구름 출처: 외부 PLY ({0})."),
-    DE("Punktquelle: externes PLY ({0})."), FR("Source des points : PLY externe ({0})."),
-    ES("Origen de puntos: PLY externo ({0})."), PT("Origem dos pontos: PLY externo ({0})."),
-    IT("Origine dei punti: PLY esterno ({0})."), NL("Puntbron: extern PLY ({0})."),
-    RU("Источник точек: внешний PLY ({0})."), TR("Nokta kaynağı: harici PLY ({0})."));
+SS_MSG(seed_choice,
+    EN("Starting points"), JA("初期点群"), ZH_HANS("初始点云"), ZH_HANT("初始點雲"), KO("시작 점 구름"),
+    DE("Startpunkte"), FR("Points de départ"), ES("Puntos iniciales"), PT("Pontos iniciais"),
+    IT("Punti iniziali"), NL("Startpunten"), RU("Начальные точки"), TR("Başlangıç noktaları"));
+SS_MSG(seed_choice_dense,
+    EN("Dense cloud"), JA("高密度点群"), ZH_HANS("稠密点云"), ZH_HANT("稠密點雲"), KO("고밀도 점 구름"),
+    DE("Dichte Punktwolke"), FR("Nuage dense"), ES("Nube densa"), PT("Nuvem densa"), IT("Nuvola densa"),
+    NL("Dichte puntenwolk"), RU("Плотное облако"), TR("Yoğun bulut"));
+SS_MSG(seed_choice_sparse,
+    EN("Sparse points"), JA("疎な点群"), ZH_HANS("稀疏点云"), ZH_HANT("稀疏點雲"), KO("희소 점 구름"),
+    DE("Dünne Punktwolke"), FR("Points épars"), ES("Puntos dispersos"), PT("Pontos esparsos"), IT("Punti sparsi"),
+    NL("IJle punten"), RU("Разреженные точки"), TR("Seyrek noktalar"));
+SS_MSG(seed_choice_other,
+    EN("Other PLY file"), JA("その他の PLY ファイル"), ZH_HANS("其他 PLY 文件"), ZH_HANT("其他 PLY 檔案"),
+    KO("다른 PLY 파일"), DE("Andere PLY-Datei"), FR("Autre fichier PLY"), ES("Otro archivo PLY"),
+    PT("Outro arquivo PLY"), IT("Altro file PLY"), NL("Ander PLY-bestand"), RU("Другой файл PLY"),
+    TR("Başka bir PLY dosyası"));
+SS_MSG(seed_choice_help,
+    EN("The points training starts from. The dense cloud comes from dense reconstruction and usually "
+       "gives finer detail sooner; the sparse points come from camera reconstruction."),
+    JA("学習の出発点となる点群。高密度点群は高密度再構成の結果で、通常は細部がより早く出ます。"
+       "疎な点群はカメラ推定で得られたものです。"),
+    ZH_HANS("训练的起始点云。稠密点云来自稠密重建，通常能更快得到更细的细节；稀疏点云来自相机重建。"),
+    ZH_HANT("訓練的起始點雲。稠密點雲來自稠密重建，通常能更快得到更細的細節；稀疏點雲來自相機重建。"),
+    KO("학습을 시작할 점 구름입니다. 고밀도 점 구름은 고밀도 재구성 결과로 보통 세부가 더 빨리 "
+       "살아나며, 희소 점 구름은 카메라 재구성에서 나옵니다."),
+    DE("Die Punkte, mit denen das Training beginnt. Die dichte Punktwolke stammt aus der dichten "
+       "Rekonstruktion und liefert meist schneller feine Details; die dünne aus der Kamerarekonstruktion."),
+    FR("Les points de départ de l'entraînement. Le nuage dense vient de la reconstruction dense et donne "
+       "en général des détails fins plus tôt ; les points épars viennent de la reconstruction des caméras."),
+    ES("Los puntos desde los que empieza el entrenamiento. La nube densa viene de la reconstrucción densa "
+       "y suele dar detalle fino antes; los puntos dispersos vienen de la reconstrucción de cámaras."),
+    PT("Os pontos de onde o treinamento parte. A nuvem densa vem da reconstrução densa e costuma dar "
+       "detalhes finos mais cedo; os pontos esparsos vêm da reconstrução das câmeras."),
+    IT("I punti da cui parte l'addestramento. La nuvola densa viene dalla ricostruzione densa e di solito "
+       "dà dettagli fini prima; i punti sparsi vengono dalla ricostruzione delle fotocamere."),
+    NL("De punten waarmee de training begint. De dichte puntenwolk komt uit de dichte reconstructie en "
+       "geeft meestal sneller fijn detail; de ijle punten komen uit de camerareconstructie."),
+    RU("Точки, с которых начинается обучение. Плотное облако получено плотной реконструкцией и обычно "
+       "быстрее даёт мелкие детали; разреженные точки — из реконструкции камер."),
+    TR("Eğitimin başladığı noktalar. Yoğun bulut yoğun yeniden yapılandırmadan gelir ve genellikle ince "
+       "ayrıntıyı daha erken verir; seyrek noktalar kamera yeniden yapılandırmasından gelir."));
 SS_MSG(seed_source_random,
     EN("Point source: random initialization."), JA("点群の読み込み元：ランダム初期化。"),
     ZH_HANS("点云来源：随机初始化。"), ZH_HANT("點雲來源：隨機初始化。"), KO("점 구름 출처: 무작위 초기화."),
@@ -9938,19 +10025,6 @@ SS_MSG(seed_source_random,
     ES("Origen de puntos: inicialización aleatoria."), PT("Origem dos pontos: inicialização aleatória."),
     IT("Origine dei punti: inizializzazione casuale."), NL("Puntbron: willekeurige initialisatie."),
     RU("Источник точек: случайная инициализация."), TR("Nokta kaynağı: rastgele başlatma."));
-SS_MSG(seed_source_auto,
-    EN("Point source: dataset cloud, or random points if none is available."),
-    JA("点群の読み込み元：データセット。点群がない場合はランダムに初期化します。"),
-    ZH_HANS("点云来源：数据集；没有点云时自动随机初始化。"), ZH_HANT("點雲來源：資料集；沒有點雲時自動隨機初始化。"),
-    KO("점 구름 출처: 데이터셋. 점 구름이 없으면 무작위로 초기화합니다."),
-    DE("Punktquelle: Datensatz; ohne Punktwolke zufällige Punkte."),
-    FR("Source des points : jeu de données, ou points aléatoires en l'absence de nuage."),
-    ES("Origen de puntos: conjunto de datos, o puntos aleatorios si no hay nube."),
-    PT("Origem dos pontos: conjunto de dados, ou pontos aleatórios se não houver nuvem."),
-    IT("Origine dei punti: set di dati, o punti casuali se non è disponibile una nuvola."),
-    NL("Puntbron: dataset, of willekeurige punten als er geen puntenwolk is."),
-    RU("Источник точек: набор данных; при отсутствии облака — случайные точки."),
-    TR("Nokta kaynağı: veri kümesi; bulut yoksa rastgele noktalar."));
 SS_MSG(seed_source_resume,
     EN("Initialization: restore Gaussians from the checkpoint."), JA("初期化：チェックポイントのガウシアンを復元します。"),
     ZH_HANS("初始化来源：恢复检查点中的高斯。"), ZH_HANT("初始化來源：恢復檢查點中的高斯。"), KO("초기화: 체크포인트의 가우시안을 복원합니다."),
@@ -9985,6 +10059,77 @@ SS_MSG(seed_cloud_unused,
     IT("La nuvola esterna selezionata non viene usata per questa inizializzazione."),
     NL("De geselecteerde externe puntenwolk wordt niet voor deze initialisatie gebruikt."),
     RU("Выбранное внешнее облако не используется для этой инициализации."), TR("Seçilen harici bulut bu başlatmada kullanılmaz."));
+
+SS_MSG(resume_training,
+    EN("Resume Training..."),
+    JA("学習を再開…"),
+    ZH_HANS("继续训练…"),
+    ZH_HANT("繼續訓練…"),
+    KO("학습 재개…"),
+    DE("Training fortsetzen …"),
+    FR("Reprendre l'entraînement…"),
+    ES("Reanudar entrenamiento…"),
+    PT("Retomar treinamento…"),
+    IT("Riprendi addestramento…"),
+    NL("Training hervatten…"),
+    RU("Продолжить обучение…"),
+    TR("Eğitime devam et…"));
+SS_MSG(resume_training_help,
+    EN("Pick a training run folder saved by Stop and Save, or one of its step checkpoint folders. The run's dataset and settings are restored, and Start continues from the saved step toward its original step count. A run stopped before its last step can always be continued."),
+    JA("「停止して保存」で保存した学習フォルダー、またはそのステップのチェックポイントフォルダーを選びます。データセットと設定が復元され、開始すると保存したステップから元のステップ数まで続けます。最後のステップ前に停止した学習はいつでも続けられます。"),
+    ZH_HANS("选择通过“停止并保存”保存的训练运行文件夹，或其中某一步的检查点文件夹。会恢复该运行的数据集和设置，点击开始后从保存的步数继续，直到原定步数。在最后一步之前停止的运行总是可以继续。"),
+    ZH_HANT("選擇透過「停止並儲存」儲存的訓練執行資料夾，或其中某一步的檢查點資料夾。會恢復該執行的資料集和設定，按下開始後從儲存的步數繼續，直到原定步數。在最後一步之前停止的執行總是可以繼續。"),
+    KO("'멈추고 저장'으로 저장한 학습 실행 폴더나 그 안의 단계 체크포인트 폴더를 고릅니다. 데이터셋과 설정이 복원되고, 시작을 누르면 저장된 단계부터 원래 단계 수까지 이어 갑니다. 마지막 단계 전에 중지한 실행은 언제든 이어서 할 수 있습니다."),
+    DE("Einen mit „Anhalten und speichern“ gesicherten Trainingsordner oder einen seiner Schritt-Prüfpunktordner wählen. Datensatz und Einstellungen werden wiederhergestellt, und Start setzt ab dem gespeicherten Schritt bis zur ursprünglichen Schrittzahl fort. Ein vor dem letzten Schritt gestopptes Training lässt sich immer fortsetzen."),
+    FR("Choisir un dossier d'entraînement enregistré par Arrêter et enregistrer, ou l'un de ses dossiers de point de sauvegarde. Le jeu de données et les réglages sont restaurés, et Démarrer reprend à l'étape enregistrée jusqu'au nombre d'étapes prévu. Un entraînement arrêté avant sa dernière étape peut toujours être repris."),
+    ES("Elija una carpeta de entrenamiento guardada con Detener y guardar, o una de sus carpetas de punto de control. Se restauran el conjunto de datos y los ajustes, e Iniciar continúa desde el paso guardado hasta el número de pasos original. Un entrenamiento detenido antes de su último paso siempre puede continuarse."),
+    PT("Escolha uma pasta de treinamento salva com Parar e salvar, ou uma de suas pastas de ponto de verificação. O conjunto de dados e as configurações são restaurados, e Iniciar continua a partir do passo salvo até o número de passos original. Um treinamento parado antes do último passo sempre pode ser continuado."),
+    IT("Scegli una cartella di addestramento salvata con Ferma e salva, o una delle sue cartelle di punto di controllo. Set di dati e impostazioni vengono ripristinati, e Avvia riprende dal passo salvato fino al numero di passi originale. Un addestramento fermato prima dell'ultimo passo si può sempre riprendere."),
+    NL("Kies een trainingsmap die met Stoppen en opslaan is bewaard, of een van de checkpointmappen daarin. Dataset en instellingen worden hersteld, en Start gaat verder vanaf de opgeslagen stap tot het oorspronkelijke aantal stappen. Een training die vóór de laatste stap is gestopt, kan altijd worden hervat."),
+    RU("Выберите папку обучения, сохранённую кнопкой «Остановить и сохранить», или одну из её папок контрольных точек. Набор данных и настройки восстанавливаются, и «Старт» продолжает с сохранённого шага до исходного числа шагов. Обучение, остановленное до последнего шага, всегда можно продолжить."),
+    TR("Durdur ve kaydet ile kaydedilmiş bir eğitim klasörünü veya içindeki adım denetim noktası klasörlerinden birini seçin. Veri kümesi ve ayarlar geri yüklenir; Başlat kaydedilen adımdan özgün adım sayısına kadar devam eder. Son adımından önce durdurulan bir eğitime her zaman devam edilebilir."));
+SS_MSG(resume_failed_title,
+    EN("Cannot resume training"),
+    JA("学習を再開できません"),
+    ZH_HANS("无法继续训练"),
+    ZH_HANT("無法繼續訓練"),
+    KO("학습을 재개할 수 없습니다"),
+    DE("Training kann nicht fortgesetzt werden"),
+    FR("Impossible de reprendre l'entraînement"),
+    ES("No se puede reanudar el entrenamiento"),
+    PT("Não é possível retomar o treinamento"),
+    IT("Impossibile riprendere l'addestramento"),
+    NL("Training kan niet worden hervat"),
+    RU("Не удаётся продолжить обучение"),
+    TR("Eğitime devam edilemiyor"));
+SS_MSG(resume_failed,
+    EN("This folder cannot be resumed: {0}"),
+    JA("このフォルダーは再開できません: {0}"),
+    ZH_HANS("无法从此文件夹继续：{0}"),
+    ZH_HANT("無法從此資料夾繼續：{0}"),
+    KO("이 폴더에서 재개할 수 없습니다: {0}"),
+    DE("Dieser Ordner kann nicht fortgesetzt werden: {0}"),
+    FR("Ce dossier ne peut pas être repris : {0}"),
+    ES("No se puede reanudar desde esta carpeta: {0}"),
+    PT("Não é possível retomar a partir desta pasta: {0}"),
+    IT("Impossibile riprendere da questa cartella: {0}"),
+    NL("Deze map kan niet worden hervat: {0}"),
+    RU("Невозможно продолжить из этой папки: {0}"),
+    TR("Bu klasörden devam edilemiyor: {0}"));
+SS_MSG(resume_failed_close,
+    EN("OK"),
+    JA("OK"),
+    ZH_HANS("确定"),
+    ZH_HANT("確定"),
+    KO("확인"),
+    DE("OK"),
+    FR("OK"),
+    ES("Aceptar"),
+    PT("OK"),
+    IT("OK"),
+    NL("OK"),
+    RU("ОК"),
+    TR("Tamam"));
 
 }  // namespace gui
 }  // namespace msg

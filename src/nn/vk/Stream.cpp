@@ -8,6 +8,7 @@
 #include <cstring>
 #include <map>
 #include "core/Env.h"
+#include "core/GpuStall.h"
 #include "core/SubmitBudget.h"
 
 namespace nn {
@@ -168,6 +169,28 @@ void Stream::shutdown() {
 // Recording
 // ================
 
+namespace {
+
+void wait_timeline(const Context& ctx, VkSemaphore timeline, const uint64_t* value) {
+    VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+    wi.semaphoreCount = 1;
+    wi.pSemaphores = &timeline;
+    wi.pValues = value;
+    spirula::GpuStallWatch watch(std::strcmp(ctx.info().type, "cpu") == 0);
+    for (;;) {
+        const VkResult r = vkWaitSemaphores(ctx.device(), &wi, spirula::GpuStallWatch::kSliceNs);
+        if (r == VK_SUCCESS) return;
+        if (r != VK_TIMEOUT) NN_VK_CHECK(r);
+        uint64_t current = 0;
+        NN_VK_CHECK(vkGetSemaphoreCounterValue(ctx.device(), timeline, &current));
+        if (watch.stalled(current))
+            ::nn::fail("the GPU stopped responding: no work finished for a minute (the driver may have "
+                       "reset it, often after running out of GPU memory; SS_GPU_STALL_SECONDS sets the wait)");
+    }
+}
+
+}  // namespace
+
 VkCommandBuffer Stream::begin() {
     Impl& s = impl();
     if (s.recording) return s.cbs[s.cur];
@@ -178,11 +201,7 @@ VkCommandBuffer Stream::begin() {
         uint64_t v = 0;
         vkGetSemaphoreCounterValue(ctx.device(), s.timeline, &v);
         if (v < s.cb_value[s.cur]) {
-            VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
-            wi.semaphoreCount = 1;
-            wi.pSemaphores = &s.timeline;
-            wi.pValues = &s.cb_value[s.cur];
-            NN_VK_CHECK(vkWaitSemaphores(ctx.device(), &wi, UINT64_MAX));
+            wait_timeline(ctx, s.timeline, &s.cb_value[s.cur]);
         }
         s.harvest(s.cur);
     }
@@ -276,11 +295,7 @@ void Stream::sync() {
     uint64_t v = 0;
     vkGetSemaphoreCounterValue(ctx.device(), s.timeline, &v);
     if (v < s.submitted) {
-        VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
-        wi.semaphoreCount = 1;
-        wi.pSemaphores = &s.timeline;
-        wi.pValues = &s.submitted;
-        NN_VK_CHECK(vkWaitSemaphores(ctx.device(), &wi, UINT64_MAX));
+        wait_timeline(ctx, s.timeline, &s.submitted);
     }
     for (int i = 0; i < Impl::kRing; ++i) s.harvest(i);
     s.resolveQueries();

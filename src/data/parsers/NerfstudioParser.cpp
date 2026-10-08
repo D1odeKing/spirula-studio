@@ -594,6 +594,10 @@ ParsedDataset parse_nerfstudio_meta(const JsonValue& meta,
     ds.num_cameras = N;
     ds.train_frame_scale = (float)(scale_factor != 0.0 ? 1.0 / scale_factor : 1.0);
     ds.center = center;
+    for (int r = 0; r < 3; ++r) {
+        for (int c = 0; c < 3; ++c) ds.raw_to_file[r * 4 + c] = A[r][c];
+        ds.raw_to_file[r * 4 + 3] = b[r];
+    }
     ds.center_mode = dsparse::kCenterModeNames[(int)center_mode];
     ds.points = std::move(points);
     ds.c2w.resize(N * 12);

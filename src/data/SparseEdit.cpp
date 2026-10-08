@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -662,41 +663,63 @@ SparseStats read_sparse_stats(const std::string& dataset_dir) {
     return out;
 }
 
-void write_ply_points(const std::string& path, const double* xyz,
-                      const uint8_t* rgb, int64_t n, const uint8_t* keep,
-                      const Sim3* moved, bool double_xyz) {
-    int64_t kept = n;
-    if (keep) {
-        kept = 0;
-        for (int64_t i = 0; i < n; i++) kept += keep[i] ? 1 : 0;
-    }
+PointCloudWriter::PointCloudWriter(const std::string& path, PlyCoordinates coordinates)
+    : path_(path), coordinates_(coordinates) {
     std::error_code ec;
     fs::create_directories(fs::path(path).parent_path(), ec);
-    std::ofstream f(path, std::ios::binary);
-    if (!f) throw std::runtime_error("cannot write " + path);
+    file_.open(path, std::ios::binary | std::ios::out | std::ios::in | std::ios::trunc);
+    auto& f = file_;
+    if (!f) throw std::runtime_error("cannot write " + path_);
     f << "ply\nformat binary_little_endian 1.0\n";
-    f << "element vertex " << kept << "\n";
-    const char* type = double_xyz ? "double" : "float";
+    f << "element vertex ";
+    count_position_ = f.tellp();
+    f << "00000000000000000000\n";
+    const char* type = coordinates == PlyCoordinates::Float64 ? "double" : "float";
     f << "property " << type << " x\nproperty " << type << " y\nproperty " << type << " z\n";
     f << "property uchar red\nproperty uchar green\nproperty uchar blue\n";
     f << "end_header\n";
+}
+
+void PointCloudWriter::append(const double xyz[3], const uint8_t rgb[3]) {
+    if (finished_) throw std::runtime_error("point cloud writer is finished");
+    for (int i = 0; i < 3; ++i)
+        if (!std::isfinite(xyz[i])) throw std::runtime_error("nonfinite point in " + path_);
+    if (coordinates_ == PlyCoordinates::Float64)
+        file_.write(reinterpret_cast<const char*>(xyz), 3 * sizeof(double));
+    else {
+        const float p[3] = {(float)xyz[0], (float)xyz[1], (float)xyz[2]};
+        for (float v : p) if (!std::isfinite(v)) throw std::runtime_error("point exceeds float range in " + path_);
+        file_.write(reinterpret_cast<const char*>(p), sizeof p);
+    }
+    const uint8_t fallback[3] = {200, 200, 200};
+    file_.write(reinterpret_cast<const char*>(rgb ? rgb : fallback), 3);
+    if (!file_) throw std::runtime_error("write failed: " + path_);
+    ++count_;
+}
+
+void PointCloudWriter::finish() {
+    if (finished_) return;
+    std::string count = std::to_string(count_);
+    file_.seekp(count_position_);
+    file_ << std::string(20 - count.size(), '0') << count;
+    file_.flush();
+    if (!file_) throw std::runtime_error("write failed: " + path_);
+    file_.close();
+    finished_ = true;
+}
+
+void write_ply_points(const std::string& path, const double* xyz,
+                      const uint8_t* rgb, int64_t n, const uint8_t* keep,
+                      const Sim3* moved, PlyCoordinates coordinates) {
+    if (n < 0 || (n > 0 && !xyz)) throw std::runtime_error("invalid point cloud for " + path);
+    PointCloudWriter writer(path, coordinates);
     for (int64_t i = 0; i < n; i++) {
         if (keep && !keep[i]) continue;
         double q[3] = {xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2]};
         if (moved) moved->apply(&xyz[i * 3], q);
-        if (double_xyz) {
-            f.write(reinterpret_cast<const char*>(q), sizeof q);
-        } else {
-            const float p[3] = {(float)q[0], (float)q[1], (float)q[2]};
-            f.write(reinterpret_cast<const char*>(p), sizeof p);
-        }
-        const uint8_t c[3] = {rgb ? rgb[i * 3] : (uint8_t)200,
-                              rgb ? rgb[i * 3 + 1] : (uint8_t)200,
-                              rgb ? rgb[i * 3 + 2] : (uint8_t)200};
-        f.write(reinterpret_cast<const char*>(c), sizeof c);
+        writer.append(q, rgb ? &rgb[i * 3] : nullptr);
     }
-    f.flush();
-    if (!f) throw std::runtime_error("write failed: " + path);
+    writer.finish();
 }
 
 

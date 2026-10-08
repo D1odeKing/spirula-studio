@@ -1,24 +1,5 @@
 #pragma once
-// Device memory: one raw allocator plus the two policies layered on it.
-//
-//   Allocator  one VkBuffer + dedicated VkDeviceMemory per allocation, handed
-//              out as a VkDeviceAddress. An address-range map resolves an
-//              address back to (buffer, offset) for copies and fills, so
-//              pointer arithmetic on device pointers stays valid the way it
-//              does under CUDA.
-//
-//   VramPool   persistent, key-addressed, grow-only (high-water mark). Weights,
-//              cached PE tables, backbone features, memory-bank slots. Mirrors
-//              the engine's DevicePool semantics, including the categorized
-//              report, so the two can be merged.
-//
-//   Arena      transient bump allocator for activations. Every module forward
-//              opens an ArenaScope; on exit the arena rewinds. Peak VRAM is
-//              therefore the deepest stage's live set, not the sum of stages.
-//
-// Allocation count stays bounded by pool slots + a handful of arenas, well
-// under maxMemoryAllocationCount, so a suballocator below this seam would just
-// duplicate what the pool already does.
+// Vulkan allocation, persistent pools and transient arenas; nn/README.md.
 
 #include "nn/vk/Context.h"
 
@@ -88,6 +69,8 @@ public:
     bool isDevicePointer(DevicePtr ptr) const;
 
     VkDeviceSize totalBytes() const;
+    VkDeviceSize peakBytes() const;
+    size_t allocationCount() const;
 
     // A never-null stand-in for optional pointer params. CPU Vulkan
     // implementations (llvmpipe) speculate loads across branches, so a null
@@ -107,7 +90,7 @@ private:
     std::unordered_map<DevicePtr, Allocation> allocs_;  // keyed by base address
     // Sorted base addresses for interior-pointer resolution.
     std::vector<DevicePtr> bases_;
-    VkDeviceSize total_ = 0;
+    VkDeviceSize total_ = 0, peak_ = 0;
     DevicePtr    null_fallback_ = 0;
 };
 

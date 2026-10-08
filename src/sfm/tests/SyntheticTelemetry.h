@@ -63,9 +63,40 @@ inline void poseAt(const Scenario& sc, double t, Mat3& R_wc, Vec3& p) {
     R_wc = mul(mul(mul(Rz, Rx), Ry), transpose(base));
 }
 
+// libstdc++'s std::normal_distribution, draw for draw. The standard leaves the
+// algorithm open and MSVC returns each polar pair in the other order, so with
+// the std one a seed tuned on Linux is different noise on Windows.
+class Normal {
+    double _saved = 0;
+    bool _have = false;
+    static double canonical(std::mt19937& g) {
+        const double lo = g(), hi = g();
+        const double u = (lo + hi * 4294967296.0) / 18446744073709551616.0;
+        return u < 1.0 ? u : std::nextafter(1.0, 0.0);
+    }
+
+public:
+    double operator()(std::mt19937& g) {
+        if (_have) {
+            _have = false;
+            return _saved;
+        }
+        double x, y, r2;
+        do {
+            x = 2.0 * canonical(g) - 1.0;
+            y = 2.0 * canonical(g) - 1.0;
+            r2 = x * x + y * y;
+        } while (r2 > 1.0 || r2 == 0.0);
+        const double m = std::sqrt(-2.0 * std::log(r2) / r2);
+        _saved = x * m;
+        _have = true;
+        return y * m;
+    }
+};
+
 inline Telemetry synthesize(const Scenario& sc, const Mat3& R_ci) {
     std::mt19937 rng(sc.seed);
-    std::normal_distribution<double> N(0, 1);
+    Normal N;
     Telemetry t;
     t.carrier = TelemetryCarrier::Camm;
     t.camera = "synthetic";

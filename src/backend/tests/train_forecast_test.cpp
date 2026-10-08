@@ -30,35 +30,43 @@ static DensifyConfig densify(int start, int stop, int every, float growth) {
     return d;
 }
 
-// The replay must agree with stepping densify_grows_at / densify_target.
+// The replay must agree with stepping densify_grows_at / densify_target, with
+// and without a splat budget that holds growth at a ceiling for a while.
 static void schedule_matches_engine_rule() {
-    const DensifyConfig d = densify(500, 15000, 100, 1.05f);
-    const int T = 30000;
-    const int64_t cap = 1000000;
-    const SplatSchedule sch(d, T, cap);
-    for (int from : {0, 499, 501, 7300, 20000}) {
-        int64_t n = 200000;
-        for (int s = 0; s < from; ++s)
-            if (densify_grows_at(d, s, T)) n = densify_target(d, n, cap);
-        std::vector<int64_t> want(T - from);
-        int64_t m = n;
-        for (int s = from; s < T; ++s) {
-            want[s - from] = m;
-            if (densify_grows_at(d, s, T)) m = densify_target(d, m, cap);
+    DensifyConfig budgeted = densify(500, 15000, 100, 1.05f);
+    budgeted.growth_caps = {{0, 250000}, {3000, 500000}, {9000, 1000000}};
+    for (const DensifyConfig& d : {densify(500, 15000, 100, 1.05f), budgeted}) {
+        const bool b = !d.growth_caps.empty();
+        const int T = 30000;
+        const int64_t cap = 1000000;
+        const SplatSchedule sch(d, T, cap);
+        for (int from : {0, 499, 501, 2950, 7300, 20000}) {
+            int64_t n = 200000;
+            for (int s = 0; s < from; ++s)
+                if (densify_grows_at(d, s, T)) n = densify_target(d, n, densify_cap_at(d, s, cap));
+            std::vector<int64_t> want(T - from);
+            int64_t m = n;
+            for (int s = from; s < T; ++s) {
+                want[s - from] = m;
+                if (densify_grows_at(d, s, T)) m = densify_target(d, m, densify_cap_at(d, s, cap));
+            }
+            int covered = from;
+            bool ok = true;
+            sch.segments(from, n, [&](int f, int e, int64_t k) {
+                ok = ok && f == covered;
+                for (int s = f; s < e; ++s) ok = ok && want[s - from] == k;
+                covered = e;
+            });
+            CHECK(ok && covered == T, "segments diverge from the engine rule, from=%d budget=%d", from, b);
+            CHECK(sch.final_count(from, n) == m, "final count %lld vs %lld, budget=%d",
+                  (long long)sch.final_count(from, n), (long long)m, b);
+            CHECK(m == cap, "budget=%d never reached the cap: %lld", b, (long long)m);
         }
-        int covered = from;
-        bool ok = true;
-        sch.segments(from, n, [&](int f, int e, int64_t k) {
-            ok = ok && f == covered;
-            for (int s = f; s < e; ++s) ok = ok && want[s - from] == k;
-            covered = e;
-        });
-        CHECK(ok && covered == T, "segments diverge from the engine rule, from=%d", from);
-        CHECK(sch.final_count(from, n) == m, "final count %lld vs %lld",
-              (long long)sch.final_count(from, n), (long long)m);
+        CHECK(sch.first_densify(0) == 600, "first densify %d", sch.first_densify(0));
+        CHECK(sch.first_densify(15000) == -1, "densify past the stop");
     }
-    CHECK(sch.first_densify(0) == 600, "first densify %d", sch.first_densify(0));
-    CHECK(sch.first_densify(15000) == -1, "densify past the stop");
+    CHECK(densify_cap_at(budgeted, 2999, 1000000) == 250000 && densify_cap_at(budgeted, 3000, 1000000) == 500000 &&
+          densify_cap_at(budgeted, 9000, 800000) == 800000, "ceiling lookup");
 }
 
 // Step time = 20 ms + (40 ms + 3 ms per SH coefficient) per Msplat: the

@@ -83,15 +83,17 @@ std::string frame_key(const std::string& image_root, const std::string& file) {
     return rel.generic_string();
 }
 
+// A key is '/'-separated (generic_string); make_preferred keeps a Windows
+// path from coming out half '\' and half '/' in the messages that name it.
 std::string mask_file(const std::string& mask_root, const std::string& key) {
-    return (fs::path(mask_root) / (key + ".png")).string();
+    return (fs::path(mask_root) / (key + ".png")).make_preferred().string();
 }
 
 std::string layer_file(const std::string& layer_root, const std::string& key,
                        Layer l) {
     const char* tag = l == Layer::Base ? ".base.png"
                     : l == Layer::Drop ? ".drop.png" : ".keep.png";
-    return (fs::path(layer_root) / (key + tag)).string();
+    return (fs::path(layer_root) / (key + tag)).make_preferred().string();
 }
 
 void flip_polarity(uint8_t* px, size_t n) {

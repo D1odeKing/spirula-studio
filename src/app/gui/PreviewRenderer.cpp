@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -796,9 +798,9 @@ bool PreviewRenderer::build(const ParsedDataset& ds, const PostSplitCameras& pos
     for (int r = 0; r < 12; r++) _t2n[r] = (float)A[r];
     _t2n_scale = (float)sA;
 
-    // ---- point cloud (capped; stride-sampled) -------------------------------
+    // ---- point cloud ------------------------------------------------------
     int64_t n_src = ds.points.num();
-    int64_t stride = std::max<int64_t>(1, n_src / 4000000);
+    int64_t stride = 1;
     std::vector<V> pts;
     pts.reserve(n_src / stride + 1);
     for (int64_t i = 0; i < n_src; i += stride) {
@@ -944,6 +946,12 @@ bool PreviewRenderer::build(const ParsedDataset& ds, const PostSplitCameras& pos
         glx::BindBuffer(GL_ARRAY_BUFFER, vb);
         glx::BufferData(GL_ARRAY_BUFFER, (glx::glSizeiptr)bytes, data,
                         GL_STATIC_DRAW);
+        if (glGetError() == GL_OUT_OF_MEMORY) {
+            glx::BindVertexArray(0);
+            glx::DeleteBuffers(1, &vb);
+            glx::DeleteVertexArrays(1, &va);
+            throw std::runtime_error("full point checkpoint exceeds graphics memory");
+        }
         glx::EnableVertexAttribArray(0);
         glx::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, (int)stride, (void*)0);
         glx::EnableVertexAttribArray(1);
@@ -1130,7 +1138,15 @@ unsigned PreviewRenderer::render(int W, int H, const float view[16],
     glx::Uniform1f(_u_dscale, 0.0f);
     glx::Uniform4f(_u_color, 0, 0, 0, 0);
     glx::BindVertexArray(_vao_pts);
-    glDrawArrays(GL_POINTS, 0, (GLsizei)_num_points);
+    glx::BindBuffer(GL_ARRAY_BUFFER, _vbo_pts);
+    for (int64_t begin = 0; begin < _num_points;) {
+        const GLsizei count = (GLsizei)std::min<int64_t>(_num_points - begin, std::numeric_limits<GLsizei>::max());
+        const size_t offset = (size_t)begin * sizeof(V);
+        glx::VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(V), reinterpret_cast<void*>(offset));
+        glx::VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(V), reinterpret_cast<void*>(offset + 3 * sizeof(float)));
+        glDrawArrays(GL_POINTS, 0, count);
+        begin += count;
+    }
     if (soft) {
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
@@ -1373,6 +1389,10 @@ void PreviewRenderer::destroy_gl() {
     }
     _built = false;
     _num_points = _num_cam_verts = _num_cam_sel = _num_cam_bright = 0;
+    std::vector<float>().swap(_pick_xyz);
+    std::vector<float>().swap(_pts_rgb);
+    _pts_stride = 1;
+    _pts_tinted = false;
     _cam_groups.clear();
 }
 

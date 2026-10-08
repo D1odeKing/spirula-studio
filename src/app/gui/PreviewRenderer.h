@@ -1,20 +1,7 @@
 #pragma once
 
-// PreviewRenderer -- pure-OpenGL preview of geometry the engine is not
-// rendering, into an offscreen FBO texture:
-//
-//   * the SfM sparse point cloud (vertex-colored) + training-camera frusta,
-//     shown by the viewport between "dataset loaded" and "training started",
-//     when the engine has nothing to render yet;
-//   * an extracted triangle mesh (vertex colors, or a baked texture atlas),
-//     which is what the mesh viewer and the meshing preview show.
-//
-// All of it is built in the same Z-up normalized frame the viewport
-// navigates, and the vertex shader implements the same camera models as the
-// engine viewer (pinhole / fisheye-equidistant / fisheye-equisolid /
-// equirectangular), so switching between a preview and an engine render is
-// seamless -- and a splat render and a mesh render of the same scene, shown
-// side by side, are the same view.
+// OpenGL point-cloud, camera and mesh previews in the viewport's normalized frame.
+// Projection models match the engine viewer.
 
 #include "app/gui/render/TransitionFx.h"
 #include "data/DatasetParser.h"
@@ -181,8 +168,7 @@ private:
     float _t2n[12] = {1,0,0,0, 0,1,0,0, 0,0,1,0};
     float _t2n_scale = 1.0f;         // normalized units per train unit
     int64_t _num_points = 0;
-    // Host copy of the displayed (stride-sampled, normalized-frame) points
-    // for double-click picking. CPU RAM only.
+    // Normalized-frame points for double-click picking.
     std::vector<float> _pick_xyz;
     std::vector<float> _pts_rgb;   // the displayed points' own colours
     int64_t _pts_stride = 1;

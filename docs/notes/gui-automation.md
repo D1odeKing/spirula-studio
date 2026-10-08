@@ -58,8 +58,12 @@ expands into a short script of steps, and the frame loop applies exactly one
 step per frame: move, move, press, release, settle.
 
 `begin_frame()` runs between `ImGui_ImplGlfw_NewFrame()` and
-`ImGui::NewFrame()` — after the backend's own mouse update, so an injected
-position is the later event and wins. `end_frame()` runs after the draw data is
+`ImGui::NewFrame()`. During each scripted step it clears competing backend
+events and reapplies the last scripted pointer position. Visible windows also
+receive GLFW focus and cursor positioning. This keeps native cursor refreshes
+from replacing the scripted position between the move and press frames.
+Native input resumes after the script; offscreen operation uses the same
+ImGui event path. `end_frame()` runs after the draw data is
 rendered and before the buffers are swapped, which is where the item table for
 the finished frame is published and where a screenshot reads the back buffer.
 

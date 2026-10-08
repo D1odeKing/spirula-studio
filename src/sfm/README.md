@@ -730,8 +730,8 @@ error.
 pair on, instead of after enough frames registered each lens on its own.
 `kind: dual-fisheye` (`--rig dual-fisheye=...`) says the first two members are
 the back-to-back lenses of one 360 camera: the second turned 180 degrees about
-the image's vertical, refined in all 6 DOF; `refine: axial` holds the baseline
-to the lens's optical axis.
+the image's vertical, its rotation refined and its baseline held to the lens's
+optical axis (`refine: axial`).
 Insta360 X, DJI Osmo 360 and a PortalCam's two fisheyes all calibrate within
 0.8-1.4 degrees of that rotation, so it is refined; the Osmo and the PortalCam,
 measured against something metric, put the baseline within a millimetre of

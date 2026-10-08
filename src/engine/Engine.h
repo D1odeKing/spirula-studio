@@ -469,6 +469,11 @@ std::map<std::string, float> engine_train_step_managed(
     bool packed,
     const EngineStepConfig& cfg);
 
+// The progressive-resolution divisor of the last managed step (1 = loaded size).
+int engine_train_resolution_divisor();
+// Seconds managed steps waited for the DataManager since the last call; resets it.
+double engine_take_data_wait_seconds();
+
 // Answer the DataDecodeError a managed step threw: true re-runs the decode
 // the worker is parked on, false abandons the pipeline. See DataManager.h.
 void engine_resolve_data_error(bool retry);

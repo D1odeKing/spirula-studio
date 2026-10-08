@@ -213,6 +213,7 @@ DevicePtr Allocator::allocRaw(VkDeviceSize bytes, VkBufferUsageFlags usage,
         allocs_[a.addr] = a;
         bases_.insert(std::lower_bound(bases_.begin(), bases_.end(), a.addr), a.addr);
         total_ += bytes;
+        peak_ = std::max(peak_,total_);
     }
     NN_LOG_DEBUG("[vk] alloc %s for %s\n", fmtBytes(bytes).c_str(), what);
     return a.addr;
@@ -310,6 +311,16 @@ bool Allocator::isDevicePointer(DevicePtr ptr) const {
 VkDeviceSize Allocator::totalBytes() const {
     std::lock_guard<std::mutex> lock(mu_);
     return total_;
+}
+
+VkDeviceSize Allocator::peakBytes() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return peak_;
+}
+
+size_t Allocator::allocationCount() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return allocs_.size();
 }
 
 DevicePtr Allocator::nullFallback() {

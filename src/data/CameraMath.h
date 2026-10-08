@@ -78,6 +78,15 @@ struct Camera {
 // Ray (camera frame, any length) -> pixel, true only where the GPU warp
 // samples it: a valid projection that lands inside the frame.
 bool ray_in_frame(const Camera& cam, const double ray[3], double px[2]);
+bool ray_pixel(const Camera& cam, const double ray[3], double px[2]);
+
+double longitude_period(const Camera& cam);
+bool full_longitude(const Camera& cam);
+bool normalize_pixel(const Camera& cam, double px[2]);
+bool pixel_ray(const Camera& cam, const double px[2], double ray[3]);
+// Horizontal residuals wrap by the full longitude period of a panorama.
+void pixel_difference(const Camera& cam, const double a[2], const double b[2], double delta[2]);
+bool projection_jacobian(const Camera& cam, const double ray[3], double jacobian[6]);
 
 // Bounding box {x0, x1, y0, y1} of the visible rays `az + x*ax + y*ay` of the
 // frame `R` (rows ax, ay, az) within `cell` (same layout); false when empty.

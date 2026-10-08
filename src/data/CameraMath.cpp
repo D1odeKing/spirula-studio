@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace camhost {
 namespace {
@@ -223,7 +224,7 @@ bool splits_to_pinhole_faces(int model, int width, int height, double fx,
 // Visibility
 // ===========================================================================
 
-bool ray_in_frame(const Camera& cam, const double ray[3], double px[2]) {
+bool ray_pixel(const Camera& cam, const double ray[3], double px[2]) {
     if (cam.source_model >= 0) {
         if (!srccam::project(cam.source_model, cam.source_params,
                              ray[0], ray[1], ray[2], &px[0], &px[1]))
@@ -234,11 +235,105 @@ bool ray_in_frame(const Camera& cam, const double ray[3], double px[2]) {
         px[0] = uv[0] * cam.fx + cam.cx;
         px[1] = uv[1] * cam.fy + cam.cy;
     }
+    return std::isfinite(px[0]) && std::isfinite(px[1]);
+}
+
+bool ray_in_frame(const Camera& cam, const double ray[3], double px[2]) {
+    if (!ray_pixel(cam, ray, px)) return false;
+    if (full_longitude(cam)) { px[0] = std::fmod(px[0],cam.width); if (px[0] < 0) px[0] += cam.width; }
     // A pixel of slack at the panorama's poles, where a half-row's rounding
     // would otherwise cut them off.
     const double tol = cam.model == M_EQUIRECT ? 1.0 : 0.0;
     return px[0] >= 0.0 && px[0] <= cam.width &&
            px[1] >= -tol && px[1] <= cam.height + tol;
+}
+
+double longitude_period(const Camera& cam) {
+    return cam.model == M_EQUIRECT && cam.fx > 0 ? 2 * kPi * cam.fx : 0;
+}
+
+bool full_longitude(const Camera& cam) {
+    const double period = longitude_period(cam);
+    return period > 0 && cam.width > 0 && std::fabs(period - cam.width) <= 1e-5 * cam.width;
+}
+
+bool normalize_pixel(const Camera& cam, double px[2]) {
+    if (!std::isfinite(px[0]) || !std::isfinite(px[1])) return false;
+    if (full_longitude(cam)) { px[0] = std::fmod(px[0],cam.width); if (px[0] < 0) px[0] += cam.width; }
+    else if (const double period = longitude_period(cam); period > 0 && (px[0] < 0 || px[0] > cam.width))
+        px[0] = cam.cx + std::remainder(px[0] - cam.cx,period);
+    return px[0] >= 0 && px[0] <= cam.width && px[1] >= 0 && px[1] <= cam.height;
+}
+
+void pixel_difference(const Camera& cam, const double a[2], const double b[2], double delta[2]) {
+    delta[0] = a[0] - b[0]; delta[1] = a[1] - b[1];
+    if (const double period = longitude_period(cam); period > 0) delta[0] = std::remainder(delta[0],period);
+}
+
+bool projection_jacobian(const Camera& cam, const double ray[3], double jacobian[6]) {
+    const double length = std::hypot(std::hypot(ray[0], ray[1]), ray[2]);
+    if (!(length > 0) || !std::isfinite(length)) return false;
+    const double step = std::cbrt(std::numeric_limits<double>::epsilon()) * length;
+    double base[2];
+    if (!ray_pixel(cam, ray, base)) return false;
+    for (int c = 0; c < 3; ++c) {
+        double plus[3] = {ray[0], ray[1], ray[2]}, minus[3] = {ray[0], ray[1], ray[2]};
+        plus[c] += step; minus[c] -= step;
+        double a[2], b[2], delta[2];
+        const bool pa = ray_pixel(cam, plus, a), pb = ray_pixel(cam, minus, b);
+        if (!pa && !pb) return false;
+        pixel_difference(cam, pa ? a : base, pb ? b : base, delta);
+        const double divisor = pa && pb ? 2 * step : step;
+        jacobian[c] = delta[0] / divisor; jacobian[3 + c] = delta[1] / divisor;
+        if (!std::isfinite(jacobian[c]) || !std::isfinite(jacobian[3 + c])) return false;
+    }
+    return true;
+}
+
+bool pixel_ray(const Camera& cam, const double input_pixel[2], double ray[3]) {
+    double px[2] = {input_pixel[0],input_pixel[1]};
+    if (!(cam.fx > 0) || !(cam.fy > 0) || !normalize_pixel(cam,px)) return false;
+    if (!generate_ray((px[0] - cam.cx) / cam.fx, (px[1] - cam.cy) / cam.fy,
+                      cam.model, cam.tier, cam.dist, ray)) return false;
+    // A fitted lens seeds the inverse; the original lens determines convergence.
+    // A stall short of exact still counts once it is far below any matcher's accuracy.
+    constexpr double kConverged = 1e-6, kAcceptable = 1e-3;
+    double projected[2];
+    for (int iteration = 0; iteration < 32; ++iteration) {
+        double delta[2];
+        if (!ray_pixel(cam, ray, projected)) return false;
+        pixel_difference(cam, projected, px, delta);
+        const double residual = std::hypot(delta[0], delta[1]);
+        if (residual < kConverged) break;
+        double jacobian[6];
+        if (!projection_jacobian(cam, ray, jacobian)) break;
+        double xx = 0, xy = 0, yy = 0;
+        for (int c = 0; c < 3; ++c) {
+            xx += jacobian[c] * jacobian[c]; xy += jacobian[c] * jacobian[3 + c];
+            yy += jacobian[3 + c] * jacobian[3 + c];
+        }
+        const double det = xx * yy - xy * xy;
+        if (!(det > 1e-12 * xx * yy)) break;
+        const double u = (yy * delta[0] - xy * delta[1]) / det;
+        const double v = (xx * delta[1] - xy * delta[0]) / det;
+        bool improved = false;
+        for (int trial = 0; trial < 12; ++trial) {
+            double candidate[3];
+            for (int c = 0; c < 3; ++c)
+                candidate[c] = ray[c] - std::ldexp(jacobian[c] * u + jacobian[3 + c] * v, -trial);
+            norm3(candidate[0], candidate[1], candidate[2], candidate);
+            double next[2], remaining[2];
+            if (!ray_pixel(cam, candidate, next)) continue;
+            pixel_difference(cam, next, px, remaining);
+            if (std::hypot(remaining[0], remaining[1]) >= residual) continue;
+            std::copy_n(candidate, 3, ray); improved = true; break;
+        }
+        if (!improved) break;
+    }
+    double delta[2];
+    if (!ray_pixel(cam, ray, projected)) return false;
+    pixel_difference(cam, projected, px, delta);
+    return std::hypot(delta[0], delta[1]) < kAcceptable && ray_in_frame(cam, ray, projected);
 }
 
 bool visible_bbox(const Camera& cam, const double R[9], const double cell[4],

@@ -8,6 +8,8 @@
 #include "core/ImageOrient.h"
 #include "core/TiffImage.h"
 #include "data/ImageProbe.h"
+#include "data/ResolutionSchedule.h"
+#include "data/SourceCamera.h"
 #include "i18n/catalog/Data.h"
 
 #include "external/stb_image.h"
@@ -189,6 +191,7 @@ private:
 struct SubBatchSpec {
     int32_t              group = 0;   // index into the train IndexGroup vector
     std::vector<int32_t> picks;       // dataset-global image indices
+    int32_t              divisor = 1; // progressive resolution of its epoch
 };
 // One optimizer step = one or more homogeneous sub-batches. Most steps hold a
 // single sub-batch; cross-group remainder packing produces multi-sub-batch
@@ -325,6 +328,17 @@ inline void cpu_nearest_resize_u8(const uint8_t* src, int sh, int sw,
     }
 }
 
+
+// One cached RGB row (sh x sw) area-filtered into dst (dh x dw), in its own dtype.
+inline void resize_rgb_row(const uint8_t* src, int sh, int sw, uint8_t* dst, int dh, int dw,
+                           PixelDType dt) {
+    if (dt == PixelDType::FLOAT32)
+        cpu_resize<float, 3>((const float*)src, sh, sw, (float*)dst, dh, dw);
+    else if (dt == PixelDType::UINT16)
+        cpu_resize<uint16_t, 3>((const uint16_t*)src, sh, sw, (uint16_t*)dst, dh, dw);
+    else
+        cpu_resize<uint8_t, 3>(src, sh, sw, dst, dh, dw);
+}
 
 // Modality decoders. `dst_h` / `dst_w` are the BATCH-slot shape (= group
 // shape); when the file is smaller it is upsampled (nearest for mask,
@@ -773,6 +787,8 @@ public:
     CacheMode cache_mode() const { return _cfg.cache_mode; }
     void set_view_stats(std::vector<float> cam_sum, std::vector<uint32_t> cam_cnt);
 
+    int last_train_divisor() const { return _last_train_divisor.load(); }
+
     int max_face_passes() const {
         int n = 1;
         for (const auto& g : _train_groups) n = std::max(n, (int)g.passes.size());
@@ -871,6 +887,9 @@ private:
     // Per-image, the decoded payload. Empty for images that don't have the
     // modality on disk. For DISK mode these stay empty.
     std::vector<std::vector<uint8_t>> _rgb_cache;
+    // The same rows area-filtered per progressive divisor, built at preload so
+    // the step does not pay for the filter; a stage's rows go once it is passed.
+    std::map<int, std::vector<std::vector<uint8_t>>> _rgb_cache_scaled;
     std::vector<std::vector<uint8_t>> _mask_cache;
     std::vector<std::vector<uint8_t>> _depth_cache;
     std::vector<std::vector<uint8_t>> _normal_cache;
@@ -888,6 +907,8 @@ private:
     // build_train_schedule_locked() under _sampling_mu.
     std::vector<StepSpec>     _train_schedule;
     size_t                    _train_sched_cursor = 0;
+    int64_t                   _issued = 0;   // steps handed out since first_step
+    std::atomic<int>          _last_train_divisor{1};
 
     // The currently-returned-to-caller data. We hold one slot per kind so the
     // reference returned by next_*_batch()/next_train_step() stays valid until
@@ -975,7 +996,10 @@ private:
     void preload_cpu_cache();
     void allocate_batch(DecodedBatch& b,
                         const IndexGroup& g,
-                        const std::vector<int32_t>& ds_indices);
+                        const std::vector<int32_t>& ds_indices,
+                        int divisor = 1);
+    // Scale a filled batch's sizes and cameras down by `divisor`.
+    void scale_batch(DecodedBatch& b, const IndexGroup& g, int divisor) const;
     void fill_camera_params(DecodedBatch& b);
 
     // CPU-mode synchronous batch fetch helpers.
@@ -1466,6 +1490,14 @@ void DataManagerImpl::preload_cpu_cache() {
     if (has_depths())  _depth_cache.resize(N);
     if (has_normals()) _normal_cache.resize(N);
 
+    // Every coarser stage this run will still reach, filtered once here.
+    std::vector<int> coarse;
+    const auto& stages = _cfg.resolution_stages;
+    for (size_t k = 0; k < stages.size(); ++k)
+        if (stages[k].second > 1 && (k + 1 == stages.size() || stages[k + 1].first > _cfg.first_step))
+            coarse.push_back(stages[k].second);
+    for (int d : coarse) _rgb_cache_scaled[d].resize(N);
+
     // Pick a sensible worker count for the preload sweep — capped by the
     // number of images, so we don't spawn 32 threads to decode 4 images.
     int n_threads = (int)std::max(1u, std::thread::hardware_concurrency());
@@ -1500,6 +1532,12 @@ void DataManagerImpl::preload_cpu_cache() {
                     decode_rgb_into(_image_filenames[i], H, W, dt,
                                     _rgb_cache[i].data(), turns_of(i), 1,
                                     composite_of(i));
+                    for (int d : coarse) {
+                        const int w = progressive::scaled_extent(W, d), h = progressive::scaled_extent(H, d);
+                        auto& row = _rgb_cache_scaled[d][i];
+                        row.assign((size_t)w * h * 3 * pixel_dtype_size(dt), 0);
+                        resize_rgb_row(_rgb_cache[i].data(), H, W, row.data(), h, w, dt);
+                    }
                 }
                 // Per-image shape; a 1x1 mask is broadcast at batch-fill time.
                 // A synthesized one is image-sized: a 1x1 broadcast fails the
@@ -1552,7 +1590,8 @@ void DataManagerImpl::preload_cpu_cache() {
 void DataManagerImpl::allocate_batch(
     DecodedBatch& b,
     const IndexGroup& g,
-    const std::vector<int32_t>& ds_indices)
+    const std::vector<int32_t>& ds_indices,
+    int divisor)
 {
     int B   = (int)ds_indices.size();
     int H   = g.height, W = g.width;
@@ -1644,6 +1683,40 @@ void DataManagerImpl::allocate_batch(
     }
 
     fill_camera_params(b);
+    b.resolution_divisor = 1;
+    if (divisor > 1) scale_batch(b, g, divisor);
+}
+
+void DataManagerImpl::scale_batch(DecodedBatch& b, const IndexGroup& g, int divisor) const {
+    const int in_w = progressive::scaled_extent(g.width, divisor);
+    const int in_h = progressive::scaled_extent(g.height, divisor);
+    // The input image is resampled exactly onto in_w x in_h, so its cameras take
+    // the realized ratio; split faces are rendered, so theirs take 1 / divisor.
+    const float rx = (float)in_w / (float)g.width, ry = (float)in_h / (float)g.height;
+    const float face = 1.0f / (float)divisor;
+    const bool split = g.K > 1;
+    b.resolution_divisor = divisor;
+    b.input_width = in_w;
+    b.input_height = in_h;
+    b.width  = split ? progressive::scaled_extent(g.out_w, divisor) : in_w;
+    b.height = split ? progressive::scaled_extent(g.out_h, divisor) : in_h;
+    for (auto& pass : b.face_passes) {
+        pass.width  = progressive::scaled_extent(pass.width, divisor);
+        pass.height = progressive::scaled_extent(pass.height, divisor);
+    }
+    const float sx = split ? face : rx, sy = split ? face : ry;
+    for (size_t c = 0; c < b.intrins.size(); c += 4) {
+        b.intrins[c] *= sx; b.intrins[c + 2] *= sx;
+        b.intrins[c + 1] *= sy; b.intrins[c + 3] *= sy;
+    }
+    for (size_t c = 0; c < b.input_intrins.size(); c += 4) {
+        b.input_intrins[c] *= rx; b.input_intrins[c + 2] *= rx;
+        b.input_intrins[c + 1] *= ry; b.input_intrins[c + 3] *= ry;
+    }
+    for (size_t j = 0; j < b.input_source_models.size(); ++j)
+        if (b.input_source_models[j] >= 0)
+            srccam::rescale(b.input_source_models[j], &b.input_source_params[j * 16], rx, ry);
+    b.rgb_buffer.assign((size_t)b.input_num * in_h * in_w * 3 * pixel_dtype_size(b.rgb_dtype), 0);
 }
 
 void DataManagerImpl::fill_camera_params(DecodedBatch& b) {
@@ -1696,10 +1769,17 @@ void DataManagerImpl::fill_batch_from_cache(DecodedBatch& b) {
     size_t depth_row  = (size_t)b.depth_height  * b.depth_width * pixel_dtype_size(b.depth_dtype);
     size_t normal_row = (size_t)b.normal_height * b.normal_width * 3;
 
+    const auto scaled = b.resolution_divisor > 1 ? _rgb_cache_scaled.find(b.resolution_divisor)
+                                                  : _rgb_cache_scaled.end();
     for (int j = 0; j < B; ++j) {
         int32_t i = b.indices[j];
-        std::memcpy(b.rgb_buffer.data() + (size_t)j * rgb_row,
-                    _rgb_cache[i].data(), rgb_row);
+        uint8_t* rgb_dst = b.rgb_buffer.data() + (size_t)j * rgb_row;
+        if (b.resolution_divisor <= 1)
+            std::memcpy(rgb_dst, _rgb_cache[i].data(), rgb_row);
+        else if (scaled != _rgb_cache_scaled.end() && scaled->second[i].size() == rgb_row)
+            std::memcpy(rgb_dst, scaled->second[i].data(), rgb_row);
+        else   // a stage the preload did not build
+            resize_rgb_row(_rgb_cache[i].data(), _heights[i], _widths[i], rgb_dst, H, W, b.rgb_dtype);
 
         // Mask: cache row at per-image on-disk shape, batch slot at group
         // shape. If equal, memcpy. If cache is 1x1, broadcast (memset).
@@ -1899,6 +1979,22 @@ void DataManagerImpl::build_train_schedule_locked() {
 
     // Interleave step order so full-chunk and mixed steps don't cluster.
     std::shuffle(_train_schedule.begin(), _train_schedule.end(), _rng);
+
+    // One divisor per epoch, so each image trains equally often at each size. An
+    // epoch that would cross a stage switch ends at it, which keeps the switch on
+    // its planned step after a mid-epoch resume or a pass of uneven length.
+    const int64_t at = _cfg.first_step + _issued;
+    const int divisor = progressive::divisor_at(_cfg.resolution_stages, at);
+    for (const auto& [first, d] : _cfg.resolution_stages)
+        if (first > at) {
+            if ((int64_t)_train_schedule.size() > first - at) _train_schedule.resize((size_t)(first - at));
+            break;
+        }
+    for (auto& step : _train_schedule)
+        for (auto& sub : step) sub.divisor = divisor;
+    // CPU mode builds schedules on the consuming thread, the one that reads these rows.
+    for (auto it = _rgb_cache_scaled.begin(); it != _rgb_cache_scaled.end();)
+        it = it->first > divisor ? _rgb_cache_scaled.erase(it) : std::next(it);
 }
 
 // One draw weight per input image from the post-split view stats; empty when
@@ -1944,6 +2040,7 @@ StepSpec DataManagerImpl::next_train_step_spec() {
         throw std::runtime_error("DataManager: no training indices configured");
     if (_train_sched_cursor >= _train_schedule.size())
         build_train_schedule_locked();   // next epoch
+    ++_issued;
     return _train_schedule[_train_sched_cursor++];
 }
 
@@ -1958,10 +2055,11 @@ const TrainStep& DataManagerImpl::next_step_cpu() {
     for (size_t i = 0; i < spec.size(); ++i) {
         if (!st.subs[i]) st.subs[i] = std::make_shared<DecodedBatch>();
         DecodedBatch& b = *st.subs[i];
-        allocate_batch(b, _train_groups[spec[i].group], spec[i].picks);
+        allocate_batch(b, _train_groups[spec[i].group], spec[i].picks, spec[i].divisor);
         fill_batch_from_cache(b);
         b.build_views();
     }
+    if (!st.subs.empty()) _last_train_divisor = st.subs[0]->resolution_divisor;
     return st;
 }
 
@@ -2300,7 +2398,7 @@ void DataManagerImpl::enqueue_step(
     // before any job runs.
     for (size_t i = 0; i < spec.size(); ++i) {
         stepp->subs[i] = std::make_shared<DecodedBatch>();
-        allocate_batch(*stepp->subs[i], _train_groups[spec[i].group], spec[i].picks);
+        allocate_batch(*stepp->subs[i], _train_groups[spec[i].group], spec[i].picks, spec[i].divisor);
     }
 
     auto decrement_absent = [&]() {
@@ -2367,6 +2465,7 @@ const TrainStep& DataManagerImpl::next_train_step() {
             throw std::runtime_error("DataManager: train prefetch queue closed");
     }
     _last_train_step_held = s;
+    if (!s->subs.empty()) _last_train_divisor = s->subs[0]->resolution_divisor;
     return *_last_train_step_held;
 }
 
@@ -2494,6 +2593,7 @@ bool      DataManager::has_depths()     const              { return _impl->has_d
 bool      DataManager::has_normals()    const              { return _impl->has_normals(); }
 int64_t   DataManager::max_input_batch_size() const         { return _impl->max_input_batch_size(); }
 int       DataManager::max_face_passes() const              { return _impl->max_face_passes(); }
+int       DataManager::last_train_divisor() const           { return _impl->last_train_divisor(); }
 void      DataManager::set_view_stats(std::vector<float> cam_sum, std::vector<uint32_t> cam_cnt) {
     _impl->set_view_stats(std::move(cam_sum), std::move(cam_cnt));
 }

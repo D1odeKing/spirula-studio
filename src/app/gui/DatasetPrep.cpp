@@ -4,6 +4,7 @@
 
 #include "app/LidarDataset.h"
 #include "app/gui/DatasetRecord.h"
+#include "dense/Artifact.h"
 #include "app/gui/mask/MaskLayer.h"
 #include "sfm/core/Resume.h"
 
@@ -943,6 +944,7 @@ WorkspaceState probe_workspace(const std::string& workspace,
                fs::exists(ws / "transforms.json", ec) ||
                colmap_model_here(ws) || metashape_export_here(ws);
     st.geometry = has_content(ws / "normals") || has_content(ws / "depths");
+    st.dense = spirula::dense::artifact_complete(ws.string(), true);
     st.record = fs::exists(ws / kDatasetRecordFile, ec);
     const fs::path resume = ws / sfm::resume::kDir;
     st.extracted = has_content(ws / "features") &&

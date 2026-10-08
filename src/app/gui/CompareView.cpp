@@ -456,6 +456,7 @@ void CompareView::begin_edit(int index) {
         _render.note_saved(saved, placement);
         const int n = render::copy_moved_projects(source, saved, placement, dir);
         if (n > 0) _log.push_back(spirula::i18n::format(rmsg::projects_moved, {(long long)n, dir}));
+        if (_on_model_saved) _on_model_saved(saved);
     });
 
     switch (m.src.kind()) {
