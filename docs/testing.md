@@ -5,10 +5,13 @@ describe is gone -- see §3 for what it covered and what now does not.
 
 ## 1. Native cross-backend parity tests (the important ones)
 
-`src/backend/tests/*.cpp` — currently 20 tools covering projection (fwd, bwd,
+`src/backend/tests/*.cpp` — currently 22 tools covering projection (fwd, bwd,
 quant-grad), rasterization bwd, tile intersect, warp, FPBO, optimizer (general
-+ geometry), densify, per-pixel train, PPISP, bilagrid, multi-scale loss
-(`mask_loss_semantics`, `reg_loss_underflow` and `fpbo_split_parity` are
++ geometry), densify, per-pixel train, PPISP, bilagrid, multi-scale loss, the
+fused appearance chain and float16 / uint8 images (`appearance_parity check`
+holds the fused chain to the per-stage kernels, and `pixel_format_parity`
+holds every compact-format reader and writer to float32;
+`mask_loss_semantics`, `reg_loss_underflow` and `fpbo_split_parity` are
 self-checking rather than dump-then-compare: the first pins what an image mask
 means in the loss, in both mask modes and with none; the second sweeps log
 scales past every exp(scales) underflow threshold, down to -inf, and fails if

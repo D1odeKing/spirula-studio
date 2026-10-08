@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     auto fwd = [&] {
         return rasterize_to_pixels_3dgs_fwd(N, splats, splats_s, gauss_ids, W,
                                             H, tile_offsets, flatten_ids,
-                                            macro_log2, dt, false);
+                                            macro_log2, dt, false, true);
     };
     auto rout = fwd();
     backend::device_synchronize();
@@ -196,8 +196,8 @@ int main(int argc, char** argv) {
             N, splats, splats_s, gauss_ids, W, H, tile_offsets, flatten_ids,
             macro_log2, std::get<1>(rout), std::get<2>(rout),
             std::get<0>(rout), std::nullopt, dt, t3f1(d_awmap), aw, v_renders,
-            t3f1(d_v_T), DeviceTensor3D<float>{}, std::nullopt, std::nullopt,
-            std::nullopt);
+            t3f1(d_v_T), DeviceTensor3D<float>{}, std::nullopt, 0.0f,
+            std::nullopt, std::nullopt);
     };
     const double bwd_ms = time_ms(iters, bwd);
     if (check_error("bwd bench")) return 1;

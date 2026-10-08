@@ -41,14 +41,14 @@ terms:
   label's weight on a camera is then its share of that camera's view --
   which is what the ROI masks later drop or keep -- and a point's observers
   weigh by how close they stand, so the votes are spatially coherent. With
-  unit weights instead (each track a vote) the hall of Atrium came out as
+  unit weights instead (each track a vote) the hall of Dataset A came out as
   salt and pepper, because its cameras are tracked in a random few of the
   points they see.
 - **Point-point edges** are the 12-NN affinities `own_points` uses (the
   share of one point's observers that are, or are covisible with, the
   other's), scaled so a point's neighbours weigh on average twice its
   observers (`kSmooth`; 4 and 8 cost view share on every capture tried, 1
-  split Atrium into a fourth part).
+  split Dataset A into a fourth part).
 - **The cut** is `graph::cut_labels` on that graph -- the same recursive
   normalized-cut bisection the view-graph method and the SfM mapper use --
   with node cost 1 per camera and ~0 per patch, so the balance, the leaf
@@ -64,33 +64,33 @@ nearest points owned by another part):
 
 | capture | method | parts | cameras see of own part | ring per part | cut of view graph | point owners interleaved |
 |---|---|---|---|---|---|---|
-| Atrium (4102 frames, one open hall with wings) | view graph | 3 | 54-58% | 671-1552 | 6.1% | 1.6% |
+| Dataset A (4102 frames, one open hall with wings) | view graph | 3 | 54-58% | 671-1552 | 6.1% | 1.6% |
 | | plane cuts | 4 | 60-66% | 456-642 | 20.4% | 2.3% |
 | | **visibility cut** | 3 | 61-75% | 430-686 | 17.4% | 2.8% |
-| utias (5314, a street loop with a dome) | view graph | 4 | 69-85% | 264-368 | 1.0% | 0.8% |
+| Dataset B (5314, a street loop with a dome) | view graph | 4 | 69-85% | 264-368 | 1.0% | 0.8% |
 | | plane cuts | 6 | 40-80% | 340-805 | 14.8% | 2.6% |
 | | **visibility cut** | 4 | 59-95% | 60-794 | 7.7% | 3.5% |
-| myhal (7013, a building on five floors) | view graph | 6 | 65-78% | 175-672 | 1.7% | 1.4% |
+| Dataset C (7013, a building on five floors) | view graph | 6 | 65-78% | 175-672 | 1.7% | 1.4% |
 | | plane cuts | 8 | 45-72% | 320-730 | 15.8% | 2.5% |
 | | **visibility cut** | 6 | 69-91% | 35-388 | 3.0% | 2.2% |
 
 The view-graph cut severs the least covisibility by construction, but its
 regions come from camera positions, so a camera sees less of its part; the
-plane cuts run through rooms and across floors (myhal's eight parts each
+plane cuts run through rooms and across floors (Dataset C's eight parts each
 mix two or three storeys; the visibility cut's six are floors and wings).
 The split takes 7-9 s on these.
 
 Trained, 6000 steps per part at `--max-images 2000`, every 8th frame held
 out, colour-corrected PSNR / SSIM of the merge; per-view differences pair
-views by their ground-truth image (see below); myhal at half resolution:
+views by their ground-truth image (see below); Dataset C at half resolution:
 
 | capture | model | PSNR / SSIM | mean dPSNR | views < -3 dB | worst | train time |
 |---|---|---|---|---|---|---|
-| Atrium | one model on everything | 22.73 / 0.793 | | | | 459 s |
+| Dataset A | one model on everything | 22.73 / 0.793 | | | | 459 s |
 | | view graph, 3 parts, ring 0.1 | 22.71 / 0.799 | -0.02 | 0 | -2.8 | 778 s |
 | | visibility cut, 3 parts, ring 0.2 | 22.45 / 0.796 | -0.28 | 10 | -6.0 | 515 s |
 | | visibility cut, 3 parts, ring 0.1 (default) | 22.63 / 0.799 | -0.10 | 2 | -3.4 | 776 s |
-| myhal | one model on everything | 17.11 / 0.687 | | | | 613 s |
+| Dataset C | one model on everything | 17.11 / 0.687 | | | | 613 s |
 | | visibility cut, 6 parts, ring 0.2 | 17.11 / 0.694 | +0.00 | 2 | -3.8 | 1072 s |
 
 The ring decides the trade: at `--ring 0.2` the visibility cut trains a
@@ -98,7 +98,7 @@ third faster than the view-graph split (rings of 245-465 cameras against
 845-1336) and loses a quarter of a dB in ten views -- the end of the long
 south corridor, where the merge shows smeared splats in front of the
 camera, and a band across the hall where its seam runs; at 0.1 (the
-default) it costs the same time and a tenth of a dB. On myhal the merge
+default) it costs the same time and a tenth of a dB. On Dataset C the merge
 matches the full model.
 
 ## The pipeline
@@ -120,7 +120,7 @@ matches the full model.
    mapper uses for its atoms, with three things the mapper does not want:
    each side of a bisection must hold at least 30% of the parent (a free
    normalized cut shaves off weakly attached clumps one at a time, which is
-   what left a utias part in 437 pieces), a half the sweep left in pieces
+   what left a Dataset B part in 437 pieces), a half the sweep left in pieces
    hands every piece but its largest to the other half, and a few passes of
    boundary refinement move a camera to the part it shares more with while
    the sizes stay within a quarter of the mean. Either exactly `--parts`
@@ -149,11 +149,11 @@ matches the full model.
    | scene, steps | one model | nearest observer + smooth | 1/d^2 over observers + smooth | nearest camera | **nearest camera + smooth** |
    |---|---|---|---|---|---|
    | classroom, 2 parts, 7k | 19.64 / .741 | 19.43 / .743 | 19.50 / .739 | 19.56 / .744 | 19.54 / .742 |
-   | Atrium, 7 parts, 2k | 21.22 / .764 | 20.95 / .767 | 20.98 / .768 | 21.18 / .771 | 21.14 / .771 |
+   | Dataset A, 7 parts, 2k | 21.22 / .764 | 20.95 / .767 | 20.98 / .768 | 21.18 / .771 | 21.14 / .771 |
 
    Anything built on the tracks loses: a point is tracked in a handful of the
    frames that see it, so "which part observed it" is mostly noise (on
-   Atrium 47% of points have no observation from their nearest camera's
+   Dataset A 47% of points have no observation from their nearest camera's
    part). The smoothing costs nothing measurable over plain nearest-camera
    Voronoi and guarantees one coherent region per part. What it gives up: a
    thin wall's far face, when it is nearer to the other room's cameras than
@@ -213,7 +213,7 @@ matches the full model.
    sparse near floor still hides what lies behind it), fills holes from
    neighbours, keeps what nothing covers, widens what is inside by a margin
    so the seam stays supervised, ANDs any existing mask, and writes the
-   result under `<run>/roi_masks/` (`write_region_masks`). On Atrium a
+   result under `<run>/roi_masks/` (`write_region_masks`). On Dataset A a
    third of the pixels drop out.
    `region_parity` holds the device test to the host mirror. The region is
    in the dataset's frame and the splats in the training frame
@@ -288,7 +288,7 @@ only.
 
 - Ground-plane tiles (VastGaussian, CityGS), or recursive plane cuts of the
   point cloud across its principal axes (the default before the visibility
-  cut): a plane through a hall or a floor splits rooms, and on myhal every
+  cut): a plane through a hall or a floor splits rooms, and on Dataset C every
   part mixed storeys.
 - k-means on the points with Voronoi cells: compact, but the cells know
   nothing about which cameras they will need, and nothing about walls.

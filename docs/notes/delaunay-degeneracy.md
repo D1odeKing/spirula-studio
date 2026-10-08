@@ -21,7 +21,7 @@ endpoints `m ± k·σ_i·a_i` of the principal axes. Per splat that is
 
 A trained scene adds near-duplicates: an axis shorter than an ulp of the centre
 collapses `m ± o` onto `m`. In a 10M-point sample of a 15M-splat scene
-(`NightAlley_15m`, coordinates spanning ±350) there were 1508 exactly repeated
+(coordinates spanning ±350) there were 1508 exactly repeated
 points and no fully collapsed splats.
 
 None of this is pathological data — it is what every mesh export feeds in.
@@ -121,11 +121,11 @@ Nothing, which is the point. Measured single-threaded, fixed vs unfixed:
 | cloud | points | threads | tetrahedra | inverted | points kept |
 |---|---|---|---|---|---|
 | `bicycle_4` | 7.0M | 1 | 46,716,110 — *identical* to the unfixed run | 0 | 100% |
-| `NightAlley_15m` (15M splats) | 105M | 16 | 703,818,771 in 152 s | 0 | 100% |
+| 15M splats | 105M | 16 | 703,818,771 in 152 s | 0 | 100% |
 | synthetic surface splats | 0.7M | 1 | 4,248,559 — *identical* | 0 | 100% |
 | lattice (worst case) | 1.4M | 1 | 5,158,580 | 0 | 95.5% |
 
-`NightAlley_15m` is the scene the 8-day report came from. `bicycle_4` produced
+The 15M dataset is the scene the 8-day report came from. `bicycle_4` produced
 zero pinched cavities and 46 cavities over 128 facets in a whole run, and came
 out 4.8 s *faster* than before. Every gram of this is for the lattice column.
 

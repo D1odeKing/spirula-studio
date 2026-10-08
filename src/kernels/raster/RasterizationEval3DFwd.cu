@@ -132,13 +132,15 @@ inline std::tuple<
     // intersections
     const DeviceTensor3D<int32_t> tile_offsets, // [I, tile_height, tile_width]
     const DeviceVector<int32_t> flatten_ids,    // [n_isects]
-    int macro_log2                              // binning granularity
+    int macro_log2,                             // binning granularity
+    bool output_depth
 ) {
     int64_t batch = tile_offsets.size<0>();
 
     RenderOutput::TensorTuple renders, distortions;
     RenderOutput::resize<SplatPrimitive::pixelType>(
-        renders, batch, image_height, image_width, PoolSlot::Renders);
+        renders, batch, image_height, image_width, PoolSlot::Renders,
+        output_depth);
     // Allocate only the distortion channels in dist_type (no-op when None).
     RenderOutput::resizeDistortion<dist_type>(
         distortions, batch, image_height, image_width, PoolSlot::Distortions);
@@ -200,7 +202,8 @@ std::tuple<
     const DeviceVector<int32_t> flatten_ids,    // [n_isects]
     int macro_log2,               // binning granularity
     DistortionType dist_type,
-    bool output_median
+    bool output_median,
+    bool output_depth             // false: nothing reads the depth, leave it out
 ) {
     // Only None/D/RGB_D are instantiated for this RGB_D primitive; DN/RGB_DN
     // require a normal-rendering primitive (add their cases + generator entries
@@ -219,7 +222,7 @@ std::tuple<
         splats_w, splats_s, gaussian_ids,
         viewmats, intrins, cmt(camera_model), cdt(distortion), dist_coeffs, aabb,
         image_width, image_height,
-        tile_offsets, flatten_ids, macro_log2
+        tile_offsets, flatten_ids, macro_log2, output_depth
     );
 }
 

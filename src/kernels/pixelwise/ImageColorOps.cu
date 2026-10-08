@@ -3,7 +3,8 @@
 //
 // Part of the PixelWise family -- see PixelWiseCommon.cuh.
 
-#include "kernels/pixelwise/PixelWiseCommon.cuh"
+#include "kernels/pixelwise/BackgroundNoise.cuh"
+#include "core/PixelFormat.h"
 
 // 2 * weight / N for L = weight * mean(max(-x, x-1, 0)^2) over N = B*H*W*3.
 static inline float _overexposure_scale(long b, long h, long w, float weight) {
@@ -128,65 +129,6 @@ void blend_background_backward(
 // Blend Background with Random Noise
 // ================
 
-// Murmur-style finalizer. Cheap, well-distributed, and stateless -- the whole
-// background is computed, never stored.
-__device__ __forceinline__ uint32_t _bg_mix(uint32_t x) {
-    x ^= x >> 16; x *= 0x7feb352du;
-    x ^= x >> 15; x *= 0x846ca68bu;
-    x ^= x >> 16;
-    return x;
-}
-
-// Unit sample for the background, in [-1, 1] either way. `blocky` draws one of
-// the 8 RGB cube corners per cell -- the extremes, so residual transparency
-// costs most; `block_px` is the cell side, 0 being one cell per image.
-__device__ __forceinline__ float3 _bg_sample(bool blocky, unsigned block_px,
-                                             uint32_t seed, unsigned bid,
-                                             unsigned x, unsigned y, unsigned W) {
-    unsigned cx = 0u, cy = 0u, cells_w = 1u;
-    if (block_px) {
-        // The whole cell grid shifts each step, so no pixel keeps its colour
-        // and the pattern cannot be baked into the splats.
-        cx = (x + _bg_mix(seed * 2u + 1u) % block_px) / block_px;
-        cy = (y + _bg_mix(seed * 2u + 7u) % block_px) / block_px;
-        cells_w = W / block_px + 2u;
-    }
-    float3 u;
-    if (blocky) {
-        const uint32_t h = _bg_mix(cx * 2654435761u ^ cy * 40503u
-                                   ^ (seed + bid * 0x9e3779b9u));
-        u.x = (h & 1u) ? 1.0f : -1.0f;
-        u.y = (h & 2u) ? 1.0f : -1.0f;
-        u.z = (h & 4u) ? 1.0f : -1.0f;
-    } else {
-        const unsigned cid = cy * cells_w + cx;
-        // 2u-1: without it the plain path lands in [0.5, 0.5+w/2) instead of
-        // straddling 0.5, so every channel sits in the same bright half.
-        u.x = (float)hash_uint3(seed + 0, cid, bid) * exp2f(-31.0f) - 1.0f;
-        u.y = (float)hash_uint3(seed + 1, cid, bid) * exp2f(-31.0f) - 1.0f;
-        u.z = (float)hash_uint3(seed + 2, cid, bid) * exp2f(-31.0f) - 1.0f;
-    }
-    return u;
-}
-
-// Per-image power on the display draw; 1 (identity) without a table.
-__device__ __forceinline__ float _bg_exponent(unsigned bid,
-                                              const float* exponent_by_cam,
-                                              const int32_t* cam_indices) {
-    return exponent_by_cam ? exponent_by_cam[cam_indices[bid]] : 1.0f;
-}
-
-template<int Transfer, bool IsLinear>
-__device__ __forceinline__ float3 _bg_color(bool blocky, unsigned block_px,
-                                            uint32_t seed, unsigned bid,
-                                            unsigned x, unsigned y, unsigned W,
-                                            float randomize_weight, float p) {
-    float3 background = _bg_sample(blocky, block_px, seed, bid, x, y, W);
-    background = 0.5 + 0.5*randomize_weight * background;
-    background = SlangPixelWise::background_apply_exponent(background, p);
-    return SlangPixelWise::display_to_working3(background, Transfer, IsLinear);
-}
-
 template<int Transfer, bool IsLinear>
 __global__ void blend_background_noise_forward_kernel(
     const TensorView<float, 4> in_rgb,
@@ -210,7 +152,7 @@ __global__ void blend_background_noise_forward_kernel(
     float3 rgb = in_rgb.load3(bid, y, x);
     float transmittance = in_transmittance.load1(bid, y, x);
 
-    float3 background = _bg_color<Transfer, IsLinear>(
+    float3 background = _bg_color(Transfer, IsLinear,
         blocky, block_px, seed, bid, x, y, W, randomize_weight,
         _bg_exponent(bid, exponent_by_cam, cam_indices));
 
@@ -245,7 +187,7 @@ __global__ void blend_background_noise_backward_kernel(
     float3 rgb = in_rgb.load3(bid, y, x);
     float transmittance = in_transmittance.load1(bid, y, x);
 
-    float3 background = _bg_color<Transfer, IsLinear>(
+    float3 background = _bg_color(Transfer, IsLinear,
         blocky, block_px, seed, bid, x, y, W, randomize_weight,
         _bg_exponent(bid, exponent_by_cam, cam_indices));
 
@@ -538,18 +480,19 @@ void working_to_display_backward(
 // the scalar loss is never materialized. Only for the no-background path: with
 // a blend enabled the same term is fused there, onto the UNCLAMPED composite.
 __global__ void overexposure_grad_add_kernel(
-    const TensorView<float, 4> rgb,
+    const PixelPtr rgb,
     const float scale,
     TensorView<float, 4> v_rgb
 ) {
     unsigned gid = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned bid = blockIdx.y * blockDim.y + threadIdx.y;
-    unsigned B = rgb.shape[0], H = rgb.shape[1], W = rgb.shape[2];
+    unsigned B = v_rgb.shape[0], H = v_rgb.shape[1], W = v_rgb.shape[2];
     if (bid >= B || gid >= H * W) return;
     unsigned y = gid / W;
     unsigned x = gid % W;
 
-    float3 c = rgb.load3(bid, y, x);
+    const size_t pix = (size_t)bid * H * W + gid;
+    float3 c = make_float3(rgb[3 * pix], rgb[3 * pix + 1], rgb[3 * pix + 2]);
     float3 v = v_rgb.load3(bid, y, x);
     float3 g = SlangPixelWise::overexposure_grad(c, scale);
     v.x += g.x;
@@ -561,15 +504,15 @@ __global__ void overexposure_grad_add_kernel(
 
 /*[AutoHeaderGeneratorExport]*/
 void overexposure_grad_add(
-    DeviceTensor3D<float3> rgb,    // [B, H, W, 3]
+    TorchTensorView rgb,           // [B, H, W, 3], float32 or float16
     float weight,                  // L = weight * mean(max(-x, x-1, 0)^2)
     DeviceTensor3D<float3> v_rgb   // [B, H, W, 3], in/out
 ) {
-    long b = rgb.size<0>(), h = rgb.size<1>(), w = rgb.size<2>();
+    long b = v_rgb.size<0>(), h = v_rgb.size<1>(), w = v_rgb.size<2>();
     if (b <= 0 || h <= 0 || w <= 0 || weight == 0.0f) return;
 
     overexposure_grad_add_kernel<<<_LAUNCH_ARGS_2D(h * w, b, 256, 1)>>>(
-        _dt3d_to_tv4<float>(rgb),
+        PixelPtr((const void*)std::get<0>(rgb), pixel_format(rgb)),
         _overexposure_scale(b, h, w, weight),
         _dt3d_to_tv4<float>(v_rgb)
     );

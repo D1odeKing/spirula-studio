@@ -11,6 +11,7 @@ namespace SlangProjectionUtils {
 
 #include <core/Tensor.h>
 #include <core/Common.cuh>
+#include "core/PixelFormat.h"
 #include "core/CameraDistortion.cuh"
 #include "engine/EngineState.h"
 #include "engine/EngineCommon.h"
@@ -1366,7 +1367,8 @@ void engine_viewer_set_grid(float radius, float view_distance)
 // ---------------------------------------------------------------------------
 
 __global__ void update_thumbnails_kernel(
-    const float3* __restrict__ rgb_float,    // [B_post, H_rgb, W_rgb] float3
+    const void* __restrict__ rgb,            // [B_post, H_rgb, W_rgb, 3]
+    PixelFormat rgb_fmt,
     int H_rgb, int W_rgb,
     const int32_t* __restrict__ cam_indices, // [B_post] device-side
     int B_post, int N, int S,
@@ -1392,7 +1394,18 @@ __global__ void update_thumbnails_kernel(
         // Bilinear RGB tap at the source resolution (matches per-pixel loss's
         // bilinear_sample_f3 convention; works when the GT RGB shape differs
         // from S x S).
-        float3 c = bilinear_sample_f3(rgb_float, b, sx, sy, S, S, W_rgb, H_rgb);
+        int x0, y0, x1, y1; float w00, w01, w10, w11;
+        _bilinear_detail::resolve_taps(sx, sy, S, S, W_rgb, H_rgb,
+                                       x0, y0, x1, y1, w00, w01, w10, w11);
+        const size_t plane = (size_t)b * H_rgb * W_rgb;
+        const float3 v00 = pixel_load3(rgb, rgb_fmt, plane + (size_t)y0 * W_rgb + x0);
+        const float3 v10 = pixel_load3(rgb, rgb_fmt, plane + (size_t)y0 * W_rgb + x1);
+        const float3 v01 = pixel_load3(rgb, rgb_fmt, plane + (size_t)y1 * W_rgb + x0);
+        const float3 v11 = pixel_load3(rgb, rgb_fmt, plane + (size_t)y1 * W_rgb + x1);
+        float3 c;
+        c.x = w00*v00.x + w10*v10.x + w01*v01.x + w11*v11.x;
+        c.y = w00*v00.y + w10*v10.y + w01*v01.y + w11*v11.y;
+        c.z = w00*v00.z + w10*v10.z + w01*v01.z + w11*v11.z;
 
         // Mask: nearest-neighbor sample at the mask's own resolution. Out-of-
         // mask pixels render as mid-gray so masked borders are visually
@@ -1424,7 +1437,8 @@ void engine_viewer_capture_thumbnails(TorchTensorView cam_indices_tv) {
     // pending_thumb only decreases monotonically once init has happened.
     if (!engine().viewer.initialized || engine().viewer.pending_thumb <= 0) return;
     if (!engine().gt.has_gt) return;
-    if (engine().gt.rgb.data_ptr() == nullptr) return;
+    const TorchTensorView& gt_rgb = engine().gt.rgb;
+    if (std::get<0>(gt_rgb) == 0) return;
 
     std::lock_guard<std::mutex> _vlock(viewer_mutex());
     auto& v = engine().viewer;
@@ -1432,9 +1446,10 @@ void engine_viewer_capture_thumbnails(TorchTensorView cam_indices_tv) {
     // hit zero on another iter even before init).
     if (!v.initialized || v.pending_thumb <= 0) return;
 
-    int64_t B_post = engine().gt.rgb.size<0>();
-    int64_t H = engine().gt.rgb.size<1>();
-    int64_t W = engine().gt.rgb.size<2>();
+    const auto& gt_shape = std::get<2>(gt_rgb);
+    int64_t B_post = gt_shape[0];
+    int64_t H = gt_shape[1];
+    int64_t W = gt_shape[2];
     if (B_post <= 0 || H <= 0 || W <= 0) return;
 
     uint64_t ci_ptr = std::get<0>(cam_indices_tv);
@@ -1499,7 +1514,7 @@ void engine_viewer_capture_thumbnails(TorchTensorView cam_indices_tv) {
     // training step, so the viewer stream must wait on it first.
     viewer_stream_wait_default();
     update_thumbnails_kernel<<<(uint32_t)B_post, 128, 0, viewer_stream()>>>(
-        (const float3*)engine().gt.rgb.data_ptr(),
+        (const void*)std::get<0>(gt_rgb), pixel_format(gt_rgb),
         (int)H, (int)W,
         d_ci, (int)B_post, v.N_post, VIEWER_THUMBNAIL_SIZE,
         v.thumbnails.data_ptr(),

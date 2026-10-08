@@ -1,7 +1,5 @@
-// PPISP (9-channel) bilateral-grid samplers (Vulkan backend), mirroring
-// kernels/bilagrid/BilagridPpispSampleFwd_kernel.cuh, BilagridPpispSampleBwd_kernel.cuh,
-// BilagridPpispUniformSampleFwd_kernel.cuh and
-// BilagridPpispUniformSampleBwdV1_kernel.cuh (uniform + PATCHED + PACKED).
+// PPISP (9-channel) bilateral-grid samplers (Vulkan backend), mirroring the
+// kernels/bilagrid/BilagridPpisp*_kernel.cuh ones (uniform + PATCHED + PACKED).
 //
 // Per-cell PPISP math comes from the canonical shaders/ppisp.slang
 // (apply_exposure + apply_color_correction_ppisp); the backward uses Slang
@@ -10,10 +8,11 @@
 // backprops every term) — rounding differs, parity is tolerance-based.
 //
 // Spec constants (IDs by declaration order — dispatches must pass ALL):
-//   0: kValueQuant  1: kPatched  2: kCoordsGrad  3: kPacked
+//   0: kValueQuant  1: kPatched  2: kCoordsGrad  3: kPacked  4: kRgbFmt  5: kOutFmt
 
 #include "int64_compat.slang"
 #include "bilagrid_common.slang"
+#include "rgb_format.slang"
 
 #define CudaDeviceExport ForceInline
 #include "shaders/ppisp.slang"
@@ -27,6 +26,12 @@ const int kPatched = 0;
 const int kCoordsGrad = 0;
 [SpecializationConstant]
 const int kPacked = 0;
+// The image formats (core/PixelFormat.h), fixed per pipeline: read per load
+// from the params, they cost the v1 grid kernel ~15%.
+[SpecializationConstant]
+const int kRgbFmt = 0;
+[SpecializationConstant]
+const int kOutFmt = 0;
 
 // exposure(ci=0) + color params (ci=1..8: b.x b.y r.x r.y g.x g.y n.x n.y)
 [ForceInline]
@@ -241,8 +246,8 @@ struct BpUniformParams {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
-    float* output;
+    uint* rgb;
+    uint* output;
     int* offsets;
     int* grid_indices;
     int N, L, H, W, m, h, w, h0, w0;
@@ -279,15 +284,16 @@ void _bp_pix(int idx, BpUniformParams p, out int ni, out int g_id,
 void bilagrid_ppisp_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                         uniform BpUniformParams p) {
     uint idx = (wg.y * p.wgs_per_row + wg.x) * 256 + tid;
-    if (idx >= p.total) return;
+    // No early return: rgb_store3's float16 pairs need every lane.
+    bool active = idx < p.total;
     int ni, g_id, g_off3;
     float gx, gy;
-    _bp_pix(int(idx), p, ni, g_id, g_off3, gx, gy);
+    _bp_pix(int(active ? idx : 0u), p, ni, g_id, g_off3, gx, gy);
     BgReader r = {p.fp32, p.q16, p.vbounds};
 
-    float sr = p.rgb[g_off3 + 0];
-    float sg = p.rgb[g_off3 + 1];
-    float sb = p.rgb[g_off3 + 2];
+    float sr = rgb_load1(p.rgb, g_off3 + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, g_off3 + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, g_off3 + 2, uint(kRgbFmt));
     float gz = kC2G_r * sr + kC2G_g * sg + kC2G_b * sb;
     gz = min(max(gz, 0.0f), 1.0f);
     float x = gx * float(p.W - 1);
@@ -304,9 +310,10 @@ void bilagrid_ppisp_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
         _bp_set_param(exposure, cp, ci, bg_trilerp(kValueQuant != 0, r, c, ci));
 
     float3 rgb = _bp_transform(float3(sr, sg, sb), exposure, cp);
-    p.output[g_off3 + 0] = bg_finite(rgb.x) ? rgb.x : 0.5f;
-    p.output[g_off3 + 1] = bg_finite(rgb.y) ? rgb.y : 0.5f;
-    p.output[g_off3 + 2] = bg_finite(rgb.z) ? rgb.z : 0.5f;
+    float3 out_rgb = float3(bg_finite(rgb.x) ? rgb.x : 0.5f,
+                            bg_finite(rgb.y) ? rgb.y : 0.5f,
+                            bg_finite(rgb.z) ? rgb.z : 0.5f);
+    rgb_store3(p.output, idx, out_rgb, uint(kOutFmt), active);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,7 +337,7 @@ struct BpV1GridParams {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
+    uint* rgb;
     float* v_output;
     float* v_bilagrid;
     int* offsets;
@@ -437,9 +444,9 @@ void bilagrid_ppisp_bwd_v1_grid(uint3 bid: SV_GroupID, uint ltid: SV_GroupThread
                     x = float(wi) / float(p.w - 1) * float(p.W - 1);
                     y = float(hi) / float(p.h - 1) * float(p.H - 1);
                 }
-                float sr = p.rgb[g_off + 0];
-                float sg = p.rgb[g_off + 1];
-                float sb = p.rgb[g_off + 2];
+                float sr = rgb_load1(p.rgb, g_off + 0, uint(kRgbFmt));
+                float sg = rgb_load1(p.rgb, g_off + 1, uint(kRgbFmt));
+                float sb = rgb_load1(p.rgb, g_off + 2, uint(kRgbFmt));
                 float z = kC2G_r * sr + kC2G_g * sg + kC2G_b * sb;
                 z = min(max(z, 0.0f), 1.0f) * float(p.L - 1);
 
@@ -524,7 +531,7 @@ struct BpV1RgbParams {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
+    uint* rgb;
     float* v_output;
     float* v_rgb;
     int* offsets;
@@ -544,7 +551,7 @@ void bilagrid_ppisp_bwd_v1_rgb(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 
     BpUniformParams u;
     u.fp32 = p.fp32; u.q16 = p.q16; u.vbounds = p.vbounds;
-    u.rgb = p.rgb; u.output = p.v_output;
+    u.rgb = p.rgb;
     u.offsets = p.offsets; u.grid_indices = p.grid_indices;
     u.N = p.N; u.L = p.L; u.H = p.H; u.W = p.W;
     u.m = p.m; u.h = p.h; u.w = p.w; u.h0 = p.h0; u.w0 = p.w0;
@@ -555,9 +562,9 @@ void bilagrid_ppisp_bwd_v1_rgb(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     _bp_pix(int(idx), u, ni, g_id, g_off3, gx, gy);
     BgReader r = {p.fp32, p.q16, p.vbounds};
 
-    float sr = p.rgb[g_off3 + 0];
-    float sg = p.rgb[g_off3 + 1];
-    float sb = p.rgb[g_off3 + 2];
+    float sr = rgb_load1(p.rgb, g_off3 + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, g_off3 + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, g_off3 + 2, uint(kRgbFmt));
     float3 v_out = float3(p.v_output[g_off3 + 0], p.v_output[g_off3 + 1],
                           p.v_output[g_off3 + 2]);
 
@@ -626,7 +633,7 @@ struct BpV2Params {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
+    uint* rgb;
     float* v_output;
     float* v_bilagrid;
     float* v_rgb;
@@ -652,9 +659,9 @@ void bilagrid_ppisp_bwd_v2(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     int g_off3 = ((ni * p.h + hi) * p.w + wi) * 3;
     BgReader r = {p.fp32, p.q16, p.vbounds};
 
-    float sr = p.rgb[g_off3 + 0];
-    float sg = p.rgb[g_off3 + 1];
-    float sb = p.rgb[g_off3 + 2];
+    float sr = rgb_load1(p.rgb, g_off3 + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, g_off3 + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, g_off3 + 2, uint(kRgbFmt));
     float3 v_out = float3(p.v_output[g_off3 + 0], p.v_output[g_off3 + 1],
                           p.v_output[g_off3 + 2]);
 

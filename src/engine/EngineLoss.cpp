@@ -144,12 +144,14 @@ static void _engine_raster_proj_backward(
     const DeviceTensor3D<float>& v_median = DeviceTensor3D<float>(),
     TorchTensorView v_rgb_dist = _tv_null(),
     TorchTensorView v_depth_dist = _tv_null(),
-    TorchTensorView v_normal_dist = _tv_null()
+    TorchTensorView v_normal_dist = _tv_null(),
+    float v_dist_rgb_per_depth = 0.0f
 ) {
     SplatStageTimer stage_timer;
     RenderOutput::TensorTuple v_render_outputs = std::make_tuple(
         DeviceTensor3D<float3>(v_render_rgb),
-        DeviceTensor3D<float>(v_render_depth),
+        _tv_valid(v_render_depth) ? DeviceTensor3D<float>(v_render_depth)
+                                  : DeviceTensor3D<float>(),
         DeviceTensor3D<float3>()  // no normal gradient yet
     );
     DeviceTensor3D<float> v_render_Ts(v_render_Ts_tv);
@@ -168,7 +170,8 @@ static void _engine_raster_proj_backward(
         // those to DeviceTensor3D throws ("Expected 4D tensor view"), so leave
         // them default-constructed (null) — e.g. dist_type=D has no rgb/normal.
         v_distortion_opt = std::make_tuple(
-            dist_has_rgb(dist_type)    ? DeviceTensor3D<float3>(v_rgb_dist)    : DeviceTensor3D<float3>(),
+            dist_has_rgb(dist_type) && _tv_valid(v_rgb_dist)
+                ? DeviceTensor3D<float3>(v_rgb_dist) : DeviceTensor3D<float3>(),
             dist_has_depth(dist_type)  ? DeviceTensor3D<float>(v_depth_dist)   : DeviceTensor3D<float>(),
             dist_has_normal(dist_type) ? DeviceTensor3D<float3>(v_normal_dist) : DeviceTensor3D<float3>()
         );
@@ -213,6 +216,12 @@ static void _engine_raster_proj_backward(
         };
     }
 
+    // The distortion terms rebuild their second moment from the rasterizer's
+    // own colour, not from what the appearance stages made of it.
+    RenderOutput::TensorTuple raster_out = engine().fwd.renders;
+    if (engine().fwd.raw_rgb.data_ptr() != nullptr)
+        std::get<0>(raster_out) = engine().fwd.raw_rgb;
+
     std::vector<DeviceTensorFloatND> v_splats_w_out, v_splats_s_out;
 
     if (engine().primitive == "3dgs" || engine().primitive == "mip") {
@@ -228,7 +237,7 @@ static void _engine_raster_proj_backward(
             engine().fwd.macro_log2,
             engine().fwd.render_Ts,
             engine().fwd.last_ids,
-            engine().fwd.renders,
+            raster_out,
             distortion_fwd_opt,  // forward distortion D (for S reconstruction)
             dist_type,
             accum_weight_map,
@@ -237,6 +246,7 @@ static void _engine_raster_proj_backward(
             v_render_Ts,
             v_median,
             v_distortion_opt,  // gradient w.r.t. distortion image
+            v_dist_rgb_per_depth,
             std::make_optional(v_splats_w),
             std::nullopt
         );
@@ -265,7 +275,7 @@ static void _engine_raster_proj_backward(
             engine().fwd.macro_log2,
             engine().fwd.render_Ts,
             engine().fwd.last_ids,
-            engine().fwd.renders,
+            raster_out,
             distortion_fwd_opt,  // forward distortion D (for S reconstruction)
             dist_type,
             DeviceTensor3D<float>(),  // loss_map
@@ -275,6 +285,7 @@ static void _engine_raster_proj_backward(
             v_render_Ts,
             v_median,
             v_distortion_opt,  // gradient w.r.t. distortion image
+            v_dist_rgb_per_depth,
             std::make_optional(v_splats_w),
             std::nullopt,
             false
@@ -509,10 +520,13 @@ static std::map<std::string, float> _engine_loss(
     }
 
     // Render outputs from forward pass (pool-backed, already populated)
-    TorchTensorView render_rgb = TorchTensorView(
-        (uint64_t)std::get<0>(engine().fwd.renders).data_ptr(), 4, {C, H, W, 3});
-    TorchTensorView render_depth = TorchTensorView(
-        (uint64_t)std::get<1>(engine().fwd.renders).data_ptr(), 4, {C, H, W, 1});
+    TorchTensorView render_rgb = _engine_image_view(
+        std::get<0>(engine().fwd.renders), engine().fwd.rgb_fmt);
+    // Absent when the forward was told nothing reads it.
+    TorchTensorView render_depth =
+        std::get<1>(engine().fwd.renders).data_ptr() == nullptr ? _tv_null()
+        : TorchTensorView((uint64_t)std::get<1>(engine().fwd.renders).data_ptr(),
+                          4, {C, H, W, 1});
     TorchTensorView render_Ts = TorchTensorView(
         (uint64_t)engine().fwd.render_Ts.data_ptr(), 4, {C, H, W, 1});
 
@@ -594,6 +608,14 @@ static std::map<std::string, float> _engine_loss(
         }
     }
 
+    // The RGB distortion gradient is the depth one times w_rgb / (3 w_depth):
+    // one mask, one normalizer. The raster backward derives it instead.
+    const float w_rgb_dist = loss_weights[(int)LossWeightIndex::RgbDistReg];
+    const float w_depth_dist = loss_weights[(int)LossWeightIndex::DepthDistReg];
+    const bool derive_rgb_dist = has_rgb_dist && has_depth_dist && w_depth_dist != 0.0f;
+    const float v_dist_rgb_per_depth =
+        derive_rgb_dist ? w_rgb_dist / (3.0f * w_depth_dist) : 0.0f;
+
     std::vector<bool> needs_input_grad = {
         true,                                  // pred_rgb
         false,                                 // gt_rgb
@@ -603,16 +625,26 @@ static std::map<std::string, float> _engine_loss(
         true,                                  // pred_depth_normal
         engine().bilagrid_normal.enabled,      // gt_normal (true when bilagrid normal)
         true,                                  // pred_transmittance
-        has_rgb_dist, has_depth_dist, has_normal_dist, // distortion (rgb, depth, normal)
+        has_rgb_dist && !derive_rgb_dist, has_depth_dist, has_normal_dist, // distortion
         has_median,                            // pred_median_depth
         has_median && median_normal_active,    // pred_median_normal
     };
 
     PerPixelGrads pixel_grads = {};
 
-    // Allocate per-pixel gradient outputs
-    pixel_grads.v_render_rgb  = _pool_tv(PoolSlot::EngVRgb,   C, H, W, 3);
-    pixel_grads.v_render_depth = _pool_tv(PoolSlot::EngVDepth, C, H, W, 1);
+    // Allocate per-pixel gradient outputs. Once the appearance chain has its
+    // float16 copy, only a distortion term reads the rasterizer's own colour
+    // again, so without one v_rgb takes its buffer.
+    if (!map_only && engine().fwd.dist_type == DistortionType::None &&
+        engine().fwd.raw_rgb16.data_ptr() != nullptr) {
+        pixel_grads.v_render_rgb =
+            _engine_image_view(engine().fwd.raw_rgb, PixelFormat::F32);
+        engine().fwd.raw_rgb = DeviceTensor3D<float3>();
+    } else {
+        pixel_grads.v_render_rgb = _pool_tv(PoolSlot::EngVRgb, C, H, W, 3);
+    }
+    if (_tv_valid(render_depth))
+        pixel_grads.v_render_depth = _pool_tv(PoolSlot::EngVDepth, C, H, W, 1);
     pixel_grads.v_render_Ts   = _pool_tv(PoolSlot::EngVTs,    C, H, W, 1);
     if (compute_depth_normal) {
         pixel_grads.v_depth_normal = _pool_tv(PoolSlot::EngVDepthNormal, C, H, W, 3);
@@ -639,7 +671,7 @@ static std::map<std::string, float> _engine_loss(
     }
     // Distortion gradient buffers (d loss / d D), consumed by the raster bwd.
     // RGB_D primitives: rgb + depth only; normal distortion grad stays null.
-    if (has_rgb_dist)
+    if (has_rgb_dist && !derive_rgb_dist)
         pixel_grads.v_rgb_dist    = _pool_tv(PoolSlot::EngVRgbDist,    C, H, W, 3);
     if (has_depth_dist)
         pixel_grads.v_depth_dist  = _pool_tv(PoolSlot::EngVDepthDist,  C, H, W, 1);
@@ -650,7 +682,7 @@ static std::map<std::string, float> _engine_loss(
     LossValues lv = compute_multi_scale_per_pixel_losses(
         num_loss_scales,
         render_rgb,
-        _dt3d_tv(engine().gt.rgb),
+        engine().gt.rgb,
         render_depth,
         _dt3d_tv(engine().gt.depth),
         render_normal,
@@ -777,7 +809,17 @@ static std::map<std::string, float> _engine_loss(
         if (engine().color_space.splat_enabled)
             _engine_color_space_backward_hook(pixel_grads.v_render_rgb);
     };
-    if (engine().ppisp.cur_run_before_color_space) {
+    const bool fused = engine().appearance.fused;
+    if (fused) {
+        // The fused chain ends where the bilateral grid starts, so only a
+        // PPISP after the grid is left outside it.
+        if (engine().appearance.params.ppisp == AppearancePpisp::Off)
+            _ppisp_bwd();
+        _bilagrid_bwd();
+        _engine_appearance_backward(pixel_grads.v_render_rgb,
+                                    pixel_grads.v_render_Ts,
+                                    overexposure_reg_weight);
+    } else if (engine().ppisp.cur_run_before_color_space) {
         _bilagrid_bwd();
         _color_space_bwd();
         _ppisp_bwd();
@@ -794,16 +836,16 @@ static std::map<std::string, float> _engine_loss(
     // --- Image-space overexposure regularization ---
     // Skipped under a blend: the blend backward applies it instead, on the
     // composite rather than on this pre-blend buffer.
-    if (overexposure_reg_weight != 0.0f && !engine().background.enabled) {
+    if (!fused && overexposure_reg_weight != 0.0f && !engine().background.enabled) {
         // Both buffers are in the splat working color space here. Whose
         // values v_render_rgb is the gradient OF is what picks between them:
         // the color-space bwd hook does not re-point fwd.renders.rgb.
-        DeviceTensor3D<float3> rgb_t =
+        TorchTensorView rgb_t =
             engine().ppisp.cur_run_before_color_space
-                ? engine().ppisp.fwd_pre
+                ? _engine_image_view(engine().ppisp.fwd_pre, PixelFormat::F32)
             : engine().color_space.splat_enabled
-                ? engine().color_space.fwd_pre
-                : DeviceTensor3D<float3>(render_rgb);
+                ? _engine_image_view(engine().color_space.fwd_pre, PixelFormat::F32)
+                : render_rgb;
         DeviceTensor3D<float3> v_rgb_t(pixel_grads.v_render_rgb);
         overexposure_grad_add(rgb_t, overexposure_reg_weight, v_rgb_t);
     }
@@ -811,7 +853,7 @@ static std::map<std::string, float> _engine_loss(
     // --- Background blend backward hook ---
     // After the color-space hook, per the forward order above. It ADDS the
     // blend's transmittance gradient into v_render_Ts, not overwrite.
-    if (engine().background.enabled) {
+    if (!fused && engine().background.enabled) {
         _engine_background_backward_hook(
             pixel_grads.v_render_rgb,
             pixel_grads.v_render_Ts,
@@ -863,7 +905,8 @@ static std::map<std::string, float> _engine_loss(
                    : DeviceTensor3D<float>(),
         pixel_grads.v_rgb_dist,
         pixel_grads.v_depth_dist,
-        pixel_grads.v_normal_dist);
+        pixel_grads.v_normal_dist,
+        v_dist_rgb_per_depth);
 
     // --- Build loss dict for display ---
     auto sdiv = [](float x, float y) -> float { return y != 0.0f ? x / y : 0.0f; };

@@ -24,10 +24,10 @@ using namespace bilagrid_ppisp;
 //
 // NEEDS_IMAGE_GRAD folds out the image-gradient write for GT-side grids
 // (depth/normal pass v_rgb_in == nullptr); for RGB PPISP it is always true.
-template <bool NEEDS_IMAGE_GRAD>
+template <bool NEEDS_IMAGE_GRAD, int kF = -1>
 __global__ void bilagrid_ppisp_uniform_sample_backward_v2_kernel(
     BilagridReader bilagrid,               // [N,L,H,W,9]
-    const float* __restrict__ rgb_in,      // [N,h,w,3]
+    PixelPtr rgb_in,      // [N,h,w,3]
     const float* __restrict__ v_rgb_out,   // [N,h,w,3]
     float* __restrict__ v_bilagrid,        // [N,L,H,W,9]  (accumulated)
     float* __restrict__ v_rgb_in,          // [N,h,w,3] or null
@@ -35,6 +35,7 @@ __global__ void bilagrid_ppisp_uniform_sample_backward_v2_kernel(
     int h, int w,
     const int* __restrict__ grid_indices   // [N], or nullptr -> identity
 ) {
+    if constexpr (kF >= 0) rgb_in.f = (PixelFormat)kF;
     int idx = blockIdx.x * kBilagridBwdV1RgbThreads + threadIdx.x;
     int total = N * h * w;
     if (idx >= total) return;

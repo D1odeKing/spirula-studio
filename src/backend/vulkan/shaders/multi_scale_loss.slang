@@ -18,6 +18,7 @@
 #include "int64_compat.slang"
 #include "int8_compat.slang"
 #include "atomic_float.slang"
+#include "rgb_format.slang"
 
 #define CudaDeviceExport ForceInline
 #include "shaders/per_pixel_losses.slang"
@@ -44,6 +45,9 @@ static const uint kInMedianDepth = 1u << 12;
 static const uint kInMedianNormal = 1u << 13;
 static const uint kInRefAlpha = 1u << 14;
 static const uint kInLossMap = 1u << 15;
+// core/PixelFormat.h formats of render_rgb and ref_rgb, two bits each.
+static const uint kInRenderRgbFmtShift = 16u;
+static const uint kInRefRgbFmtShift = 18u;
 
 // out_flags bits (v_* buffer present), in PerPixelGrads field order.
 static const uint kOutVRenderRgb = 1u << 0;
@@ -62,8 +66,8 @@ static const uint kOutVMedianNormal = 1u << 12;
 
 struct PplParams {
     i64mem_t* camera_indices;
-    float* render_rgb;
-    float* ref_rgb;
+    uint* render_rgb;
+    uint* ref_rgb;
     float* render_depth;
     float* ref_depth;
     float* render_normal;
@@ -297,8 +301,12 @@ void _ms_load_pixel(PplParams p, int batch_idx, gindex_t idx, int x_dst,
                     out float3 rgb_dist, out float depth_dist,
                     out float3 normal_dist, out float median_depth,
                     out float3 median_normal, out bool ref_alpha_v) {
-    render_rgb = (p.in_flags & kInRenderRgb) != 0 ? _ms_load_f3(p.render_rgb, idx) : float3(0.0f);
-    ref_rgb = (p.in_flags & kInRefRgb) != 0 ? _ms_load_f3(p.ref_rgb, idx) : float3(0.0f);
+    render_rgb = (p.in_flags & kInRenderRgb) != 0
+        ? rgb_load3(p.render_rgb, idx, (p.in_flags >> kInRenderRgbFmtShift) & 3u)
+        : float3(0.0f);
+    ref_rgb = (p.in_flags & kInRefRgb) != 0
+        ? rgb_load3(p.ref_rgb, idx, (p.in_flags >> kInRefRgbFmtShift) & 3u)
+        : float3(0.0f);
     render_depth = (p.in_flags & kInRenderDepth) != 0 ? p.render_depth[idx] : 1.0f;
     ref_depth_v = 1.0f;
     if ((p.in_flags & kInRefDepth) != 0)
@@ -613,27 +621,60 @@ struct MsPoolParams {
     int _pad0;
 };
 
+// MsPoolParams with the high-res side read as hs_fmt and the low-res side
+// written as ls_fmt (core/PixelFormat.h; float16 only for C == 3).
+struct MsDownParams {
+    uint* hs;
+    uint* ls;
+    int B, C;
+    int hsH, hsW;
+    int lsH, lsW;
+    int scale;
+    float a, b;
+    uint hs_fmt, ls_fmt, wgs_per_row;
+};
+
+// Flat over the low-res pixels, so a float16 level's pixels pair by lane.
+[ForceInline]
+void _ms_ls_pixel(uint pix, int B, int lsH, int lsW, out uint bid, out uint yid,
+                  out uint xid) {
+    xid = pix % uint(lsW);
+    uint t = pix / uint(lsW);
+    yid = t % uint(lsH);
+    bid = t / uint(lsH);
+}
+
+[ForceInline]
+void _ms_store_ls(uint* ls, uint pix, int C, float v[3], uint fmt, bool active) {
+    if (fmt == kRgbF16) {
+        rgb_store3(ls, pix, float3(v[0], v[1], v[2]), kRgbF16, active);
+    } else if (active) {
+        for (int c = 0; c < C; c++) ls[(gindex_t)pix * C + c] = asuint(v[c]);
+    }
+}
+
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ms_downsample_f(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
-                     uniform MsPoolParams p) {
-    uint xid = wg.x * 16 + (tid % 16u);
-    uint yid = wg.y * 16 + (tid / 16u);
-    uint bid = wg.z;
-    if (yid >= uint(p.lsH) || xid >= uint(p.lsW)) return;
+                     uniform MsDownParams p) {
+    uint pix = (wg.y * p.wgs_per_row + wg.x) * 256 + tid;
+    bool active = pix < uint(p.B * p.lsH * p.lsW);
+    uint bid, yid, xid;
+    _ms_ls_pixel(active ? pix : 0u, p.B, p.lsH, p.lsW, bid, yid, xid);
     // Clamp the odd-row/col tail (a floor-halved dst never reads it when the
     // src dim is even; clamping keeps the odd-dim edge case in-bounds).
     uint y0 = min(2 * yid, uint(p.hsH - 1)), y1 = min(2 * yid + 1, uint(p.hsH - 1));
     uint x0 = min(2 * xid, uint(p.hsW - 1)), x1 = min(2 * xid + 1, uint(p.hsW - 1));
+    float out[3] = { 0.0f, 0.0f, 0.0f };
     for (int c = 0; c < p.C; c++) {
         gindex_t base = ((gindex_t)bid * p.hsH) * (gindex_t)p.hsW;
-        float v = p.hs[((base + y0 * p.hsW + x0)) * p.C + c] +
-                  p.hs[((base + y0 * p.hsW + x1)) * p.C + c] +
-                  p.hs[((base + y1 * p.hsW + x0)) * p.C + c] +
-                  p.hs[((base + y1 * p.hsW + x1)) * p.C + c];
-        gindex_t obase = ((gindex_t)bid * p.lsH + yid) * (gindex_t)p.lsW + xid;
-        p.ls[obase * p.C + c] = 0.25f * v;
+        float v = rgb_load1(p.hs, ((base + y0 * p.hsW + x0)) * p.C + c, p.hs_fmt) +
+                  rgb_load1(p.hs, ((base + y0 * p.hsW + x1)) * p.C + c, p.hs_fmt) +
+                  rgb_load1(p.hs, ((base + y1 * p.hsW + x0)) * p.C + c, p.hs_fmt) +
+                  rgb_load1(p.hs, ((base + y1 * p.hsW + x1)) * p.C + c, p.hs_fmt);
+        out[c] = 0.25f * v;
     }
+    _ms_store_ls(p.ls, pix, p.C, out, p.ls_fmt, active);
 }
 
 // GT geometry does not pool like an image: a 2x2 block that mixes real values
@@ -673,23 +714,23 @@ void ms_downsample_gt_geo(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // pixels and two distractor pixels is a colour the render is then asked to
 // match. Averaging only the unmasked children keeps every scale comparable.
 struct MsPoolMaskedParams {
-    float* hs;
-    float* ls;
+    uint* hs;    // read as hs_fmt (core/PixelFormat.h)
+    uint* ls;    // written as ls_fmt
     uint* mask;  // [B,hsH,hsW] bool bytes
     int B, C;
     int hsH, hsW;
     int lsH, lsW;
-    int _pad0;
+    uint hs_fmt, ls_fmt, wgs_per_row, _pad0;
 };
 
 [shader("compute")]
 [numthreads(256, 1, 1)]
 void ms_downsample_masked_f(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                             uniform MsPoolMaskedParams p) {
-    uint xid = wg.x * 16 + (tid % 16u);
-    uint yid = wg.y * 16 + (tid / 16u);
-    uint bid = wg.z;
-    if (yid >= uint(p.lsH) || xid >= uint(p.lsW)) return;
+    uint pix = (wg.y * p.wgs_per_row + wg.x) * 256 + tid;
+    bool active = pix < uint(p.B * p.lsH * p.lsW);
+    uint bid, yid, xid;
+    _ms_ls_pixel(active ? pix : 0u, p.B, p.lsH, p.lsW, bid, yid, xid);
     uint ys[2] = { min(2 * yid, uint(p.hsH - 1)), min(2 * yid + 1, uint(p.hsH - 1)) };
     uint xs[2] = { min(2 * xid, uint(p.hsW - 1)), min(2 * xid + 1, uint(p.hsW - 1)) };
     gindex_t base = ((gindex_t)bid * p.hsH) * (gindex_t)p.hsW;
@@ -701,16 +742,17 @@ void ms_downsample_masked_f(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             gindex_t i = base + ys[dy] * p.hsW + xs[dx];
             bool valid = u8_load(p.mask, (uint)i) != 0u;
             for (int c = 0; c < p.C; c++) {
-                float v = p.hs[i * p.C + c];
+                float v = rgb_load1(p.hs, i * p.C + c, p.hs_fmt);
                 box[c] += 0.25f * v;
                 if (valid) acc[c] += v;
             }
             n += valid ? 1 : 0;
         }
-    gindex_t obase = ((gindex_t)bid * p.lsH + yid) * (gindex_t)p.lsW + xid;
     // All four masked: the coarse pixel is masked too, so the value is unused.
+    float out[3] = { 0.0f, 0.0f, 0.0f };
     for (int c = 0; c < p.C; c++)
-        p.ls[obase * p.C + c] = n != 0 ? acc[c] / float(n) : box[c];
+        out[c] = n != 0 ? acc[c] / float(n) : box[c];
+    _ms_store_ls(p.ls, pix, p.C, out, p.ls_fmt, active);
 }
 
 // The coarse-scale grad is scattered back uniformly over all four children,
@@ -903,4 +945,23 @@ void ms_nms_apply(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     uint n = u8_load(p.fails, (uint)idx);
     float m = n == 0u ? 1.0f : (n == 1u ? p.falloff : p.falloff * p.falloff);
     p.img[idx] *= m;
+}
+
+// The edge-aware maps take float images; a compact one is widened for them.
+struct MsWidenParams {
+    uint* src;
+    float* dst;
+    uint n;
+    uint fmt;
+    uint wgs_per_row;
+    uint _pad0;
+};
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ms_widen(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
+              uniform MsWidenParams p) {
+    uint i = (wg.y * p.wgs_per_row + wg.x) * 256 + tid;
+    if (i >= p.n) return;
+    p.dst[i] = rgb_load1(p.src, i, p.fmt);
 }

@@ -44,6 +44,7 @@ std::tuple<
     const DeviceTensor3D<float> v_render_Ts,
     const DeviceTensor3D<float> v_median,  // [I, H, W], optional
     std::optional<RenderOutput::TensorTuple> v_distortion_outputs,
+    float v_dist_rgb_per_depth,  // used when v_distortion_outputs has no rgb
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_w,
     std::optional<std::vector<DeviceTensorFloatND>> v_splats_s
 );

@@ -14,6 +14,7 @@ namespace SlangPerPixelLosses {
 }
 
 #include "core/Common.cuh"
+#include "core/PixelFormat.h"
 #include <core/Tensor.h>
 
 template<typename T>
@@ -32,21 +33,25 @@ static inline int64_t* _i64ptr(const TorchTensorView& tv) { return (int64_t*)std
 static inline bool _has(const TorchTensorView& tv) { return std::get<0>(tv) != 0; }
 
 // Per-scale/per-buffer loss scratch. Keys are built at runtime from a pyramid
-// scale index and buffer name ("ppl.s{n}.{name}", "ppl.g.{name}.s{n}") so they
-// have no compile-time PoolSlot -> dynamic Image scratch (never checkpointed).
+// scale index and buffer name ("ppl.s{n}.{name}", "ppl.g.{name}.s{n}"); all of
+// it dies inside the loss, so it lives in the Loss phase of the alias arena.
 static inline TorchTensorView _pool_alloc_f(const std::string& key, long B, long H, long W, long C) {
     float* p = (float*)DevicePool::global().acquire_dynamic(
-        VramCategory::Image, key, (size_t)(B * H * W * C) * sizeof(float));
+        VramCategory::Image, key, (size_t)(B * H * W * C) * sizeof(float),
+        PoolPhase::Loss);
     return TorchTensorView((uint64_t)p, 4, {B, H, W, C});
 }
-static inline TorchTensorView _pool_alloc_f_zero(PoolSlot key, long B, long H, long W, long C) {
-    float* p = DevicePool::global().acquire<float>(key, (size_t)(B * H * W * C));
-    cudaMemset(p, 0, B * H * W * C * sizeof(float));
-    return TorchTensorView((uint64_t)p, 4, {B, H, W, C});
+// An RGB level of a float16 render is float16 too, ref and render alike.
+static inline TorchTensorView _pool_alloc_rgb(const std::string& key, long B, long H,
+                                              long W, PixelFormat f) {
+    void* p = DevicePool::global().acquire_dynamic(
+        VramCategory::Image, key, pixel_buffer_bytes(f, B * H * W, 3), PoolPhase::Loss);
+    return TorchTensorView((uint64_t)p, pixel_format_bytes(f), {B, H, W, 3});
 }
 static inline TorchTensorView _pool_alloc_b(const std::string& key, long B, long H, long W) {
     bool* p = (bool*)DevicePool::global().acquire_dynamic(
-        VramCategory::Image, key, (size_t)(B * H * W) * sizeof(bool));
+        VramCategory::Image, key, (size_t)(B * H * W) * sizeof(bool),
+        PoolPhase::Loss);
     return TorchTensorView((uint64_t)p, 1, {B, H, W, 1});
 }
 
@@ -106,8 +111,8 @@ __global__ void per_pixel_losses_forward_kernel(
     const int W_ref_normal, const int H_ref_normal,
     const int W_ref_alpha,  const int H_ref_alpha,
     const int64_t* __restrict__ camera_indices,
-    const float3* __restrict__ render_rgb,
-    const float3* __restrict__ ref_rgb,
+    const void* __restrict__ render_rgb, const PixelFormat render_fmt,
+    const void* __restrict__ ref_rgb, const PixelFormat ref_fmt,
     const float* __restrict__ render_depth,
     const float* __restrict__ ref_depth,
     const float3* __restrict__ render_normal,
@@ -165,8 +170,8 @@ __global__ void per_pixel_losses_forward_kernel(
         }
 
         SlangPerPixelLosses::per_pixel_losses(
-            render_rgb ? render_rgb[idx] : make_float3(0),
-            ref_rgb ? ref_rgb[idx] : make_float3(0),
+            render_rgb ? pixel_load3(render_rgb, render_fmt, idx) : make_float3(0),
+            ref_rgb ? pixel_load3(ref_rgb, ref_fmt, idx) : make_float3(0),
             render_depth ? render_depth[idx] : 1.f,
             ref_depth_v,
             render_normal ? render_normal[idx] : make_float3(0),
@@ -243,8 +248,8 @@ __global__ void per_pixel_losses_backward_kernel(
     const int W_ref_normal, const int H_ref_normal,
     const int W_ref_alpha,  const int H_ref_alpha,
     const int64_t* __restrict__ camera_indices,
-    const float3* __restrict__ render_rgb,
-    const float3* __restrict__ ref_rgb,
+    const void* __restrict__ render_rgb, const PixelFormat render_fmt,
+    const void* __restrict__ ref_rgb, const PixelFormat ref_fmt,
     const float* __restrict__ render_depth,
     const float* __restrict__ ref_depth,
     const float3* __restrict__ render_normal,
@@ -336,8 +341,8 @@ __global__ void per_pixel_losses_backward_kernel(
     }
 
     SlangPerPixelLosses::per_pixel_losses_bwd(
-        render_rgb ? render_rgb[idx] : make_float3(0),
-        ref_rgb ? ref_rgb[idx] : make_float3(0),
+        render_rgb ? pixel_load3(render_rgb, render_fmt, idx) : make_float3(0),
+        ref_rgb ? pixel_load3(ref_rgb, ref_fmt, idx) : make_float3(0),
         render_depth ? render_depth[idx] : 1.f,
         ref_depth_v,
         render_normal ? render_normal[idx] : make_float3(0),
@@ -384,8 +389,7 @@ __global__ void per_pixel_losses_backward_kernel(
 
     // GT-resolution outputs: bilinear scatter (multiple render pixels may
     // share a GT tap). Uses atomicAdd, so the v_ref_depth / v_ref_normal
-    // buffers MUST be zeroed before the kernel launch -- EngineLoss does
-    // that via _pool_alloc_f_zero / cudaMemsetAsync.
+    // buffers MUST be zeroed before the kernel launch (zero_view below).
     if (v_ref_depth) {
         bilinear_scatter_add_gt_depth(
             ref_depth, v_ref_depth, (int)batch_idx, x_dst, y_dst,
@@ -507,8 +511,8 @@ static void _compute_per_pixel_losses_forward(
         W_render, H_render,
         Wd, Hd, Wn, Hn, Wa, Ha,
         _i64ptr(camera_indices),
-        _f3ptr(render_rgb),
-        _f3ptr(ref_rgb),
+        (const void*)std::get<0>(render_rgb), pixel_format(render_rgb),
+        (const void*)std::get<0>(ref_rgb), pixel_format(ref_rgb),
         _fptr(render_depth),
         _fptr(ref_depth),
         _f3ptr(render_normal),
@@ -586,8 +590,8 @@ static void _compute_per_pixel_losses_backward(
         W_render, H_render,
         Wd, Hd, Wn, Hn, Wa, Ha,
         _i64ptr(camera_indices),
-        _f3ptr(render_rgb),
-        _f3ptr(ref_rgb),
+        (const void*)std::get<0>(render_rgb), pixel_format(render_rgb),
+        (const void*)std::get<0>(ref_rgb), pixel_format(ref_rgb),
         _fptr(render_depth),
         _fptr(ref_depth),
         _f3ptr(render_normal),
@@ -622,16 +626,65 @@ static void _compute_per_pixel_losses_backward(
 }
 
 
+// The high-res side of a pooling step, in whatever form the image is stored.
+struct PoolSrc {
+    const void* p;
+    PixelFormat f;
+    uint32_t H, W, C;
+    __device__ float at(uint32_t b, uint32_t y, uint32_t x, uint32_t c) const {
+        return pixel_load1(p, f, (((size_t)b * H + y) * W + x) * C + c);
+    }
+};
+
+__global__ void _widen_kernel(const PoolSrc src, float* __restrict__ dst, size_t n) {
+    const size_t i = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dst[i] = pixel_load1(src.p, src.f, i);
+}
+
+static PoolSrc _pool_src(const TorchTensorView& tv);
+
+// The low-res side: float, or float16 for an RGB level.
+struct PoolDst {
+    PixelOut out;
+    uint32_t H, W, C;
+    __device__ PixelOut::Ref at(uint32_t b, uint32_t y, uint32_t x, uint32_t c) const {
+        return out[(((size_t)b * H + y) * W + x) * C + c];
+    }
+};
+
+static PoolDst _pool_dst(const TorchTensorView& tv) {
+    const auto& s = std::get<2>(tv);
+    return {PixelOut((void*)std::get<0>(tv), pixel_format(tv)), (uint32_t)s[1],
+            (uint32_t)s[2], (uint32_t)s[3]};
+}
+
+// The edge-aware maps take float images; a compact one is widened for them.
+static TorchTensorView _as_float(const TorchTensorView& tv, const std::string& key) {
+    if (!_has(tv) || pixel_format(tv) == PixelFormat::F32) return tv;
+    const auto& s = std::get<2>(tv);
+    TorchTensorView out = _pool_alloc_f(key, s[0], s[1], s[2], s[3]);
+    const size_t n = (size_t)s[0] * s[1] * s[2] * s[3];
+    _widen_kernel<<<_LAUNCH_ARGS_1D(n, 256)>>>(_pool_src(tv), _fptr(out), n);
+    CHECK_DEVICE_ERROR(cudaGetLastError());
+    return out;
+}
+
+static PoolSrc _pool_src(const TorchTensorView& tv) {
+    const auto& s = std::get<2>(tv);
+    return {(const void*)std::get<0>(tv), pixel_format(tv), (uint32_t)s[1],
+            (uint32_t)s[2], (uint32_t)s[3]};
+}
+
 __global__ void avg_pool_downsample_float_kernel(
-    const TensorView<float, 4> image_hs,
-    TensorView<float, 4> image_ls
+    const PoolSrc image_hs,
+    const PoolDst image_ls
 ) {
     uint32_t xid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t yid = blockIdx.y * blockDim.y + threadIdx.y;
     uint32_t bid = blockIdx.z * blockDim.z + threadIdx.z;
-    if (yid >= image_ls.shape[1] || xid >= image_ls.shape[2])
+    if (yid >= image_ls.H || xid >= image_ls.W)
         return;
-    for (int c = 0; c < image_ls.shape[3]; ++c) {
+    for (int c = 0; c < image_ls.C; ++c) {
         float v =
             image_hs.at(bid, 2*yid+0, 2*xid+0, c) +
             image_hs.at(bid, 2*yid+0, 2*xid+1, c) +
@@ -682,14 +735,14 @@ __global__ void avg_pool_downsample_gt_geometry_kernel(
 // match. Averaging only the unmasked children keeps every scale comparable.
 template<int channels>
 __global__ void avg_pool_downsample_masked_float_kernel(
-    const TensorView<float, 4> image_hs,
+    const PoolSrc image_hs,
     const TensorView<uint8_t, 4> mask_hs,
-    TensorView<float, 4> image_ls
+    const PoolDst image_ls
 ) {
     uint32_t xid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t yid = blockIdx.y * blockDim.y + threadIdx.y;
     uint32_t bid = blockIdx.z * blockDim.z + threadIdx.z;
-    if (yid >= image_ls.shape[1] || xid >= image_ls.shape[2])
+    if (yid >= image_ls.H || xid >= image_ls.W)
         return;
     float acc[channels] = {}, box[channels] = {};
     int n = 0;
@@ -752,7 +805,7 @@ static void _avg_pool_downsample_float(const TorchTensorView& src, const TorchTe
     const auto& s = std::get<2>(dst);
     long b = s[0], h = s[1], w = s[2], c = s[3];
     avg_pool_downsample_float_kernel<<<_LAUNCH_ARGS_3D(w, h, b, 16, 16, 1)>>>(
-        _tv_view4(src), _tv_view4(dst));
+        _pool_src(src), _pool_dst(dst));
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
 
@@ -802,11 +855,11 @@ static void _avg_pool_downsample_masked_float(const TorchTensorView& src,
     if (c == 1)
         avg_pool_downsample_masked_float_kernel<1>
             <<<_LAUNCH_ARGS_3D(w, h, b, 16, 16, 1)>>>(
-                _tv_view4(src), _tv_view4_u8(mask), _tv_view4(dst));
+                _pool_src(src), _tv_view4_u8(mask), _pool_dst(dst));
     else
         avg_pool_downsample_masked_float_kernel<3>
             <<<_LAUNCH_ARGS_3D(w, h, b, 16, 16, 1)>>>(
-                _tv_view4(src), _tv_view4_u8(mask), _tv_view4(dst));
+                _pool_src(src), _tv_view4_u8(mask), _pool_dst(dst));
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
 
@@ -921,7 +974,7 @@ static void _loss_map_nms_inplace(const TorchTensorView& img,
         return;
     falloff = fmaxf(falloff, 0.0f);
     uint8_t* fails = (uint8_t*)DevicePool::global().acquire_dynamic(
-        VramCategory::Image, key, (size_t)(B * H * W));
+        VramCategory::Image, key, (size_t)(B * H * W), PoolPhase::Loss);
     auto view = _tv_view4(img);
     loss_map_nms_mask_kernel<<<_LAUNCH_ARGS_3D(W, H, B, 32, 32, 1)>>>(view, fails);
     CHECK_DEVICE_ERROR(cudaGetLastError());
@@ -986,6 +1039,7 @@ LossValues compute_multi_scale_per_pixel_losses(
     float nms_falloff,
     PerPixelGrads& grads_out
 ) {
+    pool_begin_phase(PoolPhase::Loss);
     const auto _mode = densify_loss_map_base((DensifyLossMapMode)loss_map_mode);
     const bool _nms = densify_loss_map_has_nms((DensifyLossMapMode)loss_map_mode);
     // Per-pixel L1/L2/aux terms contribute to the loss map only for LossFull.
@@ -1041,15 +1095,23 @@ LossValues compute_multi_scale_per_pixel_losses(
     // resolution from the rendered output still produce a coherent per-scale
     // pyramid. The per-pixel loss kernel then bilinearly samples between the
     // render-scale grid and each modality's scale grid at each scale.
+    const PixelFormat rgb_level_fmt = pixel_format(render_rgb) == PixelFormat::F16
+                                          ? PixelFormat::F16 : PixelFormat::F32;
     for (int sc = 1; sc < num_loss_scales; ++sc) {
         std::string pfx = "ppl.s" + std::to_string(sc) + ".";
+        auto alloc_level = [&](const std::string& name, long nH, long nW, int C,
+                               PixelFormat f) {
+            return f == PixelFormat::F32 ? _pool_alloc_f(pfx + name, B, nH, nW, C)
+                                         : _pool_alloc_rgb(pfx + name, B, nH, nW, f);
+        };
 
-        auto ds_f = [&](TorchTensorView& prev, TorchTensorView& curr, const std::string& name, int C) {
+        auto ds_f = [&](TorchTensorView& prev, TorchTensorView& curr, const std::string& name,
+                        int C, PixelFormat f = PixelFormat::F32) {
             if (_has(prev)) {
                 const auto& pps = std::get<2>(prev);
                 long nH = std::max((long)1, (long)pps[1] / 2);
                 long nW = std::max((long)1, (long)pps[2] / 2);
-                curr = _pool_alloc_f(pfx + name, B, nH, nW, C);
+                curr = alloc_level(name, nH, nW, C, f);
                 _avg_pool_downsample_float(prev, curr);
             }
         };
@@ -1076,7 +1138,8 @@ LossValues compute_multi_scale_per_pixel_losses(
         // so a masked pixel reaches no coarse value -- which is what lets a
         // fully-masked tile go unrendered (docs/datasets.md, "Skipping tiles").
         auto ds_m = [&](TorchTensorView& prev, TorchTensorView& curr,
-                        const std::string& name, int C) {
+                        const std::string& name, int C,
+                        PixelFormat f = PixelFormat::F32) {
             if (!_has(prev)) return;
             const TorchTensorView& mk = ref_alpha_s[sc-1];
             const auto& pps = std::get<2>(prev);
@@ -1085,15 +1148,15 @@ LossValues compute_multi_scale_per_pixel_losses(
             const bool same = _has(mk) && mks[0] == pps[0] &&
                               mks[1] == pps[1] && mks[2] == pps[2];
             if (!has_mask || !same) {
-                ds_f(prev, curr, name, C);
+                ds_f(prev, curr, name, C, f);
                 return;
             }
-            curr = _pool_alloc_f(pfx + name, B, std::max((long)1, (long)pps[1] / 2),
-                                 std::max((long)1, (long)pps[2] / 2), C);
+            curr = alloc_level(name, std::max((long)1, (long)pps[1] / 2),
+                               std::max((long)1, (long)pps[2] / 2), C, f);
             _avg_pool_downsample_masked_float(prev, mk, curr);
         };
-        ds_m(render_rgb_s[sc-1], render_rgb_s[sc], "rrgb", 3);
-        ds_m(ref_rgb_s[sc-1], ref_rgb_s[sc], "frgb", 3);
+        ds_m(render_rgb_s[sc-1], render_rgb_s[sc], "rrgb", 3, rgb_level_fmt);
+        ds_m(ref_rgb_s[sc-1], ref_rgb_s[sc], "frgb", 3, rgb_level_fmt);
         ds_m(render_depth_s[sc-1], render_depth_s[sc], "rd", 1);
         ds_geo(ref_depth_s[sc-1], ref_depth_s[sc], "fd", 1);
         ds_m(render_normal_s[sc-1], render_normal_s[sc], "rn", 3);
@@ -1132,7 +1195,15 @@ LossValues compute_multi_scale_per_pixel_losses(
         float* loss_map_ptr = nullptr;
         TorchTensorView loss_map_scale = {};
         if (_has(loss_map_out)) {
-            loss_map_scale = _pool_alloc_f_zero(PoolSlot::PplLossMapScale, B, Hs, Ws, 1);
+            // Scale 0 is the output's own shape, so it is written in place.
+            if (scale == 0) {
+                loss_map_scale = loss_map_out;
+                cudaMemsetAsync(_fptr(loss_map_out), 0, B * H * W * sizeof(float));
+            } else {
+                loss_map_scale = _pool_alloc_f("ppl.loss_map.s" + std::to_string(scale),
+                                               B, Hs, Ws, 1);
+                cudaMemsetAsync(_fptr(loss_map_scale), 0, B * Hs * Ws * sizeof(float));
+            }
             loss_map_ptr = _fptr(loss_map_scale);
         }
 
@@ -1263,7 +1334,7 @@ LossValues compute_multi_scale_per_pixel_losses(
                 // structure regardless of how well the splats already
                 // reconstruct it.
                 canny_edge_filter_tensor(
-                    DeviceTensor3D<float3>(ref_rgb_s[scale]),
+                    DeviceTensor3D<float3>(_as_float(ref_rgb_s[scale], "ppl.f32.frgb.s" + std::to_string(scale))),
                     /*mask_in_ptr=*/_bptr(ref_alpha_s[scale]),
                     DeviceTensor3D<float>(loss_map_scale)
                 );
@@ -1274,8 +1345,8 @@ LossValues compute_multi_scale_per_pixel_losses(
                 // for well-reconstructed regions, zeroed past the cutoff
                 // so distractor pixels don't pull splats toward them.
                 robust_canny_residual_tensor(
-                    DeviceTensor3D<float3>(render_rgb_s[scale]),
-                    DeviceTensor3D<float3>(ref_rgb_s[scale]),
+                    DeviceTensor3D<float3>(_as_float(render_rgb_s[scale], "ppl.f32.rrgb.s" + std::to_string(scale))),
+                    DeviceTensor3D<float3>(_as_float(ref_rgb_s[scale], "ppl.f32.frgb.s" + std::to_string(scale))),
                     /*mask_in_ptr=*/_bptr(ref_alpha_s[scale]),
                     robust_edge_aware_quantile,
                     DeviceTensor3D<float>(loss_map_scale)
@@ -1302,9 +1373,7 @@ LossValues compute_multi_scale_per_pixel_losses(
 
         // Upsample loss map
         if (_has(loss_map_out) && loss_map_ptr) {
-            if (scale == 0) {
-                cudaMemcpy(_fptr(loss_map_out), loss_map_ptr, B * H * W * sizeof(float), cudaMemcpyDeviceToDevice);
-            } else {
+            if (scale > 0) {
                 avg_pool_upsample_float_kernel<<<_LAUNCH_ARGS_3D(W, H, B, 16, 16, 1)>>>(
                     _make_view4(_fptr(loss_map_out), B, H, W, 1L),
                     _make_view4(loss_map_ptr, B, Hs, Ws, 1L),

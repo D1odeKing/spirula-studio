@@ -7,8 +7,10 @@
 //   0: kValueQuant  — 0 = fp32 grid, 1 = 16-bit packed + bounds
 //   1: kPatched     — 0 = uniform, 1 = patched (offsets + h0/w0)
 //   2: kCoordsGrad  — bilagrid_sample_bwd only: also write v_coords
+//   3: kRgbFmt, 4: kOutFmt — the uniform / patched samplers' image formats
 
 #include "bilagrid_common.slang"
+#include "rgb_format.slang"
 
 [SpecializationConstant]
 const int kValueQuant = 0;
@@ -16,6 +18,12 @@ const int kValueQuant = 0;
 const int kPatched = 0;
 [SpecializationConstant]
 const int kCoordsGrad = 0;
+// The image formats (core/PixelFormat.h), fixed per pipeline: read per load
+// from the params, they cost the v1 grid kernel ~15%.
+[SpecializationConstant]
+const int kRgbFmt = 0;
+[SpecializationConstant]
+const int kOutFmt = 0;
 
 // ---------------------------------------------------------------------------
 // bilagrid_sample_forward / backward (per-pixel coords, [N,m,h,w])
@@ -168,8 +176,8 @@ struct BgUniformParams {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;           // [N,(m,)h,w,3]
-    float* output;        // fwd out / bwd v_output
+    uint* rgb;           // [N,(m,)h,w,3]
+    uint* output;        // fwd out / bwd v_output
     int* offsets;         // [N,m,2] (kPatched)
     int* grid_indices;    // [N] (!kPatched; has_grid_indices)
     int N, L, H, W, m, h, w, h0, w0;
@@ -219,14 +227,15 @@ BgPix _bg_pix(int idx, int m, int h, int w, int h0, int w0, int* offsets,
 void bilagrid_affine_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                          uniform BgUniformParams p) {
     uint idx = (wg.y * p.wgs_per_row + wg.x) * 256 + tid;
-    if (idx >= p.total) return;
-    BgPix q = _bg_pix(int(idx), p.m, p.h, p.w, p.h0, p.w0, p.offsets,
+    // No early return: rgb_store3's float16 pairs need every lane.
+    bool active = idx < p.total;
+    BgPix q = _bg_pix(int(active ? idx : 0u), p.m, p.h, p.w, p.h0, p.w0, p.offsets,
                       p.grid_indices, p.has_grid_indices);
     BgReader r = {p.fp32, p.q16, p.vbounds};
 
-    float sr = p.rgb[q.g_off3 + 0];
-    float sg = p.rgb[q.g_off3 + 1];
-    float sb = p.rgb[q.g_off3 + 2];
+    float sr = rgb_load1(p.rgb, q.g_off3 + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, q.g_off3 + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, q.g_off3 + 2, uint(kRgbFmt));
 
     float gz = kC2G_r * sr + kC2G_g * sg + kC2G_b * sb;
     gz = min(max(gz, 0.0f), 1.0f);
@@ -245,9 +254,10 @@ void bilagrid_affine_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
         d[ci / 4] += val * coeff[ci % 4];
     }
 
-    p.output[q.g_off3 + 0] = bg_finite(d[0]) ? d[0] : 0.5f;
-    p.output[q.g_off3 + 1] = bg_finite(d[1]) ? d[1] : 0.5f;
-    p.output[q.g_off3 + 2] = bg_finite(d[2]) ? d[2] : 0.5f;
+    float3 out_rgb = float3(bg_finite(d[0]) ? d[0] : 0.5f,
+                            bg_finite(d[1]) ? d[1] : 0.5f,
+                            bg_finite(d[2]) ? d[2] : 0.5f);
+    rgb_store3(p.output, idx, out_rgb, uint(kOutFmt), active);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +265,7 @@ void bilagrid_affine_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // ---------------------------------------------------------------------------
 
 struct BgV1GridParams {
-    float* rgb;            // [N,(m,)h,w,3]
+    uint* rgb;            // [N,(m,)h,w,3]
     float* v_output;
     float* v_bilagrid;     // [N,L,H,W,12] (batch-slot indexed)
     int* offsets;          // kPatched
@@ -337,9 +347,9 @@ void bilagrid_affine_bwd_v1_grid(uint3 bid: SV_GroupID, uint ltid: SV_GroupThrea
                     x = float(wi) / float(p.w - 1) * float(p.W - 1);
                     y = float(hi) / float(p.h - 1) * float(p.H - 1);
                 }
-                float sr = p.rgb[g_off + 0];
-                float sg = p.rgb[g_off + 1];
-                float sb = p.rgb[g_off + 2];
+                float sr = rgb_load1(p.rgb, g_off + 0, uint(kRgbFmt));
+                float sg = rgb_load1(p.rgb, g_off + 1, uint(kRgbFmt));
+                float sb = rgb_load1(p.rgb, g_off + 2, uint(kRgbFmt));
                 float z = kC2G_r * sr + kC2G_g * sg + kC2G_b * sb;
                 z = min(max(z, 0.0f), 1.0f) * float(p.L - 1);
 
@@ -386,7 +396,7 @@ struct BgV1RgbParams {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
+    uint* rgb;
     float* v_output;
     float* v_rgb;
     int* offsets;
@@ -408,9 +418,9 @@ void bilagrid_affine_bwd_v1_rgb(uint3 wg: SV_GroupID,
                       p.grid_indices, p.has_grid_indices);
     BgReader r = {p.fp32, p.q16, p.vbounds};
 
-    float sr = p.rgb[q.g_off3 + 0];
-    float sg = p.rgb[q.g_off3 + 1];
-    float sb = p.rgb[q.g_off3 + 2];
+    float sr = rgb_load1(p.rgb, q.g_off3 + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, q.g_off3 + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, q.g_off3 + 2, uint(kRgbFmt));
     float dcol[3] = {p.v_output[q.g_off3 + 0], p.v_output[q.g_off3 + 1],
                      p.v_output[q.g_off3 + 2]};
 
@@ -481,7 +491,7 @@ struct BgV2Params {
     float* fp32;
     uint* q16;
     float2* vbounds;
-    float* rgb;
+    uint* rgb;
     float* v_output;
     float* v_bilagrid;
     float* v_rgb;
@@ -522,9 +532,9 @@ void bilagrid_affine_bwd_v2(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
         y = float(hi) / float(p.h - 1) * float(p.H - 1);
     }
 
-    float sr = p.rgb[g_off + 0];
-    float sg = p.rgb[g_off + 1];
-    float sb = p.rgb[g_off + 2];
+    float sr = rgb_load1(p.rgb, g_off + 0, uint(kRgbFmt));
+    float sg = rgb_load1(p.rgb, g_off + 1, uint(kRgbFmt));
+    float sb = rgb_load1(p.rgb, g_off + 2, uint(kRgbFmt));
     sr = bg_finite(sr) ? sr : 0.5f;
     sg = bg_finite(sg) ? sg : 0.5f;
     sb = bg_finite(sb) ? sb : 0.5f;

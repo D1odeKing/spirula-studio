@@ -16,6 +16,7 @@ the detail.
 | [notes/pose-normalization.md](notes/pose-normalization.md) | orientation/centering: what the native parser implements, and the kept reference for what it doesn't |
 | [notes/compare-view.md](notes/compare-view.md) | showing several models at once: engine scene slots, the shared navigation frame |
 | [notes/vram-splat-x-img.md](notes/vram-splat-x-img.md) | what the largest scratch category costs per element, the bitmask compaction, and the measured dead ends |
+| [notes/vram-high-res.md](notes/vram-high-res.md) | the per-pixel half of VRAM: the fused appearance chain, float16 images, what a 60 and a 120 MP image cost |
 | [notes/color-transfer.md](notes/color-transfer.md) | linear storage vs the output tone curve, the dynamic range a curve buys, and why its clip is straight-through |
 | [notes/gui-editing-plan.md](notes/gui-editing-plan.md) | editing in the GUI: the selection seam every tool shares, transforms, mask editing, trajectories, and the order to build them in |
 | [notes/gui-automation.md](notes/gui-automation.md) | driving the GUI from a script: the imgui item hooks, the loopback control surface, `tools/guictl.py` and the MCP server |

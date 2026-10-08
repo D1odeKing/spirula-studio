@@ -101,6 +101,17 @@ inline void dispatch_ring(const char* entry,
     dispatch(entry, spec, gx, gy, gz, &addr, sizeof(addr));
 }
 
+// dispatch_flat for a params struct that goes through the ring.
+inline void dispatch_ring_flat(const char* entry,
+                               const backend::vk::SpecList& spec,
+                               int64_t total, uint32_t block, void* params,
+                               uint32_t size, uint32_t* wgs_per_row_field) {
+    if (total <= 0) return;
+    Fold f = fold_1d(total, block);
+    *wgs_per_row_field = f.per_row;
+    dispatch_ring(entry, spec, f.per_row, f.rows, 1, params, size);
+}
+
 // Device address of a small zeroed allocation that stands in for null
 // optional pointers in kernel params. Rationale (learned on llvmpipe): the
 // CPU JIT can SPECULATE loads that sit behind a pointer-null (or flag)

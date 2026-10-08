@@ -5,16 +5,17 @@
 
 namespace cg = cooperative_groups;
 
+template <int kF = -1>
 #ifdef PATCHED
 __global__ void bilagrid_patched_sample_backward_v1_kernel_bilagrid(
 #else
 __global__ void bilagrid_uniform_sample_backward_v1_kernel_bilagrid(
 #endif
 #ifdef PATCHED
-    const float* __restrict__ rgb,  // [N,m,h,w,3]
+    PixelPtr rgb,  // [N,m,h,w,3]
     const float* __restrict__ v_output,  // [N,m,h,w,3]
 #else
-    const float* __restrict__ rgb,  // [N,h,w,3]
+    PixelPtr rgb,  // [N,h,w,3]
     const float* __restrict__ v_output,  // [N,h,w,3]
 #endif
     float* __restrict__ v_bilagrid,  // [N_grids,L,H,W,12] or [N,L,H,W,12]
@@ -35,6 +36,7 @@ __global__ void bilagrid_uniform_sample_backward_v1_kernel_bilagrid(
     , const int* __restrict__ grid_indices  // [N], or nullptr -> identity
 #endif
 ) {
+    if constexpr (kF >= 0) rgb.f = (PixelFormat)kF;
 #ifdef PATCHED
     int idx = blockIdx.z * kBilagridBwdV1BlockZ + threadIdx.z;
     bool inside = (idx < (N*m*L));
@@ -230,6 +232,7 @@ __global__ void bilagrid_uniform_sample_backward_v1_kernel_bilagrid(
 }
 
 
+template <int kF = -1>
 #ifdef PATCHED
 __global__ void bilagrid_patched_sample_backward_v1_kernel_rgb(
 #else
@@ -237,11 +240,11 @@ __global__ void bilagrid_uniform_sample_backward_v1_kernel_rgb(
 #endif
     BilagridReader bilagrid,  // [N_grids,L,H,W,12] or [N,L,H,W,12]
 #ifdef PATCHED
-    const float* __restrict__ rgb,  // [N,m,h,w,3]
+    PixelPtr rgb,  // [N,m,h,w,3]
     const float* __restrict__ v_output,  // [N,m,h,w,3]
     float* __restrict__ v_rgb,  // [N,m,h,w,3]
 #else
-    const float* __restrict__ rgb,  // [N,h,w,3]
+    PixelPtr rgb,  // [N,h,w,3]
     const float* __restrict__ v_output,  // [N,h,w,3]
     float* __restrict__ v_rgb,  // [N,h,w,3]
 #endif
@@ -258,6 +261,7 @@ __global__ void bilagrid_uniform_sample_backward_v1_kernel_rgb(
     , const int* __restrict__ grid_indices  // [N], or nullptr -> identity
 #endif
 ) {
+    if constexpr (kF >= 0) rgb.f = (PixelFormat)kF;
     int idx = blockIdx.x * kBilagridBwdV1RgbThreads + threadIdx.x;
 #ifdef PATCHED
     int total = N * m * h * w;

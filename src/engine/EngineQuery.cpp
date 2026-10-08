@@ -2,12 +2,15 @@
 
 #include "engine/Engine.h"
 #include "engine/EngineCommon.h"
+#include "engine/EngineInternal.h"
 #include "engine/EngineState.h"
 #include "backend/common/Profiler.h"
+#include "core/HalfFloat.h"
 
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
+#include <vector>
 
 
 void engine_copy_accum_buffer(TorchTensorView dst) {
@@ -50,7 +53,15 @@ void engine_copy_render_to_host(
     auto& renders = engine().fwd.renders;
     auto& rgb = std::get<0>(renders);
     auto& depth = std::get<1>(renders);
-    if (rgb.data_ptr() && std::get<0>(out_rgb) != 0) {
+    if (rgb.data_ptr() && std::get<0>(out_rgb) != 0 &&
+        engine().fwd.rgb_fmt == PixelFormat::F16) {
+        std::vector<uint16_t> h((size_t)rgb.numel() * 3);
+        backend::memcpy_sync(h.data(), rgb.data_ptr(), h.size() * sizeof(uint16_t),
+                             backend::MemcpyKind::DeviceToHost);
+        const float* half_to_float = spirula::half_to_float_table();
+        float* dst = (float*)std::get<0>(out_rgb);
+        for (size_t i = 0; i < h.size(); i++) dst[i] = half_to_float[h[i]];
+    } else if (rgb.data_ptr() && std::get<0>(out_rgb) != 0) {
         backend::memcpy_sync((void*)std::get<0>(out_rgb), rgb.data_ptr(),
                    rgb.numel() * sizeof(float3), backend::MemcpyKind::DeviceToHost);
     }
@@ -62,15 +73,34 @@ void engine_copy_render_to_host(
         backend::memcpy_sync((void*)std::get<0>(out_Ts), engine().fwd.render_Ts.data_ptr(),
                    engine().fwd.render_Ts.numel() * sizeof(float), backend::MemcpyKind::DeviceToHost);
     }
-    // Pre-conversion (linear / wide-gamut) render is stashed by the color
-    // space forward hook into cs.fwd_pre. When the engine has no color
-    // space configured, fwd_pre is empty; the caller mirrors out_rgb to
-    // out_rgb_raw on the Python side to avoid a redundant D->H of the
-    // identical buffer.
+    // The pre-encode (linear / wide-gamut) render: kept in cs.fwd_pre by the
+    // per-stage path, redone here for the fused one. Left unwritten without a
+    // color space; the caller then mirrors out_rgb.
     auto& cs = engine().color_space;
-    if (std::get<0>(out_rgb_raw) != 0 && cs.fwd_pre.data_ptr() != nullptr) {
-        backend::memcpy_sync((void*)std::get<0>(out_rgb_raw), cs.fwd_pre.data_ptr(),
-                   cs.fwd_pre.numel() * sizeof(float3), backend::MemcpyKind::DeviceToHost);
+    DeviceTensor3D<float3> pre = cs.fwd_pre;
+    const auto& app = engine().appearance;
+    if (std::get<0>(out_rgb_raw) != 0 && pre.data_ptr() == nullptr &&
+        app.fused && app.params.cs_enabled) {
+        // A training step's loss may have put v_rgb in the float32 raw render.
+        const bool half = engine().fwd.raw_rgb16.data_ptr() != nullptr;
+        pre = half ? engine().fwd.raw_rgb16 : engine().fwd.raw_rgb;
+        if (app.params.bg != AppearanceBg::None || half) {
+            AppearanceChainParams p = app.params;
+            p.cs_enabled = 0;
+            p.ppisp = AppearancePpisp::Off;
+            DeviceTensor3D<float3> lin;
+            lin.resize(PoolSlot::EngAppearanceLinear, pre.size<0>(), pre.size<1>(),
+                       pre.size<2>());
+            appearance_chain_forward(
+                p, _engine_image_view(pre, half ? PixelFormat::F16 : PixelFormat::F32),
+                engine().fwd.render_Ts, _engine_image_view(lin, PixelFormat::F32),
+                _tv_null());
+            pre = lin;
+        }
+    }
+    if (std::get<0>(out_rgb_raw) != 0 && pre.data_ptr() != nullptr) {
+        backend::memcpy_sync((void*)std::get<0>(out_rgb_raw), pre.data_ptr(),
+                   pre.numel() * sizeof(float3), backend::MemcpyKind::DeviceToHost);
     }
     if (engine().fwd.render_median.data_ptr() && std::get<0>(out_median) != 0) {
         backend::memcpy_sync((void*)std::get<0>(out_median), engine().fwd.render_median.data_ptr(),
@@ -157,9 +187,10 @@ void engine_copy_grads_to_host(
 // Shape getters: callers use these to size the host buffer before calling
 // the copy. Returns (B, H, W, C); zeros when the buffer is empty.
 std::tuple<int64_t, int64_t, int64_t, int64_t> engine_get_gt_rgb_shape() {
-    auto& t = engine().gt.rgb;
-    if (t.data_ptr() == nullptr) return {0, 0, 0, 0};
-    return {t.template size<0>(), t.template size<1>(), t.template size<2>(), 3LL};
+    const TorchTensorView& t = engine().gt.rgb;
+    if (std::get<0>(t) == 0) return {0, 0, 0, 0};
+    const auto& s = std::get<2>(t);
+    return {s[0], s[1], s[2], 3LL};
 }
 
 std::tuple<int64_t, int64_t, int64_t, int64_t> engine_get_gt_alpha_shape() {
@@ -174,11 +205,22 @@ std::tuple<int64_t, int64_t, int64_t, int64_t> engine_get_render_rgb_shape() {
     return {t.template size<0>(), t.template size<1>(), t.template size<2>(), 3LL};
 }
 
+// The host buffer is float; an 8-bit GT is widened here, as the loss reads it.
 void engine_copy_gt_rgb_to_host(TorchTensorView out) {
-    auto& t = engine().gt.rgb;
-    if (t.data_ptr() == nullptr || std::get<0>(out) == 0) return;
-    backend::memcpy_sync((void*)std::get<0>(out), t.data_ptr(),
-               t.numel() * sizeof(float3), backend::MemcpyKind::DeviceToHost);
+    const TorchTensorView& t = engine().gt.rgb;
+    if (std::get<0>(t) == 0 || std::get<0>(out) == 0) return;
+    size_t n = 1;
+    for (int64_t d : std::get<2>(t)) n *= (size_t)d;
+    float* dst = (float*)std::get<0>(out);
+    if (std::get<1>(t) == 4) {
+        backend::memcpy_sync(dst, (const void*)std::get<0>(t), n * sizeof(float),
+                             backend::MemcpyKind::DeviceToHost);
+        return;
+    }
+    std::vector<uint8_t> bytes(n);
+    backend::memcpy_sync(bytes.data(), (const void*)std::get<0>(t), n,
+                         backend::MemcpyKind::DeviceToHost);
+    for (size_t i = 0; i < n; ++i) dst[i] = (float)bytes[i] / 255.0f;
 }
 
 void engine_copy_gt_alpha_to_host(TorchTensorView out) {

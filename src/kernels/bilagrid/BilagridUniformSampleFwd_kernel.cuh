@@ -8,11 +8,11 @@ __global__ void bilagrid_uniform_sample_forward_kernel(
 #endif
     BilagridReader bilagrid, // [N_grids,L,H,W,12] or [N,L,H,W,12]
 #ifdef PATCHED
-    const float* __restrict__ rgb,  // [N,m,h,w,3]
-    float* __restrict__ output,  // [N,m,h,w,3]
+    const PixelPtr rgb,  // [N,m,h,w,3]
+    const PixelOut output,  // [N,m,h,w,3]
 #else
-    const float* __restrict__ rgb,  // [N,h,w,3]
-    float* __restrict__ output,  // [N,h,w,3]
+    const PixelPtr rgb,  // [N,h,w,3]
+    const PixelOut output,  // [N,h,w,3]
 #endif
     int N, int L, int H, int W,
 #ifdef PATCHED

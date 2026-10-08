@@ -170,6 +170,10 @@ asks for more than it holds. The saving is `raster_bwd.v_screen` in full --
 the intersect phase is the larger of the two, so it sets the arena and the
 gradient buffer rides along free.
 
+The multi-scale loss's scratch is a third phase, `Loss`
+([vram-high-res.md](vram-high-res.md)); at tens of megapixels it is the
+largest of the three and sets the arena.
+
 ### Adding a buffer to a phase
 
 1. Add its row to `POOL_ALIAS_TABLE`. If the phase is new, add the enumerator

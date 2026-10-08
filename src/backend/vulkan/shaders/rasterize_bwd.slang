@@ -81,6 +81,12 @@ groupshared uint _rb_wtot[RB_THREADS];   // per-wave compaction totals
 groupshared uint _rb_binmax;             // 1 + max last_id over the tile's pixels
 groupshared float _rb_red[RB_THREADS];   // viewmat-grad reduction scratch
 
+// state_flags: the render's depth and its gradient are bound (a render whose
+// depth nothing reads has neither), and the RGB distortion gradient is that
+// multiple of the depth one instead of a buffer.
+static const uint kRbDepthBound = 1u;
+static const uint kRbDistRgbFromDepth = 2u;
+
 // Load the per-pixel color/distortion/median state shared by both entries.
 // `pix` is the local pixel id, `gpix` the in-image pixel id (valid only when
 // inside). Returns nothing; fills the groupshared arrays.
@@ -90,18 +96,21 @@ void _rb_load_pixel_state(
     float* render_Ts_img, float* v_render_Ts_img, uint gpix,
     float* out_rgb, float* out_depth, float* dist_rgb, float* dist_depth,
     float* v_out_rgb, float* v_out_depth, float* v_dist_rgb,
-    float* v_dist_depth, float* awmap, float* v_median) {
+    float* v_dist_depth, float* awmap, float* v_median, uint state_flags,
+    float v_dist_rgb_per_depth) {
     float T = inside ? render_Ts_img[gpix] : 0.0f;
     float v_T = inside ? v_render_Ts_img[gpix] : 0.0f;
     float4 v_c = float4(0.0f);
     if (inside) {
         v_c = float4(v_out_rgb[3 * image_pix], v_out_rgb[3 * image_pix + 1],
-                     v_out_rgb[3 * image_pix + 2], v_out_depth[image_pix]);
+                     v_out_rgb[3 * image_pix + 2],
+                     (state_flags & kRbDepthBound) != 0 ? v_out_depth[image_pix] : 0.0f);
     }
     // depth channel: convert dL/d(render depth) to dL/d(accumulated C).
     {
         float inv_alpha = 1.0f / max(1.0f - T, 1e-10f);
-        float exp_depth = inside ? out_depth[image_pix] : 0.0f;
+        float exp_depth = (inside && (state_flags & kRbDepthBound) != 0)
+                              ? out_depth[image_pix] : 0.0f;
         if (kDistType != 0) {
             float m = log(max(exp_depth, DEPTH_DIST_EPS));
             v_T += exp_depth * v_c.w * m * inv_alpha;
@@ -127,9 +136,11 @@ void _rb_load_pixel_state(
                 Dv.xyz = float3(dist_rgb[3 * image_pix],
                                 dist_rgb[3 * image_pix + 1],
                                 dist_rgb[3 * image_pix + 2]);
-                v_d.xyz = float3(v_dist_rgb[3 * image_pix],
-                                 v_dist_rgb[3 * image_pix + 1],
-                                 v_dist_rgb[3 * image_pix + 2]);
+                v_d.xyz = (state_flags & kRbDistRgbFromDepth) != 0
+                    ? float3(v_d.w * v_dist_rgb_per_depth)
+                    : float3(v_dist_rgb[3 * image_pix],
+                             v_dist_rgb[3 * image_pix + 1],
+                             v_dist_rgb[3 * image_pix + 2]);
             }
         }
         float W = max(1.0f - T, 1e-10f);
@@ -247,7 +258,9 @@ struct Raster2dBwdParams {  // via params ring
     uint32_t height;
     uint32_t tile_width;
     uint32_t tile_height;
-    uint32_t macro_log2;  // was _pad0; the struct size is unchanged
+    uint32_t macro_log2;
+    float v_dist_rgb_per_depth;
+    uint32_t state_flags;  // kRb*
 };
 
 struct Frag2d_ {
@@ -357,7 +370,8 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             pix, inside, img_off + gpix, p.render_Ts + img_off,
             p.v_render_Ts + img_off, gpix, p.out_rgb, p.out_depth,
             p.dist_rgb, p.dist_depth, p.v_out_rgb, p.v_out_depth,
-            p.v_dist_rgb, p.v_dist_depth, p.awmap, p.v_median);
+            p.v_dist_rgb, p.v_dist_depth, p.awmap, p.v_median,
+            p.state_flags, p.v_dist_rgb_per_depth);
     }
     { uint prev; InterlockedMax(_rb_binmax, uint(bin_local + 1), prev); }
     GroupMemoryBarrierWithGroupSync();
@@ -550,7 +564,9 @@ struct Raster3dgutBwdParams {  // via params ring
     uint32_t height;
     uint32_t tile_width;
     uint32_t tile_height;
-    uint32_t macro_log2;  // was _pad0; the struct size is unchanged
+    uint32_t macro_log2;
+    float v_dist_rgb_per_depth;
+    uint32_t state_flags;  // kRb*
 };
 
 struct Frag3dgut_ {
@@ -696,7 +712,8 @@ void rasterize_bwd_3dgut(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             pix, inside, img_off + gpix, p.render_Ts + img_off,
             p.v_render_Ts + img_off, gpix, p.out_rgb, p.out_depth,
             p.dist_rgb, p.dist_depth, p.v_out_rgb, p.v_out_depth,
-            p.v_dist_rgb, p.v_dist_depth, p.awmap, p.v_median);
+            p.v_dist_rgb, p.v_dist_depth, p.awmap, p.v_median,
+            p.state_flags, p.v_dist_rgb_per_depth);
     }
     { uint prev; InterlockedMax(_rb_binmax, uint(bin_local + 1), prev); }
     GroupMemoryBarrierWithGroupSync();

@@ -43,6 +43,10 @@ using spirula::i18n::format;
 // ===========================================================================
 namespace {
 
+// Pixels one warp pass may render. A 5.7K panorama's six faces stay one pass;
+// a 120 MP one's faces go one at a time.
+constexpr int64_t kWarpPassPixelBudget = (int64_t)1 << 24;
+
 // Why a decode failed, for a message a user reads. stbi_failure_reason() is
 // a global every decode thread writes, so a missing file -- the common case,
 // a dataset moved mid-run -- is diagnosed from the filesystem instead.
@@ -1389,8 +1393,14 @@ std::vector<IndexGroup> DataManagerImpl::build_index_groups_member(
                 const int64_t o = _post_offsets[i] + k;
                 const int32_t w = K_i > 1 ? _post_widths[o]  : out_w;
                 const int32_t h = K_i > 1 ? _post_heights[o] : out_h;
+                // A pass renders its faces at once, so every per-pixel buffer
+                // of the step is sized by the pass; the split's weighting keeps
+                // the loss independent of where a run is cut.
+                const bool fits = !g.passes.empty() &&
+                    (int64_t)(g.passes.back().k1 - g.passes.back().k0 + 1) * w * h <=
+                        kWarpPassPixelBudget;
                 if (!g.passes.empty() && g.passes.back().width == w &&
-                    g.passes.back().height == h)
+                    g.passes.back().height == h && fits)
                     g.passes.back().k1 = k + 1;
                 else
                     g.passes.push_back(WarpFacePass{k, k + 1, w, h});
