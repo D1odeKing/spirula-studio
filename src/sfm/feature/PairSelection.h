@@ -333,8 +333,9 @@ inline std::vector<std::pair<uint32_t, uint32_t>> prefilterPairsFor(
         ordered.emplace_back(c.first, n + c.second);
         ordered.emplace_back(c.second, n + c.first);
     }
-    std::vector<uint32_t> s = detail::scoreOrderedPairs(sets, ordered, opt, 0, ordered.size(),
-                                                        progress);
+    BruteForceMatcher matcher(detail::countingOptions(opt));
+    std::vector<uint32_t> s = detail::scoreOrderedPairs(matcher, sets, ordered, opt, 0,
+                                                        ordered.size(), progress);
     std::vector<uint32_t> edge(cand.size(), 0);
     for (size_t e = 0; e < cand.size(); e++) edge[e] = std::max(s[2 * e], s[2 * e + 1]);
     // topPartners keeps the union over both ends; a partner's own top-k is not the ask.
