@@ -77,6 +77,64 @@ static void _visit_accumulate_camera_stats(const std::string& primitive) {
 }
 
 
+void _engine_arm_step_forward(const EngineStepConfig& cfg,
+                              DistortionType dist_type, bool image_stages) {
+    // The rendered depth and its gradient are two full-resolution floats a
+    // pixel; a step none of whose terms reads them leaves both out.
+    {
+        const auto& w = cfg.loss.weights;
+        engine().fwd.skip_depth_pending =
+            !dist_any(dist_type) && engine().gt.depth.data_ptr() == nullptr &&
+            engine().gt.normal.data_ptr() == nullptr &&
+            w[(int)LossWeightIndex::MeanMedianDepthSup] == 0.0f &&
+            w[(int)LossWeightIndex::MedianDepthNormalReg] == 0.0f &&
+            w[(int)LossWeightIndex::MedianNormalSup] == 0.0f &&
+            w[(int)LossWeightIndex::MedianRenderNormalReg] == 0.0f;
+    }
+    auto& pp = engine().ppisp;
+    pp.cur_run_before_bilagrid = cfg.ppisp.run_before_bilagrid;
+    pp.cur_run_before_color_space =
+        cfg.ppisp.run_before_color_space && engine().color_space.splat_enabled;
+    pp.forward_pending = image_stages && pp.enabled && pp.cur_run_before_color_space;
+    // The fused appearance chain can also take PPISP after the encode, when
+    // nothing stands between it and the encode.
+    pp.forward_pending_after_encode =
+        image_stages && pp.enabled && !pp.cur_run_before_color_space &&
+        (pp.cur_run_before_bilagrid || !engine().bilagrid_rgb.enabled);
+    engine().appearance.allow = cfg.loss.color_shift_reg_weight <= 0.0f;
+    // The color-shift term reads the stages' images as float.
+    engine().fwd.image_fmt_pending =
+        cfg.optim.image_bits == 16 && engine().appearance.allow
+            ? PixelFormat::F16 : PixelFormat::F32;
+    engine().appearance.transient_pending =
+        image_stages && engine().fwd.image_fmt_pending == PixelFormat::F16 &&
+        engine().bilagrid_rgb.enabled;
+    engine().background.match_luma_pending = cfg.background.match_luminance;
+}
+
+void _engine_step_image_stages(TorchTensorView cam_indices) {
+    // PPISP already ran inside the forward in the before-color-space order,
+    // and in the fused chain's after-encode one.
+    const bool ppisp_fused = engine().appearance.fused &&
+                             engine().appearance.params.ppisp != AppearancePpisp::Off;
+    const bool ppisp_after = engine().ppisp.enabled &&
+                             !engine().ppisp.cur_run_before_color_space &&
+                             !ppisp_fused;
+    const bool bg_enabled = engine().bilagrid_rgb.enabled ||
+                            engine().bilagrid_depth.enabled ||
+                            engine().bilagrid_normal.enabled;
+    if (engine().ppisp.cur_run_before_bilagrid) {
+        if (ppisp_after) engine_ppisp_forward(cam_indices);
+        if (bg_enabled)  engine_bilagrid_forward(cam_indices);
+    } else {
+        // The per-stage PPISP reads the grid's output as float.
+        if (ppisp_after) engine().fwd.image_fmt = PixelFormat::F32;
+        if (bg_enabled)  engine_bilagrid_forward(cam_indices);
+        if (ppisp_after) engine_ppisp_forward(cam_indices);
+    }
+}
+
+
 // Forward + bilagrid/PPISP forward + loss + raster/proj backward only.
 // No optimizer / densify. Used both as a per-sub-batch step in split mode
 // and as the inner of the single-batch path. Returns the loss_dict from
@@ -156,62 +214,13 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
     } else {
         engine().fwd.tile_active = DeviceVector<int32_t>();
     }
-    // The rendered depth and its gradient are two full-resolution floats a
-    // pixel; a step none of whose terms reads them leaves both out.
-    {
-        const auto& w = cfg.loss.weights;
-        engine().fwd.skip_depth_pending =
-            !dist_any(dist_type) && engine().gt.depth.data_ptr() == nullptr &&
-            engine().gt.normal.data_ptr() == nullptr &&
-            w[(int)LossWeightIndex::MeanMedianDepthSup] == 0.0f &&
-            w[(int)LossWeightIndex::MedianDepthNormalReg] == 0.0f &&
-            w[(int)LossWeightIndex::MedianNormalSup] == 0.0f &&
-            w[(int)LossWeightIndex::MedianRenderNormalReg] == 0.0f;
-    }
-    engine().ppisp.cur_run_before_bilagrid = cfg.ppisp.run_before_bilagrid;
-    engine().ppisp.cur_run_before_color_space =
-        cfg.ppisp.run_before_color_space && engine().color_space.splat_enabled;
-    engine().ppisp.forward_pending =
-        engine().ppisp.enabled && engine().ppisp.cur_run_before_color_space;
-    // The fused appearance chain can also take PPISP after the encode, when
-    // nothing stands between it and the encode.
-    engine().ppisp.forward_pending_after_encode =
-        engine().ppisp.enabled && !engine().ppisp.cur_run_before_color_space &&
-        (engine().ppisp.cur_run_before_bilagrid || !engine().bilagrid_rgb.enabled);
-    engine().appearance.allow = cfg.loss.color_shift_reg_weight <= 0.0f;
-    // The color-shift term reads the stages' images as float.
-    engine().fwd.image_fmt_pending =
-        cfg.optim.image_bits == 16 && engine().appearance.allow
-            ? PixelFormat::F16 : PixelFormat::F32;
-    engine().appearance.transient_pending =
-        engine().fwd.image_fmt_pending == PixelFormat::F16 &&
-        engine().bilagrid_rgb.enabled;
-    engine().background.match_luma_pending = cfg.background.match_luminance;
+    _engine_arm_step_forward(cfg, dist_type, /*image_stages=*/true);
 
     {
         SplatStageTimer stage_timer;
         forward_3dgs(primitive, sh_degree, packed, /*output_median=*/false, (int)dist_type);
     }
-
-    // PPISP already ran inside the forward in the before-color-space order,
-    // and in the fused chain's after-encode one.
-    const bool ppisp_fused = engine().appearance.fused &&
-                             engine().appearance.params.ppisp != AppearancePpisp::Off;
-    const bool ppisp_after = engine().ppisp.enabled &&
-                             !engine().ppisp.cur_run_before_color_space &&
-                             !ppisp_fused;
-    const bool bg_enabled = engine().bilagrid_rgb.enabled ||
-                            engine().bilagrid_depth.enabled ||
-                            engine().bilagrid_normal.enabled;
-    if (engine().ppisp.cur_run_before_bilagrid) {
-        if (ppisp_after) engine_ppisp_forward(bilagrid_cam_indices);
-        if (bg_enabled)  engine_bilagrid_forward(bilagrid_cam_indices);
-    } else {
-        // The per-stage PPISP reads the grid's output as float.
-        if (ppisp_after) engine().fwd.image_fmt = PixelFormat::F32;
-        if (bg_enabled)  engine_bilagrid_forward(bilagrid_cam_indices);
-        if (ppisp_after) engine_ppisp_forward(bilagrid_cam_indices);
-    }
+    _engine_step_image_stages(bilagrid_cam_indices);
 
     auto losses = engine_compute_loss_backward(
         step, cfg.loss.weights, cfg.loss.w_ssim,

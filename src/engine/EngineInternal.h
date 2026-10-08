@@ -179,6 +179,16 @@ void _engine_appearance_backward(TorchTensorView v_render_rgb,
 // kept it only transiently (AppearanceState::transient_post).
 DeviceTensor3D<float3> _engine_appearance_replay();
 
+// What a training step's forward renders, in which formats, and which stages it
+// fuses -- armed after the GT is installed. A preview arms the same, so it fills
+// the buffers the step sized instead of growing float32 twins of them.
+struct EngineStepConfig;
+enum class DistortionType;
+void _engine_arm_step_forward(const EngineStepConfig& cfg,
+                              DistortionType dist_type, bool image_stages);
+// PPISP and the colour grids the forward left to run, in the step's order.
+void _engine_step_image_stages(TorchTensorView cam_indices);
+
 // An image buffer of `fmt` for [C, H, W] pixels, typed as the float3 tensor the
 // engine passes renders around as; fwd.rgb_fmt says how renders.rgb is stored.
 DeviceTensor3D<float3> _engine_image(PoolSlot slot, int64_t C, int64_t H,

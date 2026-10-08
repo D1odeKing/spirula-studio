@@ -635,7 +635,7 @@ static std::map<std::string, float> _engine_loss(
     // Allocate per-pixel gradient outputs. Once the appearance chain has its
     // float16 copy, only a distortion term reads the rasterizer's own colour
     // again, so without one v_rgb takes its buffer.
-    if (!map_only && engine().fwd.dist_type == DistortionType::None &&
+    if (engine().fwd.dist_type == DistortionType::None &&
         engine().fwd.raw_rgb16.data_ptr() != nullptr) {
         pixel_grads.v_render_rgb =
             _engine_image_view(engine().fwd.raw_rgb, PixelFormat::F32);
