@@ -71,8 +71,11 @@ uint32_t pick_compute_queue_family(VkPhysicalDevice pd) {
     return best;
 }
 
+bool has_extension(VkPhysicalDevice pd, const char* name);
+
 struct DeviceProbe {
     bool required_ok = false;
+    const char* unusable = nullptr;  // why required_ok is false
     bool atomic_float = false;
     bool shader_int64 = false;
     bool shader_int8 = false;
@@ -80,6 +83,9 @@ struct DeviceProbe {
     VkDriverId driver_id = (VkDriverId)0;  // 0 when the device predates 1.2
     VkPhysicalDeviceProperties props{};
     VkPhysicalDeviceSubgroupProperties subgroup{};
+    // VK_EXT_subgroup_size_control can pin compute pipelines within [min, max].
+    bool subgroup_control = false;
+    uint32_t min_subgroup = 0, max_subgroup = 0;
 };
 
 DeviceProbe probe_device(VkPhysicalDevice pd) {
@@ -112,12 +118,35 @@ DeviceProbe probe_device(VkPhysicalDevice pd) {
         out.driver_id = drv.driverID;
     }
 
+    if (has_extension(pd, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT sgc{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 sf2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        sf2.pNext = &sgc;
+        vkGetPhysicalDeviceFeatures2(pd, &sf2);
+        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sp{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
+        VkPhysicalDeviceProperties2 sp2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        sp2.pNext = &sp;
+        vkGetPhysicalDeviceProperties2(pd, &sp2);
+        out.subgroup_control = sgc.subgroupSizeControl && sgc.computeFullSubgroups &&
+                               (sp.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT);
+        out.min_subgroup = sp.minSubgroupSize;
+        out.max_subgroup = sp.maxSubgroupSize;
+    }
+    // Kernels count waves as 32 / WaveGetLaneCount() (rasterize_bwd's survivor
+    // compaction), so a wider subgroup counts none and trains silently wrong.
+    // AMD GCN is wave64-only; RDNA pins to 32.
+    const uint32_t narrowest =
+        out.subgroup_control ? out.min_subgroup : out.subgroup.subgroupSize;
+
     out.queue_family = pick_compute_queue_family(pd);
-    out.required_ok =
-        out.props.apiVersion >= VK_API_VERSION_1_2 &&
-        f12.bufferDeviceAddress &&
-        f12.timelineSemaphore &&
-        out.queue_family != UINT32_MAX;
+    if (out.props.apiVersion < VK_API_VERSION_1_2 || !f12.bufferDeviceAddress ||
+        !f12.timelineSemaphore || out.queue_family == UINT32_MAX)
+        out.unusable = "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
+    else if (narrowest > 32)
+        out.unusable = "needs compute subgroups of 32 lanes or fewer";
+    out.required_ok = out.unusable == nullptr;
     out.atomic_float = fatomic.shaderBufferFloat32AtomicAdd;
     // Optional: without shaderInt64 the pipeline layer loads the ".noint64"
     // blob variants (32-bit index emulation); with shaderInt8 (+ 8-bit
@@ -289,9 +318,7 @@ const Enumeration& enumeration() {
             sel::probeIdentity(devices[i], &d);
             d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
             d.usable = p.required_ok;
-            if (!p.required_ok)
-                d.unusable_reason =
-                    "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
+            if (!p.required_ok) d.unusable_reason = p.unusable;
             out.devices.push_back(std::move(d));
             out.issues.push_back(device_issue(p));
         }
@@ -326,7 +353,7 @@ int resolve_device_index() {
         std::fprintf(stderr, "[spirula-vk] %s\n",
             spirula::i18n::format(
                 spirula::i18n::msg::data::vk_device_lacks_features,
-                {res.device.name}).c_str());
+                {res.device.name, res.device.unusable_reason}).c_str());
         return -1;
     }
     if (!res.ok()) {
@@ -402,9 +429,7 @@ void Context::init() {
         sel::probeIdentity(devices[i], &d);
         d.vram_bytes = (uint64_t)device_local_vram(devices[i]);
         d.usable = pr.required_ok;
-        if (!pr.required_ok)
-            d.unusable_reason =
-                "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
+        if (!pr.required_ok) d.unusable_reason = pr.unusable;
         here.push_back(std::move(d));
     }
     // Precedence: an explicit identity request, else SS_VK_DEVICE, else Auto.
@@ -520,52 +545,21 @@ void Context::init() {
     }
 
     // Pin the compute subgroup size when the device lets us (see
-    // Capabilities::required_subgroup_size).
+    // Capabilities::required_subgroup_size). The probe refused any device
+    // whose narrowest compute subgroup is over 32.
     VkPhysicalDeviceSubgroupSizeControlFeaturesEXT fsgc{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
-    if (has_extension(_physical,
-                      VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
-        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT probe_sgc{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
-        VkPhysicalDeviceFeatures2 probe_f2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-        probe_f2.pNext = &probe_sgc;
-        vkGetPhysicalDeviceFeatures2(_physical, &probe_f2);
-
-        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sgc_props{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
-        VkPhysicalDeviceProperties2 sgc_p2{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-        sgc_p2.pNext = &sgc_props;
-        vkGetPhysicalDeviceProperties2(_physical, &sgc_p2);
-
-        if (probe_sgc.subgroupSizeControl && probe_sgc.computeFullSubgroups &&
-            (sgc_props.requiredSubgroupSizeStages &
-             VK_SHADER_STAGE_COMPUTE_BIT)) {
-            uint32_t want = _caps.subgroup_size;
-            if (want < sgc_props.minSubgroupSize)
-                want = sgc_props.minSubgroupSize;
-            if (want > sgc_props.maxSubgroupSize)
-                want = sgc_props.maxSubgroupSize;
-            if (want > 32)  // TODO: not supported by shaders
-                want = 32;
-            _caps.required_subgroup_size = want;
-            extensions.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
-            fsgc.subgroupSizeControl = VK_TRUE;
-            fsgc.computeFullSubgroups = VK_TRUE;
-            fsgc.pNext = f12.pNext;
-            f12.pNext = &fsgc;
-        }
-    }
-    // Several kernels index subgroups as tid / WaveGetLaneCount() against a
-    // 32-wide workgroup, so a wider unpinned subgroup makes the count 0 and
-    // the result silently wrong (rasterize_bwd's survivor compaction).
-    if (!_caps.required_subgroup_size && _caps.subgroup_size > 32) {
-        std::fprintf(stderr,
-            "[spirula-vk] warning: %s reports subgroup size %u and does not "
-            "support VK_EXT_subgroup_size_control, which this build needs to "
-            "pin it to 32. Training results on this device are not trusted.\n",
-            _device_name.c_str(), _caps.subgroup_size);
+    if (probe.subgroup_control) {
+        uint32_t want = _caps.subgroup_size;
+        if (want < probe.min_subgroup) want = probe.min_subgroup;
+        if (want > probe.max_subgroup) want = probe.max_subgroup;
+        if (want > 32) want = 32;
+        _caps.required_subgroup_size = want;
+        extensions.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        fsgc.subgroupSizeControl = VK_TRUE;
+        fsgc.computeFullSubgroups = VK_TRUE;
+        fsgc.pNext = f12.pNext;
+        f12.pNext = &fsgc;
     }
 
     VkPhysicalDeviceFeatures features{};

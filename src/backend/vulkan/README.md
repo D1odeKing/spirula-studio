@@ -26,7 +26,8 @@ reproduced.
 ## Device baseline
 
 Vulkan 1.2 core with features: `bufferDeviceAddress`, `timelineSemaphore`
-(both core-1.2 features; MoltenVK exposes both on Apple silicon). Optional,
+(both core-1.2 features; MoltenVK exposes both on Apple silicon), and compute
+subgroups of at most 32 lanes, pinned where the device allows (below). Optional,
 probed per device and reflected as pipeline variants where needed
 (spirv_tool compiles every subset of an entry's applicable variants, so
 any capability combination finds an exact blob; SS_VK_NATIVE_ATOMICS=0 /
@@ -76,9 +77,11 @@ for A/B testing):
   Forward/render path does not need it (only float atomicMax on radii,
   which is integer-monotonic on non-negative floats → emulate with
   u32 atomicMax over the float bit pattern; exact, not a CAS loop).
-- Subgroup size: never assumed 32. Kernels use `WaveActive*` /
-  `WavePrefixSum` and size-agnostic reductions; AMD wave64 and Intel
-  variable-width are first-class.
+- Subgroup size: at most 32. Most kernels use `WaveActive*` /
+  `WavePrefixSum` and size-agnostic reductions, but rasterize_bwd counts waves
+  as `32 / WaveGetLaneCount()`. RDNA and Intel are pinned to 32 or below; a
+  device whose narrowest compute subgroup is 64 (AMD GCN, Adreno) is refused
+  in `probe_device`.
 
 ## Memory model
 

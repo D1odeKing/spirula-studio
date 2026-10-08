@@ -16,6 +16,7 @@
 #ifdef SS_TOOL_SAM
 #include "app/ModelLicenses.h"
 #include "app/cli/LicenseCli.h"   // --accept-license: the inference layer is in this build
+#include "nn/Device.h"
 #endif
 
 #include <cctype>
@@ -143,6 +144,15 @@ void print_usage() {
                 spirula::i18n::language_list().c_str());
 }
 
+// The inference device must go before static destructors run: a validation
+// layer's own statics are gone by then, and it aborts on the first call.
+int finish_tool(int rc) {
+#ifdef SS_TOOL_SAM
+    nn::shutdown();
+#endif
+    return rc;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -215,7 +225,7 @@ int main(int argc, char** argv) {
             sub.push_back(prog.data());
             for (int i = 2; i < argc; i++) sub.push_back(argv[i]);
             sub.push_back(nullptr);
-            return t->run((int)sub.size() - 1, sub.data());
+            return finish_tool(t->run((int)sub.size() - 1, sub.data()));
         }
     }
 
@@ -223,7 +233,7 @@ int main(int argc, char** argv) {
     // spirula-sfm symlink behaves exactly as the separate executable did.
     if (const Tool* t = tool_from_argv0(argc > 0 ? argv[0] : nullptr)) {
         app::set_crash_note(t->name);
-        return t->run(argc, argv);
+        return finish_tool(t->run(argc, argv));
     }
 
     if (argc > 1) {

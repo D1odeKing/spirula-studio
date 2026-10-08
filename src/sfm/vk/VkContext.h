@@ -320,9 +320,20 @@ public:
         std::vector<const char*> instExts;
         vkEnablePortability(ici, instExts);
         const char* layers[] = {"VK_LAYER_KHRONOS_validation"};
-        if (opt.validate) {
-            ici.enabledLayerCount = 1;
-            ici.ppEnabledLayerNames = layers;
+        if (opt.validate || spirula::env_on("VK_VALIDATION")) {
+            uint32_t n = 0;
+            vkEnumerateInstanceLayerProperties(&n, nullptr);
+            std::vector<VkLayerProperties> props(n);
+            vkEnumerateInstanceLayerProperties(&n, props.data());
+            const bool present = std::any_of(props.begin(), props.end(), [&](const VkLayerProperties& p) {
+                return std::strcmp(p.layerName, layers[0]) == 0;
+            });
+            if (present) {
+                ici.enabledLayerCount = 1;
+                ici.ppEnabledLayerNames = layers;
+            } else {
+                std::fprintf(stderr, "[vk_ba] validation requested but %s is not installed\n", layers[0]);
+            }
         }
         VK_CHECK(vkCreateInstance(&ici, nullptr, &instance_));
 

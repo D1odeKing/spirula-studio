@@ -30,7 +30,7 @@ struct Capabilities {
     bool memory_budget = false;       // VK_EXT_memory_budget (usage reporting)
     bool timestamps = false;
     double timestamp_period_ns = 0.0;
-    uint32_t subgroup_size = 0;       // advertised default; never assumed 32
+    uint32_t subgroup_size = 0;       // advertised default; may be 64 where pinning lowers it
     // Non-zero when VK_EXT_subgroup_size_control is enabled: every compute
     // pipeline is created with this REQUIRED subgroup size + full subgroups,
     // pinning WaveGetLaneCount() to a launch-time constant. Essential on

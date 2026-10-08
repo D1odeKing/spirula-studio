@@ -67,6 +67,12 @@ const Feature NOINT64{".noint64", "-DSS_EMULATE_INT64"};
 constexpr uint32_t CAP_INT64 = 11;
 constexpr uint32_t CAP_INT8 = 39;
 constexpr uint32_t CAP_8BIT_STORAGE = 4437;  // StorageBuffer8BitAccess
+// Capabilities VulkanContext never enables, so a module declaring one is invalid.
+struct Cap { uint32_t id; const char* name; };
+const Cap kNeverEnabled[] = {
+    {9, "Float16"}, {10, "Float64"}, {22, "Int16"},
+    {4433, "StorageBuffer16BitAccess"}, {4434, "UniformAndStorageBuffer16BitAccess"},
+    {4435, "StoragePushConstant16"}};
 
 bool is_ident(char c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -607,6 +613,14 @@ int run_embed(const std::vector<std::string>& args) {
                 "through vulkan/int8_compat.slang)\n", name.c_str());
             failed = true;
         }
+        for (const Cap& c : kNeverEnabled)
+            if (caps.count(c.id)) {
+                std::fprintf(stderr, "  CAPABILITY LEAK: %s declares %s, which the "
+                    "engine's device does not enable (for half floats use "
+                    "pack_half2 / unpack_half2 in vulkan/rgb_format.slang)\n",
+                    name.c_str(), c.name);
+                failed = true;
+            }
     }
     if (failed) return 1;
 

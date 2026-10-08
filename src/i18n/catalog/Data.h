@@ -1237,32 +1237,19 @@ SS_MSG(write_failures,
 // ===========================================================================
 
 SS_MSG(vk_device_lacks_features,
-    EN("the requested device '{0}' does not have the features this needs "
-       "(Vulkan 1.2 with bufferDeviceAddress and timelineSemaphore)"),
-    JA("指定されたデバイス '{0}' には必要な機能がありません"
-       "（Vulkan 1.2 と bufferDeviceAddress、timelineSemaphore）"),
-    ZH_HANS("所选设备 '{0}' 不具备所需特性（Vulkan 1.2，且需 bufferDeviceAddress "
-            "与 timelineSemaphore）"),
-    ZH_HANT("所選裝置 '{0}' 不具備所需特性（Vulkan 1.2，且需 bufferDeviceAddress "
-            "與 timelineSemaphore）"),
-    KO("요청한 장치 '{0}' 에는 필요한 기능이 없습니다"
-       "(Vulkan 1.2 와 bufferDeviceAddress, timelineSemaphore)"),
-    DE("das angeforderte Gerät '{0}' hat die benötigten Funktionen nicht "
-       "(Vulkan 1.2 mit bufferDeviceAddress und timelineSemaphore)"),
-    FR("le périphérique demandé '{0}' n'a pas les fonctions nécessaires "
-       "(Vulkan 1.2 avec bufferDeviceAddress et timelineSemaphore)"),
-    ES("el dispositivo solicitado '{0}' no tiene las funciones necesarias "
-       "(Vulkan 1.2 con bufferDeviceAddress y timelineSemaphore)"),
-    PT("o dispositivo pedido '{0}' não tem os recursos necessários (Vulkan 1.2 "
-       "com bufferDeviceAddress e timelineSemaphore)"),
-    IT("il dispositivo richiesto '{0}' non ha le funzioni necessarie (Vulkan "
-       "1.2 con bufferDeviceAddress e timelineSemaphore)"),
-    NL("het gevraagde apparaat '{0}' heeft de benodigde functies niet (Vulkan "
-       "1.2 met bufferDeviceAddress en timelineSemaphore)"),
-    RU("у запрошенного устройства '{0}' нет нужных возможностей (Vulkan 1.2 с "
-       "bufferDeviceAddress и timelineSemaphore)"),
-    TR("istenen aygıt '{0}' gereken özelliklere sahip değil (bufferDeviceAddress "
-       "ve timelineSemaphore ile Vulkan 1.2)"));
+    EN("the requested device '{0}' does not have the features this needs ({1})"),
+    JA("指定されたデバイス '{0}' には必要な機能がありません（{1}）"),
+    ZH_HANS("所选设备 '{0}' 不具备所需特性（{1}）"),
+    ZH_HANT("所選裝置 '{0}' 不具備所需特性（{1}）"),
+    KO("요청한 장치 '{0}' 에는 필요한 기능이 없습니다({1})"),
+    DE("das angeforderte Gerät '{0}' hat die benötigten Funktionen nicht ({1})"),
+    FR("le périphérique demandé '{0}' n'a pas les fonctions nécessaires ({1})"),
+    ES("el dispositivo solicitado '{0}' no tiene las funciones necesarias ({1})"),
+    PT("o dispositivo pedido '{0}' não tem os recursos necessários ({1})"),
+    IT("il dispositivo richiesto '{0}' non ha le funzioni necessarie ({1})"),
+    NL("het gevraagde apparaat '{0}' heeft de benodigde functies niet ({1})"),
+    RU("у запрошенного устройства '{0}' нет нужных возможностей ({1})"),
+    TR("istenen aygıt '{0}' gereken özelliklere sahip değil ({1})"));
 
 // ===========================================================================
 // Decode faults
