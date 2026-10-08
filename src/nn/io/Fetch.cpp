@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <utility>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -67,12 +68,28 @@ std::string cached_path(const FetchFile& f) {
 }
 
 std::string mirror_url(const FetchFile& f) {
-    return f.mirror ? std::string(f.mirror) : spirula::model_mirror_url(f.file);
+    return spirula::mirror_for(f.file, f.mirror);
 }
 
 std::string sha256_file(const std::string& path) {
     return spirula::sha256_file(path);
 }
+
+namespace {
+
+LicenseGate g_gate;
+
+// Refuses unless the application's gate lets `f`'s families through.
+void require_license(const FetchFile& f) {
+    if (!f.license_family || !*f.license_family) return;
+    NN_CHECK(g_gate, "%s needs the licence '%s' accepted, and this program has no way to "
+             "ask: it has not installed a licence gate.", f.file, f.license_family);
+    g_gate(f.license_family);
+}
+
+}  // namespace
+
+void set_license_gate(LicenseGate gate) { g_gate = std::move(gate); }
 
 std::string ensure_file(const FetchFile& f, const char* tag) {
     const fs::path dst = cached_path(f);
@@ -88,6 +105,8 @@ std::string ensure_file(const FetchFile& f, const char* tag) {
         fs::remove(dst, ec);
     }
 
+    // Past a verified cached copy: what follows is a download.
+    require_license(f);
     NN_CHECK(!spirula::env_on("NO_AUTO_FETCH"),
              "%s is not in the model cache, and this process may not download "
              "it.\n  Get it from the application's own download button, or "

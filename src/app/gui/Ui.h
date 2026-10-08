@@ -27,6 +27,7 @@
 // one message therefore share an ID too -- wrap one in ImGui::PushID() exactly
 // as you would for two identical literals.
 
+#include "app/gui/Automation.h"
 #include "app/gui/Layout.h"
 #include "i18n/Message.h"
 
@@ -64,6 +65,17 @@ inline const char* label(const Msg& m) { return label(m.get(), m.id); }
 
 inline const char* label(const std::string& text, const Msg& m) {
     return label(text.c_str(), m.id);
+}
+
+// ImGui's combo reports no label to the item hooks (Automation.h), so a script
+// could not find it by its message id. The id is taken first: an open popup
+// moves ImGui's last item.
+template <class Draw>
+inline bool named_combo(const char* label, Draw&& draw) {
+    const ImGuiID id = ImGui::GetID(label);
+    const bool r = draw();
+    ::gui::automation::name_item(id, label);
+    return r;
 }
 
 // Msg* list -> the const char*[] ImGui's Combo wants.
@@ -269,6 +281,9 @@ inline bool InvisibleButtonRaw(const char* id, const ImVec2& size,
 inline bool Checkbox(const Msg& m, bool* v) {
     return ImGui::Checkbox(detail::label(m), v);
 }
+inline bool Checkbox(const Msg& m, std::initializer_list<Arg> a, bool* v) {
+    return ImGui::Checkbox(detail::label(format(m, a), m), v);
+}
 inline bool CheckboxRaw(const char* id, bool* v) {
     return ImGui::Checkbox(id, v);
 }
@@ -361,7 +376,8 @@ inline bool BeginPopupModalRaw(const char* title, bool* open = nullptr,
 
 inline bool Combo(const Msg& m, int* cur, std::initializer_list<const Msg*> its) {
     const auto& v = detail::items(its);
-    return ImGui::Combo(detail::label(m), cur, v.data(), (int)v.size());
+    const char* l = detail::label(m);
+    return detail::named_combo(l, [&] { return ImGui::Combo(l, cur, v.data(), (int)v.size()); });
 }
 inline bool ComboRaw(const char* id, int* cur, const char* const items[],
                      int count) {
@@ -381,7 +397,8 @@ inline bool ComboRaw(const char* id, int* cur, const std::vector<const Msg*>& it
     return ImGui::Combo(id, cur, v.data(), (int)v.size());
 }
 inline bool BeginCombo(const Msg& m, const char* preview, ImGuiComboFlags flags = 0) {
-    return ImGui::BeginCombo(detail::label(m), preview, flags);
+    const char* l = detail::label(m);
+    return detail::named_combo(l, [&] { return ImGui::BeginCombo(l, preview, flags); });
 }
 inline bool BeginComboRaw(const char* id, const char* preview) {
     return ImGui::BeginCombo(id, preview);

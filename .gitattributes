@@ -4,3 +4,4 @@ src/external/** linguist-vendored
 # Auto-generated code (generate_headers.py, generate_kernel_instantiation.py)
 src/generated/** linguist-vendored linguist-generated
 src/instantiations/** linguist-vendored linguist-generated
+LICENSES/* text eol=lf

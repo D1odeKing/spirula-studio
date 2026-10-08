@@ -42,5 +42,9 @@ void end_frame(int fb_w, int fb_h);
 
 void shutdown();
 
+// Labels the item `id` in this frame's table, for a widget that reports no label
+// to the item hooks (ImGui's combo). A no-op unless armed.
+void name_item(unsigned id, const char* label);
+
 }  // namespace automation
 }  // namespace gui

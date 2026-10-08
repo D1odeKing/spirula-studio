@@ -309,6 +309,21 @@ foreach(test_src ${SS_NN_TESTS})
     target_link_libraries(${test_name} PRIVATE ss_sam ss_aliked ss_loma ss_metric3d
                                                 ss_moge ss_roma)
     set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 17)
+    target_compile_definitions(${test_name} PRIVATE SS_REPO_ROOT="${SS_ROOT}")
     target_compile_options(${test_name} PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
 endforeach()
+
+# The licence tests reach outside the inference layer: the app's path logic and
+# terminal prompt, the licence table, and the translation catalogs.
+foreach(t license_paths_test license_text_test fetch_consent_test)
+    if(TARGET ${t})
+        target_link_libraries(${t} PRIVATE ss_license ss_i18n)
+    endif()
+endforeach()
+if(TARGET license_paths_test)
+    target_sources(license_paths_test PRIVATE ${SS_SRC}/app/AppPaths.cpp)
+endif()
+if(TARGET fetch_consent_test)
+    target_sources(fetch_consent_test PRIVATE ${SS_SRC}/app/cli/LicenseCli.cpp)
+endif()

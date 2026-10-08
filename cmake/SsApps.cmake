@@ -148,6 +148,7 @@ if(SS_BUILD_SAM)
          ${SS_SRC}/app/FfmpegVideo.cpp
          ${SS_SRC}/app/gui/Subprocess.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_SAM=1)
+    list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/LicenseCli.cpp)
     list(APPEND SS_TOOL_LIBS ss_sam)
     if(SS_ENABLE_PATENTED)
         list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/FrameDecodeVulkan.cpp)
@@ -291,6 +292,8 @@ endif()
 # ---------------------------------------------------------------------------
 # spirula -- the executable
 # ---------------------------------------------------------------------------
+# The GUI's licence dialog and the CLI's prompt read the same record.
+list(APPEND SS_TOOL_LIBS ss_license)
 # The frame extraction and ffmpeg files are claimed by both the segmentation
 # tool and the GUI.
 list(REMOVE_DUPLICATES SS_TOOL_SOURCES)
@@ -357,8 +360,8 @@ if(SS_SEPARATE_TOOLS)
                      ${SS_SRC}/app/FrameSharpness.cpp ${SS_SRC}/app/Pano360.cpp
                      ${SS_SRC}/app/cli/sam_extract.cpp ${SS_SRC}/app/FrameExtract.cpp
                      ${SS_SRC}/app/FrameDecodeFfmpeg.cpp ${SS_SRC}/app/FfmpegVideo.cpp
-                     ${SS_SRC}/app/gui/Subprocess.cpp)
-        set(_sam_lib ss_sam)
+                     ${SS_SRC}/app/gui/Subprocess.cpp ${SS_SRC}/app/cli/LicenseCli.cpp)
+        set(_sam_lib ss_sam ss_license)
         if(SS_ENABLE_PATENTED)
             list(APPEND _sam_src ${SS_SRC}/app/FrameDecodeVulkan.cpp)
             list(APPEND _sam_lib ss_video)
@@ -403,6 +406,7 @@ add_executable(model_download_test
     ${SS_SRC}/app/gui/Subprocess.cpp
     ${SS_SRC}/app/AppPaths.cpp)
 ss_configure_app(model_download_test)
+target_link_libraries(model_download_test PRIVATE ss_license)
 
 add_executable(packed_lens_test
     ${SS_SRC}/app/tests/packed_lens_test.cpp
@@ -577,4 +581,15 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameMotion.cpp
         ${SS_SRC}/app/Pano360.cpp)
     ss_configure_app(dataset_plan_test)
+endif()
+
+# `--accept-license` through the real binary (Main.cpp), not a stand-in for it.
+if(SS_BUILD_SAM)
+    add_executable(accept_license_cli_test ${SS_SRC}/app/tests/accept_license_cli_test.cpp)
+    add_dependencies(accept_license_cli_test spirula)
+    target_compile_definitions(accept_license_cli_test PRIVATE
+        SS_SPIRULA_EXE="$<TARGET_FILE:spirula>")
+    set_property(TARGET accept_license_cli_test PROPERTY CXX_STANDARD 17)
+    target_compile_options(accept_license_cli_test PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
 endif()

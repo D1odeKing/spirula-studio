@@ -1,9 +1,11 @@
 #include "nn/vk/Stream.h"
+#include "nn/vk/StreamTesting.h"
 
 #include "nn/core/Error.h"
 #include "nn/core/Log.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -23,6 +25,10 @@ bool debug_sync_enabled() {
 }
 
 namespace {
+
+// Set only by testing::override_work_cap; negative means the measured budget.
+std::atomic<double> g_cap_override{-1};
+
 constexpr VkDeviceSize kStagingBytes = 32ull << 20;   // upload/download chunk
 constexpr VkDeviceSize kParamsRingBytes = 1ull << 20;  // oversized param structs
 constexpr uint32_t     kMaxQueries = 8192;
@@ -285,7 +291,14 @@ void Stream::Impl::harvest(int slot) {
     slot_work[slot] = 0;
 }
 
-double Stream::workCap() { return impl().budget.limit(); }
+double Stream::workCap() {
+    const double pinned = g_cap_override.load();
+    return pinned >= 0 ? pinned : impl().budget.limit();
+}
+
+namespace testing {
+void override_work_cap(double cap) { g_cap_override.store(cap); }
+}  // namespace testing
 
 void Stream::sync() {
     Impl& s = impl();
@@ -360,7 +373,7 @@ void Stream::dispatch(const char* entry, const SpecList& spec, uint32_t gx, uint
         NN_LOG_ERROR("[ssam-sync] %s (%u,%u,%u)...\n", entry, gx, gy, gz);
 
     VkPipeline pipe = Pipelines::get().acquire(entry, spec);
-    const double cap = s.budget.limit();
+    const double cap = workCap();
     if (s.recording && s.recorded > 0 && s.work + work > cap) flush();
     VkCommandBuffer cb = begin();
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);

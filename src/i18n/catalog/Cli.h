@@ -1237,6 +1237,142 @@ SS_MSG(sam_subject_no_prompt,
     TR("{0} ana özneyi kendiliğinden maskeler; metin istemleri ve tıklamalar yok "
        "sayılır"));
 
+// ===========================================================================
+// Licence consent at the terminal (nn/io/Fetch.cpp)
+// ===========================================================================
+// LEGAL: human review in every language, like the GUI's dialog. The typed word
+// stays 'yes' everywhere; a script sends it, so it is an identifier.
+
+// {0} is the licence's name.
+SS_MSG(license_ask_header,
+    EN("[license] {0} must be accepted before this model is used."),
+    JA("[license] このモデルを使う前に、{0} に同意する必要があります。"),
+    ZH_HANS("[license] 使用此模型之前，必须先接受 {0}。"),
+    ZH_HANT("[license] 使用此模型之前，必須先接受 {0}。"),
+    KO("[license] 이 모델을 사용하기 전에 {0}에 동의해야 합니다."),
+    DE("[license] {0} muss angenommen werden, bevor dieses Modell verwendet wird."),
+    FR("[license] {0} doit être acceptée avant d'utiliser ce modèle."),
+    ES("[license] Hay que aceptar {0} antes de usar este modelo."),
+    PT("[license] {0} precisa ser aceita antes de usar este modelo."),
+    IT("[license] {0} deve essere accettata prima di usare questo modello."),
+    NL("[license] {0} moet worden aanvaard voordat dit model wordt gebruikt."),
+    RU("[license] Перед использованием этой модели нужно принять {0}."),
+    TR("[license] Bu model kullanılmadan önce {0} kabul edilmelidir."));
+
+// {0} is the licence's name. Ends in a space: the answer is typed after it.
+SS_MSG(license_ask_confirm,
+    EN("Type 'yes' to confirm that you have read and accept the terms of {0}: "),
+    JA("{0} の条件を読み、同意することを確認するには 'yes' と入力してください: "),
+    ZH_HANS("请输入 'yes' 以确认您已阅读并接受 {0} 的条款: "),
+    ZH_HANT("請輸入 'yes' 以確認您已閱讀並接受 {0} 的條款: "),
+    KO("{0}의 조건을 읽었고 이에 동의함을 확인하려면 'yes'를 입력하세요: "),
+    DE("Geben Sie 'yes' ein, um zu bestätigen, dass Sie die Bedingungen von {0} gelesen haben und annehmen: "),
+    FR("Tapez 'yes' pour confirmer que vous avez lu et que vous acceptez les conditions de {0} : "),
+    ES("Escriba 'yes' para confirmar que ha leído y acepta los términos de {0}: "),
+    PT("Digite 'yes' para confirmar que leu e aceita os termos de {0}: "),
+    IT("Digiti 'yes' per confermare di aver letto e di accettare i termini di {0}: "),
+    NL("Typ 'yes' om te bevestigen dat u de voorwaarden van {0} hebt gelezen en aanvaardt: "),
+    RU("Введите 'yes', чтобы подтвердить, что вы прочитали условия {0} и принимаете их: "),
+    TR("{0} koşullarını okuduğunuzu ve kabul ettiğinizi onaylamak için 'yes' yazın: "));
+
+// {0} is the licence's name, {1} what was typed.
+SS_MSG(license_ask_declined,
+    EN("{0} was not accepted (answered '{1}'), so the model was not used."),
+    JA("{0} には同意されませんでした（入力: '{1}'）。モデルは使用していません。"),
+    ZH_HANS("未接受 {0}（输入: '{1}'），因此没有使用该模型。"),
+    ZH_HANT("未接受 {0}（輸入: '{1}'），因此沒有使用該模型。"),
+    KO("{0}에 동의하지 않았으므로(입력: '{1}') 모델을 사용하지 않았습니다."),
+    DE("{0} wurde nicht angenommen (Antwort: '{1}'), deshalb wurde das Modell nicht verwendet."),
+    FR("{0} n'a pas été acceptée (réponse : '{1}') ; le modèle n'a donc pas été utilisé."),
+    ES("No se aceptó {0} (respuesta: '{1}'), así que no se usó el modelo."),
+    PT("{0} não foi aceita (resposta: '{1}'), então o modelo não foi usado."),
+    IT("{0} non è stata accettata (risposta: '{1}'), quindi il modello non è stato usato."),
+    NL("{0} is niet aanvaard (antwoord: '{1}'), dus het model is niet gebruikt."),
+    RU("{0} не принята (ответ: '{1}'), поэтому модель не использовалась."),
+    TR("{0} kabul edilmedi (yanıt: '{1}'), bu yüzden model kullanılmadı."));
+
+// {0} is the licence's name, {1} its URL, {2} the family to pass to --accept-license.
+// The flag and `=yes` are identifiers and stay as typed.
+SS_MSG(license_no_terminal,
+    EN("The licence '{0}' has not been accepted, so this model cannot be downloaded "
+       "or loaded, and there is no terminal to ask on.\n  Read the terms at {1}, "
+       "then pass\n    --accept-license {2}=yes\n  (without =yes it asks on a "
+       "terminal), or accept it in the application's download dialog."),
+    JA("ライセンス '{0}' に同意していないため、このモデルをダウンロードも読み込みも"
+       "できません。確認を求める端末もありません。\n  {1} で条件を読んでから、次を"
+       "指定してください\n    --accept-license {2}=yes\n  （=yes を付けない場合は端末で"
+       "確認します）。アプリのダウンロードダイアログで同意することもできます。"),
+    ZH_HANS("尚未接受许可协议 '{0}'，因此无法下载或加载此模型，而且没有可供询问的终端。\n"
+            "  请先阅读 {1} 上的条款，然后传入\n    --accept-license {2}=yes\n"
+            "  （不带 =yes 时会在终端中询问），或在应用的下载对话框中接受。"),
+    ZH_HANT("尚未接受授權條款 '{0}'，因此無法下載或載入此模型，而且沒有可供詢問的終端機。\n"
+            "  請先閱讀 {1} 上的條款，然後傳入\n    --accept-license {2}=yes\n"
+            "  （不帶 =yes 時會在終端機中詢問），或在應用程式的下載對話框中接受。"),
+    KO("라이선스 '{0}'에 동의하지 않았으므로 이 모델을 내려받거나 불러올 수 없으며, "
+       "물어볼 터미널도 없습니다.\n  {1}에서 조건을 읽은 다음 다음을 지정하세요\n"
+       "    --accept-license {2}=yes\n  (=yes가 없으면 터미널에서 묻습니다). "
+       "앱의 다운로드 대화상자에서 동의할 수도 있습니다."),
+    DE("Die Lizenz '{0}' wurde nicht angenommen, deshalb kann dieses Modell weder "
+       "heruntergeladen noch geladen werden, und es gibt kein Terminal zum Nachfragen.\n"
+       "  Lesen Sie die Bedingungen unter {1} und übergeben Sie dann\n"
+       "    --accept-license {2}=yes\n  (ohne =yes wird im Terminal gefragt) oder "
+       "nehmen Sie sie im Download-Dialog der Anwendung an."),
+    FR("La licence '{0}' n'a pas été acceptée : ce modèle ne peut donc être ni "
+       "téléchargé ni chargé, et il n'y a pas de terminal où poser la question.\n"
+       "  Lisez les conditions à {1}, puis passez\n    --accept-license {2}=yes\n"
+       "  (sans =yes, la question est posée dans un terminal), ou acceptez-la dans la "
+       "boîte de dialogue de téléchargement de l'application."),
+    ES("No se ha aceptado la licencia '{0}', así que este modelo no se puede descargar "
+       "ni cargar, y no hay un terminal donde preguntar.\n  Lea los términos en {1} "
+       "y luego pase\n    --accept-license {2}=yes\n  (sin =yes se pregunta en un "
+       "terminal), o acéptela en el cuadro de descarga de la aplicación."),
+    PT("A licença '{0}' não foi aceita, então este modelo não pode ser baixado nem "
+       "carregado, e não há terminal para perguntar.\n  Leia os termos em {1} e "
+       "depois passe\n    --accept-license {2}=yes\n  (sem =yes ele pergunta em um "
+       "terminal), ou aceite na janela de download do aplicativo."),
+    IT("La licenza '{0}' non è stata accettata, quindi questo modello non può essere "
+       "scaricato né caricato, e non c'è un terminale a cui chiedere.\n  Legga i "
+       "termini su {1}, poi passi\n    --accept-license {2}=yes\n  (senza =yes lo "
+       "chiede in un terminale), oppure la accetti nella finestra di download "
+       "dell'applicazione."),
+    NL("De licentie '{0}' is niet aanvaard, dus dit model kan niet worden gedownload "
+       "of geladen, en er is geen terminal om het te vragen.\n  Lees de voorwaarden "
+       "op {1} en geef dan mee\n    --accept-license {2}=yes\n  (zonder =yes wordt "
+       "het in een terminal gevraagd), of aanvaard de licentie in het "
+       "downloadvenster van de toepassing."),
+    RU("Лицензия '{0}' не принята, поэтому эту модель нельзя ни загрузить, ни "
+       "открыть, а терминала для вопроса нет.\n  Прочитайте условия по адресу {1} "
+       "и передайте\n    --accept-license {2}=yes\n  (без =yes вопрос задаётся в "
+       "терминале) или примите лицензию в диалоге загрузки приложения."),
+    TR("'{0}' lisansı kabul edilmedi, bu yüzden bu model indirilemez veya "
+       "yüklenemez ve soru sorulacak bir terminal yok.\n  Koşulları {1} adresinde "
+       "okuyun, ardından şunu verin\n    --accept-license {2}=yes\n  (=yes olmadan "
+       "terminalde sorulur) ya da uygulamanın indirme penceresinde kabul edin."));
+
+SS_MSG(license_no_home,
+    EN("(Neither XDG_CONFIG_HOME nor HOME is set, so no acceptance can be read or "
+       "recorded.)"),
+    JA("（XDG_CONFIG_HOME も HOME も設定されていないため、同意の読み取りも記録もできません。）"),
+    ZH_HANS("（XDG_CONFIG_HOME 和 HOME 均未设置，因此无法读取或记录任何接受状态。）"),
+    ZH_HANT("（XDG_CONFIG_HOME 和 HOME 均未設定，因此無法讀取或記錄任何接受狀態。）"),
+    KO("(XDG_CONFIG_HOME도 HOME도 설정되어 있지 않아 동의 여부를 읽거나 기록할 수 없습니다.)"),
+    DE("(Weder XDG_CONFIG_HOME noch HOME ist gesetzt, daher lässt sich keine Annahme lesen "
+       "oder speichern.)"),
+    FR("(Ni XDG_CONFIG_HOME ni HOME n'est défini : aucune acceptation ne peut être lue ni "
+       "enregistrée.)"),
+    ES("(No están definidos ni XDG_CONFIG_HOME ni HOME, así que no se puede leer ni "
+       "registrar ninguna aceptación.)"),
+    PT("(Nem XDG_CONFIG_HOME nem HOME estão definidos, então nenhuma aceitação pode ser "
+       "lida ou registrada.)"),
+    IT("(Non sono impostati né XDG_CONFIG_HOME né HOME, quindi nessuna accettazione può "
+       "essere letta o registrata.)"),
+    NL("(Noch XDG_CONFIG_HOME noch HOME is ingesteld, dus er kan geen aanvaarding worden "
+       "gelezen of vastgelegd.)"),
+    RU("(Не заданы ни XDG_CONFIG_HOME, ни HOME, поэтому согласие нельзя ни прочитать, ни "
+       "записать.)"),
+    TR("(Ne XDG_CONFIG_HOME ne de HOME ayarlı, bu yüzden hiçbir kabul okunamaz veya "
+       "kaydedilemez.)"));
+
 }  // namespace cli
 }  // namespace msg
 }  // namespace i18n

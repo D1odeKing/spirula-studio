@@ -38,6 +38,12 @@ std::string file_url(const fs::path& path) {
     }
     return "file://" + std::string(source.front() == '/' ? "" : "/") + encoded;
 }
+
+gui::PendingDownload verified(std::string url, std::string dest, uint64_t bytes, std::string sha256) {
+    gui::PendingDownload download{std::move(url),std::move(dest),bytes};
+    download.sha256 = std::move(sha256);
+    return download;
+}
 }
 
 int main(int argc, char** argv) {
@@ -52,16 +58,16 @@ int main(int argc, char** argv) {
                 std::string(entry.sha256) == spirula::roma::kOfficialCheckpoint.sha256 &&
                 std::string(entry.url) == spirula::roma::kOfficialCheckpoint.url,"official download identity changed");
         gui::FileDownload download;
-        download.start(file_url(source),destination.string(),fs::file_size(source),"",digest);
+        download.start(verified(file_url(source),destination.string(),fs::file_size(source),digest));
         wait(download);
         require(download.state() == gui::FileDownload::State::Done && download.path() == destination.string() &&
                 spirula::sha256_file(destination.string()) == digest,"valid download was not verified and published");
-        download.start(file_url(source),destination.string(),fs::file_size(source),"",std::string(64,'0'));
+        download.start(verified(file_url(source),destination.string(),fs::file_size(source),std::string(64,'0')));
         wait(download);
         require(download.state() == gui::FileDownload::State::Failed &&
                 spirula::sha256_file(destination.string()) == digest && !fs::exists(destination.string() + ".part"),
                 "checksum failure replaced a verified file or retained corrupt partial bytes");
-        download.start(file_url(source),destination.string(),fs::file_size(source),"",digest);
+        download.start(verified(file_url(source),destination.string(),fs::file_size(source),digest));
         download.cancel(); wait(download);
         require(download.state() == gui::FileDownload::State::Cancelled &&
                 spirula::sha256_file(destination.string()) == digest,"cancelled download replaced the previous verified file");
@@ -69,7 +75,7 @@ int main(int argc, char** argv) {
             const fs::path checkpoint(argv[1]); const auto output = fixture.root / entry.file;
             require(fs::file_size(checkpoint) == entry.bytes && spirula::sha256_file(checkpoint.string()) == entry.sha256,
                     "local official checkpoint does not match pinned bytes");
-            download.start(file_url(checkpoint),output.string(),entry.bytes,"",entry.sha256); wait(download);
+            download.start(verified(file_url(checkpoint),output.string(),entry.bytes,entry.sha256)); wait(download);
             require(download.state() == gui::FileDownload::State::Done && spirula::sha256_file(output.string()) == entry.sha256,
                     "official checkpoint bytes did not pass the shared download verifier");
         }

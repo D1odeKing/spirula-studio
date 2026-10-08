@@ -13,8 +13,13 @@
 #include "i18n/Locale.h"
 #include "i18n/catalog/Cli.h"
 #include "i18n/catalog/Dense.h"
+#ifdef SS_TOOL_SAM
+#include "app/ModelLicenses.h"
+#include "app/cli/LicenseCli.h"   // --accept-license: the inference layer is in this build
+#endif
 
 #include <cctype>
+#include <exception>
 #include <cstdio>
 #include <cstdlib>
 #ifdef _WIN32
@@ -176,6 +181,20 @@ int main(int argc, char** argv) {
     // file, which is a step below --lang and the environment.
     const char* lang = spirula::i18n::take_lang_arg(&argc, argv);
     spirula::i18n::init(lang, nullptr);
+
+#ifdef SS_TOOL_SAM
+    // --accept-license, anywhere in argv and for every command: how a terminal
+    // accepts a model licence. Removed from argv, so no tool's parser sees it;
+    // the gate installed here answers every command that fetches a licensed model.
+    try {
+        app::register_model_licenses();
+        app::install_license_gate();
+        app::consume_accept_license_args(argc, argv);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "%s\n", e.what());
+        return 2;
+    }
+#endif
 
     // Every tool, not only the window: the GUI runs reconstruction, masking
     // and meshing as child processes, and a child that dies of a fault leaves

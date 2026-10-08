@@ -346,6 +346,31 @@ std::string batch_dataset_workspace(const BatchRow& row) {
 }
 
 
+bool batch_model_needs(const BatchRow& row, BatchModelNeeds& out) {
+    if (!row.enabled || !row.does(BatchStage::Dataset)) return false;
+    DatasetSettings s;
+    std::error_code ec;
+    if (!row.dataset_preset.path.empty()) {
+        if (!fs::is_regular_file(row.dataset_preset.path, ec)) return false;
+        try {
+            s = load_dataset_preset(row.dataset_preset.path).s;
+        } catch (const std::exception&) {
+            return false;
+        }
+    } else if (!dataset_apply_preset(s, builtin_dataset_name(row))) {
+        return false;
+    }
+    out = BatchModelNeeds{};
+    out.mask = s.sfm.prep.mask_enable;
+    out.mask_model_id = s.mask_model_id;
+    out.mask_detector_id = s.mask_detector_id;
+    out.geometry = s.sfm.geometry.enable;
+    out.geometry_model = s.sfm.geometry.model;
+    out.dense = s.sfm.dense.enable;
+    out.dense_checkpoint = s.sfm.dense.config.checkpoint;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // The pre-flight
 // ---------------------------------------------------------------------------
@@ -424,6 +449,11 @@ void check_dataset_stage(const BatchRow& row, const BatchCapabilities& caps,
             out.push_back(issue_of(msg::chk_geometry_model_missing, kSt, true,
                                    s.sfm.geometry.model));
     }
+
+    if (s.sfm.dense.enable && caps.dense_model_ready &&
+        !caps.dense_model_ready(s.sfm.dense.config.checkpoint))
+        out.push_back(issue_of(msg::chk_dense_model_missing, kSt, true,
+                               s.sfm.dense.config.checkpoint));
 
     // A preset made for photographs, pointed at a video (or the other way
     // round): it still runs, and it picks the wrong pairing strategy.

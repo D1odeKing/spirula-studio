@@ -31,7 +31,7 @@ Weights are not bundled. A local checkpoint path is accepted; the default
 the existing model cache. The GUI can download and verify it after showing
 the model terms. The CLI does not download weights automatically.
 Review the [RoMa terms](https://github.com/Parskatt/RoMaV2/blob/main/LICENSE)
-and [DINOv3 terms](https://github.com/facebookresearch/dinov3/blob/main/LICENSE)
+and [DINOv3 terms](https://github.com/facebookresearch/dinov3/blob/main/LICENSE.md)
 before obtaining or using the weights.
 
 The parser supports COLMAP, Nerfstudio, and Metashape. Sparse points are
@@ -332,9 +332,9 @@ points** choice switches between the dense cloud, the sparse points and
 another PLY.
 
 The official model download uses the existing consent and download UI,
-with pinned size and SHA-256 validation before publication. RoMa's MIT terms
-and the DINOv3 backbone terms are linked in that dialog. A local path avoids
-the download step.
+with pinned size and SHA-256 validation before publication. That dialog shows
+the DINOv3 backbone terms and RoMa's MIT terms in full (licence family `roma`,
+`LICENSES/`). A local path avoids the download step.
 
 ## Reconstruction controls
 

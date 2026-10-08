@@ -36,14 +36,30 @@ void follow_preset(spirula::dense::DenseConfig& config) {
 
 }  // namespace
 
+void GuiApp::init_dense() {
+    register_dense_license();
+    add_batch_fetcher({
+        [](const BatchModelNeeds& n, std::vector<std::string>& families) {
+            const ModelEntry& e = dense_model_entry();
+            if (!n.dense || n.dense_checkpoint != e.id || model_is_cached(e)) return false;
+            families.push_back(e.family);
+            return true;
+        },
+        [this]() -> FileDownload* {
+            return _dense_download.state() == FileDownload::State::Running ? &_dense_download : nullptr;
+        },
+        [this] { _dense_download.start(dense_model_entry()); }});
+}
+
 bool GuiApp::dense_model_missing() const {
     return _dense.enable && _dense.config.checkpoint == "romav2.0.1" && !model_is_cached(dense_model_entry());
 }
 
 void GuiApp::request_dense_download() {
-    if (std::find(_accepted_licenses.begin(), _accepted_licenses.end(), "roma") == _accepted_licenses.end()) {
-        _license_prompt = "roma"; _license_model_id = "romav2.0.1"; _license_detector_id.clear(); _license_tick = false;
-    } else _dense_download.start(dense_model_entry());
+    _license_notice.clear();
+    request_licenses({dense_model_entry().family},
+                     [this] { _dense_download.start(dense_model_entry()); },
+                     [this] { note_license_declined(spirula::i18n::msg::dataset::license_declined_download); });
 }
 
 // While the dense step runs, and once after it for the fused cloud's final snapshot.

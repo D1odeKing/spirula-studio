@@ -10,6 +10,7 @@
 //   spirula-sam segment ... 2>/dev/null > detections.tsv
 
 #include "app/Tools.h"
+#include "app/cli/ModelLicense.h"
 #include "i18n/catalog/Cli.h"
 #include "i18n/catalog/SamHelp.h"
 #include "app/FrameLook.h"
@@ -454,6 +455,7 @@ int cmd_segment(const Options& o) {
         std::fprintf(stderr, "%s\n", cmsg::sam_segment_needs.get());
         return 2;
     }
+    if (!app::require_model_license(o.model)) return 2;
     if (!o.detector.empty() || birefnet::find_model_source(o.model) ||
         birefnet::is_checkpoint(o.model))
         return segment_with_masker(o);
@@ -504,6 +506,7 @@ int cmd_track(const Options& o) {
         std::fprintf(stderr, "%s\n", cmsg::sam_track_needs.get());
         return 2;
     }
+    if (!app::require_model_license(o.model)) return 2;
     std::vector<std::string> files;
     std::error_code ec;
     for (const auto& e : fs::directory_iterator(o.frames, ec)) {

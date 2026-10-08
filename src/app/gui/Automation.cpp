@@ -698,6 +698,12 @@ namespace automation {
 
 bool armed() { return st().armed; }
 
+void name_item(unsigned id, const char* label) {
+    ImGuiContext* ctx = ImGui::GetCurrentContext();
+    if (ctx && ctx->TestEngineHookItems)
+        ::ImGuiTestEngineHook_ItemInfo(ctx, id, label, ImGuiItemStatusFlags_None);
+}
+
 std::vector<std::string> take_drop() {
     std::vector<std::string> out;
     out.swap(st().dropped);

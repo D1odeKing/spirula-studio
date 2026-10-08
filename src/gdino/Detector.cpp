@@ -1,6 +1,7 @@
 #include "gdino/GroundingDino.h"
 #include "gdino/Model.h"
 
+#include "core/LicenseFamilies.h"
 #include "nn/core/Error.h"
 #include "nn/io/Safetensors.h"
 
@@ -19,7 +20,7 @@ namespace {
     {"bert-base-uncased-vocab.txt",                                                    \
      "https://huggingface.co/IDEA-Research/grounding-dino-tiny/resolve/main/vocab.txt", \
      "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3", 231508ull,     \
-     "https://modelscope.cn/models/IDEA-Research/grounding-dino-tiny/resolve/master/vocab.txt"}
+     "https://modelscope.cn/models/IDEA-Research/grounding-dino-tiny/resolve/master/vocab.txt", spirula::license::family::kGdino}
 
 const ModelSource kSources[] = {
     {"gdino-tiny",
@@ -27,14 +28,14 @@ const ModelSource kSources[] = {
       "https://huggingface.co/IDEA-Research/grounding-dino-tiny/resolve/main/model.safetensors",
       "1a2412ef99bd74bcd3c2a246fa1e48581f8889a1300c9051974741314fc042f3", 689359096ull,
       "https://modelscope.cn/models/IDEA-Research/grounding-dino-tiny/resolve/master/"
-      "model.safetensors"},
+      "model.safetensors", spirula::license::family::kGdino},
      GDINO_VOCAB},
     {"gdino-base",
      {"grounding-dino-base.safetensors",
       "https://huggingface.co/IDEA-Research/grounding-dino-base/resolve/main/model.safetensors",
       "5548f844c928c4b6f411fa8cbcc2bfa8dbbba437cb1d513975519f93c2a9ed21", 933400872ull,
       "https://modelscope.cn/models/IDEA-Research/grounding-dino-base/resolve/master/"
-      "model.safetensors"},
+      "model.safetensors", spirula::license::family::kGdino},
      GDINO_VOCAB},
 };
 

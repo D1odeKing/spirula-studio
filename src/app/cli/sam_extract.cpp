@@ -11,6 +11,7 @@
 #include "app/FfmpegVideo.h"
 #include "app/FrameExtract.h"
 #include "app/Tools.h"
+#include "app/cli/ModelLicense.h"
 #include "i18n/catalog/Cli.h"
 #include "i18n/catalog/Data.h"
 #include "i18n/catalog/SamHelp.h"
@@ -259,6 +260,8 @@ int sam_cli_extract(int argc, char** argv) {
     // SS_VK_DEVICE would leak the choice into unrelated children.
     if (o.validate) set_env("SS_VK_VALIDATION", "1");
     if (o.profile) set_env("SS_PROFILE", "1");
+
+    if (!o.model.empty() && !app::require_model_license(o.model)) return 2;
 
     const fs::path input(o.input);
     const fs::path base = o.out_dir.empty()

@@ -12,6 +12,7 @@ project(spirula_studio LANGUAGES C CXX)  # CUDA enabled by the cuda backend modu
 #   SsSfm.cmake            the SfM module (optional; Vulkan-only)
 #   SsNn.cmake             inference layer + SAM + video (optional; Vulkan-only)
 #   SsI18n.cmake           ss_i18n, the translation library (a leaf)
+#   SsLicense.cmake        ss_license, accepted model licences and their texts (a leaf)
 #   SsApps.cmake           the `spirula` executable (every tool in one)
 #   SsPackage.cmake        the redistributable form of it (macOS .app / .dmg)
 #   SsChecks.cmake         the source lints every build runs (last: it makes
@@ -27,6 +28,7 @@ include(SsSources)
 # A leaf everything else may link: the backends print device names, and their
 # test binaries link a backend without the engine.
 include(SsI18n)
+include(SsLicense)
 
 # The web viewer's browser client is compiled into the engine library
 # (app/webviewer/Viewer.cpp), so it must be embedded before either backend

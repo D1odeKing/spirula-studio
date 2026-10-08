@@ -323,6 +323,46 @@ private:
     void draw_model_fetch(FileDownload& dl, const spirula::i18n::Msg& missing,
                           const spirula::i18n::Msg& get, const std::function<void()>& request);
     bool license_accepted(const std::string& family) const;
+    mutable std::vector<std::string> _accepted_cache;   // gui.conf, as of _accepted_frame
+    mutable int _accepted_frame = -1;
+    // Raises one modal per family not yet accepted, in order, then runs `then`.
+    // Cancelling any of them drops the rest and `then` never runs.
+    // `declined` runs when the user cancels one of them instead.
+    void request_licenses(std::vector<std::string> families, std::function<void()> then,
+                          std::function<void()> declined = nullptr);
+    void advance_license_queue();
+    // Starts a queue of files after the consent every one of them names: the dialog
+    // first when a licence is missing, the download then, nothing on a refusal.
+    // The one door for a download that is not a SAM / detector checkpoint.
+    void start_downloads_with_consent(DownloadQueue& queue, std::vector<PendingDownload> files);
+    // Said when a licence dialog is cancelled: the log, and a line by the fetch button.
+    void note_license_declined(const spirula::i18n::Msg& what);
+
+    // A batch asks for every licence its rows need, once, before the first row
+    // starts, then fetches what is missing, then starts. Never mid-batch.
+    struct BatchFetchPlan {
+        std::vector<std::string> families;                           // unaccepted, each once
+        std::vector<std::pair<std::string, std::string>> masks;      // model id, detector id
+        std::vector<std::string> geometries;
+        std::vector<size_t> fetchers;                                // _batch_fetchers still to run
+        bool empty() const {
+            return families.empty() && masks.empty() && geometries.empty() && fetchers.empty();
+        }
+    };
+    // A download a batch needs beyond the masking and geometry checkpoints. A
+    // feature registers one; the plan and the pump know no feature by name.
+    struct BatchFetcher {
+        // True when `needs` calls for a download that is not on disk yet; the
+        // licence families it would ask about are appended to `families`.
+        std::function<bool(const BatchModelNeeds& needs, std::vector<std::string>& families)> due;
+        std::function<FileDownload*()> active;   // its download while it runs, else null
+        std::function<void()> start;             // begins it (consent was given first)
+    };
+    void add_batch_fetcher(BatchFetcher f) { _batch_fetchers.push_back(std::move(f)); }
+    std::vector<BatchFetcher> _batch_fetchers;
+    BatchFetchPlan batch_fetch_plan() const;
+    void begin_batch(bool skip_invalid);
+    void pump_batch_fetch();
 
     // ---- screens ----
     void draw_menu_bar();
@@ -923,6 +963,8 @@ private:
     double _dense_probe_time = -1.0;
     bool _dense_probe_found = false;
     bool _seed_other = false;          // "Other PLY file" picked, no file yet
+    // RoMa's licence and its batch fetcher. Once, before anything asks either.
+    void init_dense();
     void request_dense_download();
     bool dense_model_missing() const;
     GeometryPanel _geometry_panel;
@@ -1001,9 +1043,14 @@ private:
     FontSet _fonts;
     FileDownload _font_download;
     const CjkFace* _font_fetching = nullptr;
-    // Families whose licence the user has accepted, persisted in the settings.
-    std::vector<std::string> _accepted_licenses;
+    std::string _license_notice;      // what a cancelled dialog left undone
+    BatchFetchPlan _batch_fetch;      // what the batch is fetching before it starts
+    bool _batch_fetching = false;
+    bool _batch_fetch_skip = false;
     std::string _license_prompt;      // family whose modal is open
+    std::vector<std::string> _license_queue;
+    std::function<void()> _license_then;
+    std::function<void()> _license_declined;
     std::string _license_model_id;    // the pick it downloads
     std::string _license_detector_id;
     bool _license_tick = false;
