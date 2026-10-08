@@ -47,6 +47,17 @@ std::array<double, 3> scene_center(CenterMode mode, const double* c2w, int64_t n
                                    const float* points, int64_t m,
                                    int stride = 3, int64_t max_samples = 0);
 
+struct ResolvedCenter {
+    CenterMode mode = CenterMode::None;
+    std::array<double, 3> center{0.0, 0.0, 0.0};
+};
+// A mode name, or `auto`: point-median when the cameras and the points each lie
+// more than `auto_threshold` times their median distance to their own median
+// from the origin, else none. c2w [N,3,4], m points of 3 values.
+ResolvedCenter resolve_scene_center(const std::string& name, float auto_threshold,
+                                    const double* c2w, int64_t n,
+                                    const double* points, int64_t m);
+
 // One centre per mode, in mode order.
 using CenterTable = std::array<std::array<float, 3>, kNumCenterModes>;
 

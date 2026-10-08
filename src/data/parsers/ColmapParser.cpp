@@ -830,9 +830,8 @@ ParsedDataset parse_colmap_dataset(const std::string& dataset_dir,
 
     // ---- Centering, over ALL post-outlier frames and every point, while
     // both are still double --------------------------------------------------
-    const dsparse::CenterMode center_mode = dsparse::center_mode_from_name(cfg.center_mode);
-    const std::array<double, 3> center = dsparse::scene_center(
-        center_mode, c2w_all.data(), n_all, points.xyz.data(), points.num());
+    const auto [center_mode, center] =
+        dsparse::parse_center(cfg, c2w_all.data(), n_all, points);
     for (int64_t i = 0; i < n_all; i++)
         for (int r = 0; r < 3; r++) c2w_all[i*12 + r*4 + 3] -= center[r];
     for (int64_t i = 0; i < points.num(); i++)

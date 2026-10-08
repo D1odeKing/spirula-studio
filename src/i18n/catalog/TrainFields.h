@@ -2566,75 +2566,159 @@ SS_MSG(scene_center,
 SS_MSG(scene_center_help,
     EN("Move the dataset so this point becomes the origin before training, and "
        "record the shift in scene_transform.json in the output folder. Splats "
-       "are then trained in the shifted frame. Useful for geo-referenced "
+       "are then trained in the shifted frame. Needed for geo-referenced "
        "reconstructions whose coordinates are millions of units from the "
-       "origin, where single precision would lose detail. `none` keeps the "
-       "dataset's own frame."),
+       "origin, where single precision would lose detail. `auto` centers on the "
+       "point cloud median when the scene lies far from the origin for its size, "
+       "and keeps the frame otherwise; `none` always keeps the dataset's own "
+       "frame."),
     JA("学習前にデータセットを移動し、この点を原点にします。移動量は出力フォルダの "
        "scene_transform.json に記録され、スプラットは移動後の座標系で学習されます。"
        "座標が原点から数百万単位も離れた地理参照付きの再構成では、単精度では細部が"
-       "失われるため有効です。`none` はデータセット自身の座標系をそのまま使います。"),
+       "失われるため必要です。`auto` はシーンが自身の大きさに比べて原点から遠いとき"
+       "だけ点群の中央値に合わせ、それ以外は座標系を変えません。`none` は常に"
+       "データセット自身の座標系を使います。"),
     ZH_HANS("训练前平移数据集，使该点成为原点，并把平移量记录到输出文件夹的 "
-            "scene_transform.json 中；泼溅在平移后的坐标系中训练。适用于坐标距原点"
-            "数百万单位的地理参考重建，否则单精度会丢失细节。`none` 保留数据集自身"
-            "的坐标系。"),
+            "scene_transform.json 中；泼溅在平移后的坐标系中训练。坐标距原点"
+            "数百万单位的地理参考重建需要这样做，否则单精度会丢失细节。`auto` "
+            "仅在场景相对自身大小离原点很远时以点云中位数居中，否则不改变坐标系；"
+            "`none` 始终保留数据集自身的坐标系。"),
     ZH_HANT("訓練前平移資料集，使該點成為原點，並把平移量記錄到輸出資料夾的 "
-            "scene_transform.json 中；潑濺在平移後的座標系中訓練。適用於座標距原點"
-            "數百萬單位的地理參考重建，否則單精度會遺失細節。`none` 保留資料集自身"
-            "的座標系。"),
+            "scene_transform.json 中；潑濺在平移後的座標系中訓練。座標距原點"
+            "數百萬單位的地理參考重建需要這樣做，否則單精度會遺失細節。`auto` "
+            "僅在場景相對自身大小離原點很遠時以點雲中位數置中，否則不改變座標系；"
+            "`none` 始終保留資料集自身的座標系。"),
     KO("학습 전에 데이터셋을 옮겨 이 점을 원점으로 삼고, 그 이동량을 출력 폴더의 "
        "scene_transform.json에 기록합니다. 스플랫은 옮겨진 좌표계에서 학습됩니다. "
        "좌표가 원점에서 수백만 단위 떨어진 지리 참조 복원에서는 단정밀도로 세부가 "
-       "사라지므로 유용합니다. `none`은 데이터셋 자체의 좌표계를 그대로 둡니다."),
+       "사라지므로 필요합니다. `auto`는 장면이 자체 크기에 비해 원점에서 멀리 있을 "
+       "때만 점군 중앙값으로 맞추고, 그렇지 않으면 좌표계를 그대로 둡니다. `none`은 "
+       "항상 데이터셋 자체의 좌표계를 유지합니다."),
     DE("Verschiebt den Datensatz vor dem Training so, dass dieser Punkt zum "
        "Ursprung wird, und hält die Verschiebung in scene_transform.json im "
        "Ausgabeordner fest. Die Splats werden im verschobenen Bezugssystem "
-       "trainiert. Nützlich für georeferenzierte Rekonstruktionen, deren "
+       "trainiert. Nötig für georeferenzierte Rekonstruktionen, deren "
        "Koordinaten Millionen Einheiten vom Ursprung entfernt liegen, wo einfache "
-       "Genauigkeit Details verliert. `none` behält das Bezugssystem des "
-       "Datensatzes."),
+       "Genauigkeit Details verliert. `auto` zentriert nur dann auf den Median "
+       "der Punktwolke, wenn die Szene gemessen an ihrer Größe weit vom Ursprung "
+       "entfernt liegt, und lässt das Bezugssystem sonst unverändert; `none` "
+       "behält immer das Bezugssystem des Datensatzes."),
     FR("Déplace le jeu de données avant l'entraînement pour que ce point devienne "
        "l'origine, et note le décalage dans scene_transform.json dans le dossier "
-       "de sortie. Les splats sont alors entraînés dans le repère décalé. Utile "
-       "pour les reconstructions géoréférencées dont les coordonnées sont à des "
-       "millions d'unités de l'origine, où la simple précision perd des détails. "
-       "`none` garde le repère du jeu de données."),
+       "de sortie. Les splats sont alors entraînés dans le repère décalé. "
+       "Nécessaire pour les reconstructions géoréférencées dont les coordonnées "
+       "sont à des millions d'unités de l'origine, où la simple précision perd "
+       "des détails. `auto` centre sur la médiane du nuage de points seulement "
+       "quand la scène est loin de l'origine au regard de sa taille, et garde le "
+       "repère sinon ; `none` garde toujours le repère du jeu de données."),
     ES("Desplaza el conjunto de datos antes de entrenar para que este punto sea "
        "el origen, y anota el desplazamiento en scene_transform.json en la carpeta "
-       "de salida. Los splats se entrenan entonces en el sistema desplazado. Útil "
-       "para reconstrucciones georreferenciadas cuyas coordenadas están a millones "
-       "de unidades del origen, donde la precisión simple pierde detalle. `none` "
-       "conserva el sistema propio del conjunto de datos."),
+       "de salida. Los splats se entrenan entonces en el sistema desplazado. "
+       "Necesario para reconstrucciones georreferenciadas cuyas coordenadas están "
+       "a millones de unidades del origen, donde la precisión simple pierde "
+       "detalle. `auto` centra en la mediana de la nube de puntos solo cuando la "
+       "escena está lejos del origen en relación con su tamaño, y si no conserva "
+       "el sistema; `none` conserva siempre el sistema propio del conjunto de "
+       "datos."),
     PT("Desloca o conjunto de dados antes do treino para que este ponto vire a "
        "origem, e registra o deslocamento em scene_transform.json na pasta de "
-       "saída. Os splats são então treinados no referencial deslocado. Útil para "
-       "reconstruções georreferenciadas cujas coordenadas ficam a milhões de "
-       "unidades da origem, onde a precisão simples perde detalhe. `none` mantém "
-       "o referencial do próprio conjunto de dados."),
+       "saída. Os splats são então treinados no referencial deslocado. Necessário "
+       "para reconstruções georreferenciadas cujas coordenadas ficam a milhões de "
+       "unidades da origem, onde a precisão simples perde detalhe. `auto` "
+       "centraliza na mediana da nuvem de pontos só quando a cena está longe da "
+       "origem em relação ao próprio tamanho, e caso contrário mantém o "
+       "referencial; `none` mantém sempre o referencial do próprio conjunto de "
+       "dados."),
     IT("Sposta il dataset prima dell'addestramento in modo che questo punto "
        "diventi l'origine, e annota lo spostamento in scene_transform.json nella "
        "cartella di output. Gli splat vengono quindi addestrati nel sistema "
-       "spostato. Utile per ricostruzioni georeferenziate le cui coordinate "
+       "spostato. Necessario per ricostruzioni georeferenziate le cui coordinate "
        "distano milioni di unità dall'origine, dove la precisione singola perde "
-       "dettaglio. `none` mantiene il sistema proprio del dataset."),
+       "dettaglio. `auto` centra sulla mediana della nuvola di punti solo quando "
+       "la scena è lontana dall'origine rispetto alle sue dimensioni, altrimenti "
+       "mantiene il sistema; `none` mantiene sempre il sistema proprio del "
+       "dataset."),
     NL("Verschuift de dataset vóór het trainen zodat dit punt de oorsprong wordt, "
        "en legt de verschuiving vast in scene_transform.json in de uitvoermap. De "
-       "splats worden dan in het verschoven stelsel getraind. Handig voor "
+       "splats worden dan in het verschoven stelsel getraind. Nodig voor "
        "gegeorefereerde reconstructies waarvan de coördinaten miljoenen eenheden "
-       "van de oorsprong liggen, waar enkele precisie detail verliest. `none` "
-       "behoudt het eigen stelsel van de dataset."),
+       "van de oorsprong liggen, waar enkele precisie detail verliest. `auto` "
+       "centreert alleen op de mediaan van de puntenwolk als de scène ver van de "
+       "oorsprong ligt in verhouding tot haar grootte, en behoudt het stelsel "
+       "anders; `none` behoudt altijd het eigen stelsel van de dataset."),
     RU("Сдвигает набор данных перед обучением так, чтобы эта точка стала началом "
        "координат, и записывает сдвиг в scene_transform.json в папке вывода. "
-       "Сплаты обучаются в сдвинутой системе координат. Полезно для "
+       "Сплаты обучаются в сдвинутой системе координат. Необходимо для "
        "геопривязанных реконструкций, координаты которых отстоят от начала на "
-       "миллионы единиц, где одинарная точность теряет детали. `none` сохраняет "
-       "собственную систему набора данных."),
+       "миллионы единиц, где одинарная точность теряет детали. `auto` центрирует "
+       "по медиане облака точек, только если сцена далеко от начала координат по "
+       "сравнению со своим размером, а иначе сохраняет систему; `none` всегда "
+       "сохраняет собственную систему набора данных."),
     TR("Eğitimden önce veri kümesini bu nokta başlangıç olacak şekilde kaydırır "
        "ve kaydırmayı çıktı klasöründeki scene_transform.json dosyasına yazar. "
        "Splatlar kaydırılmış çerçevede eğitilir. Koordinatları başlangıçtan "
        "milyonlarca birim uzakta olan coğrafi referanslı yeniden kurmalar için "
-       "yararlıdır; tek duyarlık orada ayrıntı kaybeder. `none` veri kümesinin "
-       "kendi çerçevesini korur."));
+       "gereklidir; tek duyarlık orada ayrıntı kaybeder. `auto` yalnızca sahne "
+       "kendi boyutuna göre başlangıçtan uzaktaysa nokta bulutu ortancasına "
+       "ortalar, değilse çerçeveyi korur; `none` her zaman veri kümesinin kendi "
+       "çerçevesini korur."));
+
+SS_MSG(scene_center_threshold,
+    EN("Auto-centering distance"), JA("自動中心合わせの距離"),
+    ZH_HANS("自动居中距离"), ZH_HANT("自動置中距離"), KO("자동 중심 맞추기 거리"),
+    DE("Abstand für automatisches Zentrieren"),
+    FR("Distance du centrage automatique"), ES("Distancia del centrado automático"),
+    PT("Distância da centralização automática"),
+    IT("Distanza della centratura automatica"),
+    NL("Afstand voor automatisch centreren"), RU("Расстояние автоцентрирования"),
+    TR("Otomatik ortalama mesafesi"));
+SS_MSG(scene_center_threshold_help,
+    EN("How far from the origin a scene must lie before `auto` scene centering "
+       "moves it, in multiples of its own radius (the median distance to its "
+       "median). The point cloud and the camera positions must both be that far "
+       "out."),
+    JA("`auto` のシーン中心合わせが働くには、シーンが原点からどれだけ離れている"
+       "必要があるか。シーン自身の半径（中央値までの距離の中央値）の倍数で指定"
+       "します。点群とカメラ位置の両方がそれだけ離れている必要があります。"),
+    ZH_HANS("场景离原点多远时 `auto` 场景居中才会平移它，以场景自身半径（到中位数"
+            "距离的中位数）的倍数表示。点云和相机位置都必须离得这么远。"),
+    ZH_HANT("場景離原點多遠時 `auto` 場景置中才會平移它，以場景自身半徑（到中位數"
+            "距離的中位數）的倍數表示。點雲和相機位置都必須離得這麼遠。"),
+    KO("`auto` 장면 중심 맞추기가 장면을 옮기려면 원점에서 얼마나 떨어져 있어야 "
+       "하는지를 장면 자체 반지름(중앙값까지 거리의 중앙값)의 배수로 정합니다. "
+       "점군과 카메라 위치가 모두 그만큼 떨어져 있어야 합니다."),
+    DE("Wie weit eine Szene vom Ursprung entfernt liegen muss, damit das "
+       "Zentrieren mit `auto` sie verschiebt, in Vielfachen ihres eigenen Radius "
+       "(des Medians der Abstände zu ihrem Median). Punktwolke und "
+       "Kamerapositionen müssen beide so weit entfernt liegen."),
+    FR("Distance à l'origine à partir de laquelle le centrage `auto` déplace la "
+       "scène, en multiples de son propre rayon (la médiane des distances à sa "
+       "médiane). Le nuage de points et les positions de caméra doivent tous deux "
+       "être aussi loin."),
+    ES("A qué distancia del origen debe estar una escena para que el centrado "
+       "`auto` la desplace, en múltiplos de su propio radio (la mediana de las "
+       "distancias a su mediana). La nube de puntos y las posiciones de cámara "
+       "deben estar ambas así de lejos."),
+    PT("A que distância da origem uma cena precisa estar para que a "
+       "centralização `auto` a desloque, em múltiplos do seu próprio raio (a "
+       "mediana das distâncias até a sua mediana). A nuvem de pontos e as "
+       "posições das câmeras precisam estar ambas tão longe."),
+    IT("Quanto lontano dall'origine deve trovarsi una scena perché la centratura "
+       "`auto` la sposti, in multipli del suo stesso raggio (la mediana delle "
+       "distanze dalla sua mediana). La nuvola di punti e le posizioni delle "
+       "camere devono essere entrambe così lontane."),
+    NL("Hoe ver een scène van de oorsprong moet liggen voordat centreren met "
+       "`auto` haar verschuift, in veelvouden van haar eigen straal (de mediaan "
+       "van de afstanden tot haar mediaan). De puntenwolk en de cameraposities "
+       "moeten allebei zo ver liggen."),
+    RU("Насколько далеко от начала координат должна быть сцена, чтобы "
+       "центрирование `auto` её сдвинуло, в единицах её собственного радиуса "
+       "(медианы расстояний до её медианы). Так далеко должны быть и облако "
+       "точек, и положения камер."),
+    TR("`auto` sahne ortalamasının sahneyi kaydırması için sahnenin başlangıçtan "
+       "ne kadar uzakta olması gerektiği, kendi yarıçapının (ortancasına olan "
+       "uzaklıkların ortancası) katı olarak. Nokta bulutu ve kamera konumlarının "
+       "ikisi de bu kadar uzakta olmalıdır."));
 
 SS_MSG(relative_scale,
     EN("Scene scale multiplier"), JA("シーンの倍率"),
@@ -12573,6 +12657,14 @@ SS_MSG(choice_point_mean,
     NL("gemiddelde van de puntenwolk"), RU("среднее облака точек"),
     TR("nokta bulutu ortalaması"));
 
+SS_MSG(choice_far_from_origin,
+    EN("when far from the origin"), JA("原点から遠いとき"), ZH_HANS("远离原点时"),
+    ZH_HANT("遠離原點時"), KO("원점에서 멀 때"), DE("wenn weit vom Ursprung"),
+    FR("si loin de l'origine"), ES("si está lejos del origen"),
+    PT("se estiver longe da origem"), IT("se lontana dall'origine"),
+    NL("als ver van de oorsprong"), RU("если далеко от начала координат"),
+    TR("başlangıçtan uzaksa"));
+
 SS_MSG(choice_camera_mean,
     EN("camera position mean"), JA("カメラ位置の平均"), ZH_HANS("相机位置平均"),
     ZH_HANT("相機位置平均"), KO("카메라 위치 평균"),
@@ -12798,6 +12890,7 @@ inline constexpr ChoiceText kChoiceText[] = {
     {"train_frame", "camera",     &choice_camera},
     {"train_frame", "points",     &choice_points},
 
+    {"scene_center", "auto",          &choice_far_from_origin},
     {"scene_center", "none",          &choice_none},
     {"scene_center", "point-median",  &choice_point_median},
     {"scene_center", "camera-median", &choice_camera_median},

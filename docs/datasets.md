@@ -458,14 +458,29 @@ what a geo-referenced reconstruction needs -- a model millions of units from
 its origin loses metres to single precision otherwise. The modes are
 `point-median` (geometric median of the seed cloud), `camera-median`,
 `camera-focus` (the point the optical axes converge on), `point-mean` and
-`camera-mean`; `none` (the default) keeps the frame the files came in. The
-shift, and the identity rotation and scale that go with it, are written to
+`camera-mean`; `none` keeps the frame the files came in.
+
+`auto`, the default, is `point-median` for a scene that lies far from its
+origin for its size and `none` for every other: it centres when the camera
+positions AND the seed points each have a geometric median more than
+`--scene-center-threshold` (20) times their own radius -- the median distance
+to that median -- from the origin. Precision is relative, so the test is
+scale-free: an ECEF or UTM capture is thousands of radii out, a COLMAP or
+Nerfstudio frame a few. The cameras are tested first and most datasets stop
+there; the points' verdict uses at most 2^18 of them, and only a centring
+scene pays for the full median (`dsparse::resolve_scene_center`). A dataset
+without points is decided, and centred, on its cameras alone.
+
+The shift, and the identity rotation and scale that go with it, are written to
 `scene_transform.json` in the run folder in every common spelling (4x4
 matrices, quaternions, Euler angles), so a downstream tool can put the
 splats back into the dataset's frame without converting anything by hand.
 The centre is taken over every frame before the train/eval split and over
-the whole seed cloud, so both splits, `spirula mesh` and the viewers -- all
-of which re-read `config.json` -- land in the same frame.
+the whole seed cloud. The eval split re-parses with the mode `auto` resolved
+to, and `spirula mesh` takes the recorded centre from `scene_transform.json`
+rather than measuring again (it reads neither the run's seed cloud nor its
+outlier filter), so both land in the training frame. A run whose
+`config.json` predates `--scene-center` resumes as `none`.
 
 The same six modes are also a *view* setting, offered by all three viewers as
 a "center" menu (camera position median by default) that moves the orbit

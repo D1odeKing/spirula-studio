@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <limits>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -147,9 +148,13 @@ struct DatasetParserConfig {
     float outlier_threshold = std::numeric_limits<float>::infinity();
 
     // Which point of the raw frame becomes the training frame's origin: a
-    // dsparse::CenterMode name. Computed over ALL post-outlier frames and every
-    // seed point, in double, before anything is narrowed to float.
+    // dsparse::CenterMode name or `auto` (dsparse::resolve_scene_center). Over ALL
+    // post-outlier frames and every seed point, in double, before any narrowing.
     std::string center_mode = "none";
+    float center_auto_threshold = 20.0f;
+    // Set: the centre a run already chose (its scene_transform.json), taken as
+    // is under the name center_mode, which must then not be `auto`.
+    std::optional<std::array<double, 3>> center;
 
     // Pixel size of an image file (data/ImageProbe.h). Set: every camera trains
     // at its own image's resolution. Null: a caller with no decoders -- the
@@ -225,8 +230,8 @@ struct ParsedDataset {
     ColmapPoints3D           points;
 
     // p_train = p_raw - center, where p_raw is the frame the files came in
-    // (COLMAP's own, or nerfstudio's with applied_transform undone). Zero
-    // unless DatasetParserConfig::center_mode asked for one.
+    // (COLMAP's own, or nerfstudio's with applied_transform undone).
+    // center_mode names the statistic it is, never `auto`.
     std::array<double, 3>    center{0.0, 0.0, 0.0};
     std::string              center_mode = "none";
 
@@ -397,6 +402,11 @@ void train_to_normalized_inverse(const ParsedDataset& ds, double out[16]);
 // Every centering mode over a parsed dataset, in its NORMALIZED frame --
 // which is what both viewers navigate.
 CenterTable scene_centers(const ParsedDataset& ds);
+
+// The parse's origin over c2w [N,3,4] and the seed points: cfg.center when set,
+// else what cfg.center_mode resolves to.
+ResolvedCenter parse_center(const DatasetParserConfig& cfg, const double* c2w,
+                            int64_t n, const ColmapPoints3D& points);
 
 // eval_mode subset over N sorted frames, honouring cfg.split; identity for
 // "all". `names` are image filenames (used by eval_mode="filename").

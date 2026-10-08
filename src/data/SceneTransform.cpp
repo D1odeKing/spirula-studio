@@ -316,4 +316,23 @@ bool read_scene_transform_json(const std::string& path, SceneTransform& out) {
     return true;
 }
 
+bool read_scene_centering_json(const std::string& path, std::string& center_mode,
+                               double center_world[3]) {
+    JsonValue root;
+    try {
+        root = json_parse_file(path);
+    } catch (const std::exception&) {
+        return false;
+    }
+    const JsonValue* c = root.find("centering");
+    const JsonValue* mode = c ? c->find("mode") : nullptr;
+    const JsonValue* at = c ? c->find("center_world") : nullptr;
+    if (!mode || mode->type != JsonValue::Type::String || !at || !at->is_array() ||
+        at->arr.size() != 3)
+        return false;
+    center_mode = mode->as_string();
+    for (int i = 0; i < 3; i++) center_world[i] = at->arr[(size_t)i].as_double();
+    return true;
+}
+
 }  // namespace spirula

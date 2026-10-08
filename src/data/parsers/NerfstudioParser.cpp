@@ -544,9 +544,8 @@ ParsedDataset parse_nerfstudio_meta(const JsonValue& meta,
     // ---- Centering, over ALL post-outlier frames and every point, still in
     // double. The same shift is A @ center + b in the transforms.json frame,
     // after which the map between the two frames is A alone. ----------------
-    const dsparse::CenterMode center_mode = dsparse::center_mode_from_name(cfg.center_mode);
-    const std::array<double, 3> center = dsparse::scene_center(
-        center_mode, c2w_world.data(), n_all, points.xyz.data(), points.num());
+    const auto [center_mode, center] =
+        dsparse::parse_center(cfg, c2w_world.data(), n_all, points);
     double center_json[3];
     for (int r = 0; r < 3; r++)
         center_json[r] = A[r][0]*center[0] + A[r][1]*center[1] + A[r][2]*center[2] + b[r];

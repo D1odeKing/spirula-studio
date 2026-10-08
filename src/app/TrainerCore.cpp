@@ -899,6 +899,7 @@ void TrainerSession::load_dataset() {
     pcfg.train_split_fraction = cfg.train_split_fraction;
     pcfg.outlier_threshold    = cfg.outlier_threshold;
     pcfg.center_mode          = cfg.scene_center;
+    pcfg.center_auto_threshold = cfg.scene_center_threshold;
     pcfg.exif_orientation     = cfg.exif_orientation;
     pcfg.probe_image_size        = probe_image_size;
     pcfg.train_resolution_divisor = cfg.train_resolution_divisor;
@@ -914,7 +915,9 @@ void TrainerSession::load_dataset() {
         char xyz[96];
         std::snprintf(xyz, sizeof xyz, "%.12g, %.12g, %.12g",
                       ds.center[0], ds.center[1], ds.center[2]);
-        log(lfmt(lmsg::scene_centered, {ds.center_mode, xyz}));
+        const std::string how =
+            cfg.scene_center == "auto" ? "auto: " + ds.center_mode : ds.center_mode;
+        log(lfmt(lmsg::scene_centered, {how, xyz}));
     }
 
     // An EXR's header or a TIFF's ICC profile: nothing downstream can recover
@@ -1902,7 +1905,8 @@ void TrainerSession::eval() {
     pcfg.eval_interval        = cfg.eval_interval;
     pcfg.train_split_fraction = cfg.train_split_fraction;
     pcfg.outlier_threshold    = cfg.outlier_threshold;
-    pcfg.center_mode          = cfg.scene_center;
+    // The mode `auto` resolved to for training, so eval cannot decide differently.
+    pcfg.center_mode          = ds.center_mode;
     pcfg.exif_orientation     = cfg.exif_orientation;
     pcfg.probe_image_size        = probe_image_size;
     pcfg.train_resolution_divisor = cfg.train_resolution_divisor;
