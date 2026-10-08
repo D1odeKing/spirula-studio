@@ -488,8 +488,7 @@ static TorchTensorView _slice_rows(const TorchTensorView& tv, int64_t k_start,
                            std::get<1>(tv), std::move(out));
 }
 
-// How many post-split views one pass of a batch renders -- what
-// _install_and_forward returns, needed by its caller before the call.
+// How many post-split views one pass of a batch renders.
 static int _batch_views(const DecodedBatch& b, int pass) {
     if (b.K <= 1 && b.input_source_models.empty()) return (int)b.num;
     const int C = b.face_passes.empty() ? 1 : (int)b.face_passes.size();
@@ -498,14 +497,10 @@ static int _batch_views(const DecodedBatch& b, int pass) {
     return (C == 1 ? (int)b.K : b.face_passes[(size_t)p].k1) - k0;
 }
 
-// Install a decoded batch as GT + camera params and run the forward pass;
-// neither caller wants loss, backward or optim. `with_geometry` installs the
-// depth and normal GT too, which costs the linear->ray conversion.
-static int _install_and_forward(const DecodedBatch& b, std::string primitive,
-                                int sh_degree, bool packed,
-                                bool with_geometry = false,
-                                bool input_depth_is_ray_depth = true,
-                                int dist_type = 0, int pass = 0) {
+// Install one pass of a decoded batch as GT + camera params. `with_geometry`
+// installs the depth and normal GT too, which costs the linear->ray conversion.
+static void _install_batch(const DecodedBatch& b, bool with_geometry,
+                           bool input_depth_is_ray_depth, int pass) {
     const bool geom = with_geometry;
     if (b.K <= 1 && b.input_source_models.empty()) {
         set_camera_params((int)b.width, (int)b.height,
@@ -550,14 +545,16 @@ static int _install_and_forward(const DecodedBatch& b, std::string primitive,
             b.input_intrins_view, b.input_dist_coeffs_view,
             b.input_source_models_view, b.input_source_params_view,
             _slice_rows(b.face_axes_view, k0, Kc));
-        forward_3dgs(std::move(primitive), sh_degree, packed,
-                     /*output_median=*/false, dist_type);
-        return _batch_views(b, pass);
     }
+}
 
+// Install a decoded batch and run the forward pass alone, for eval.
+static int _install_and_forward(const DecodedBatch& b, std::string primitive,
+                                int sh_degree, bool packed) {
+    _install_batch(b, /*with_geometry=*/false, true, 0);
     forward_3dgs(std::move(primitive), sh_degree, packed,
-                 /*output_median=*/false, dist_type);
-    return _batch_views(b, pass);
+                 /*output_median=*/false, 0);
+    return _batch_views(b, 0);
 }
 
 int engine_eval_forward(std::string primitive, int sh_degree, bool packed) {
@@ -583,7 +580,8 @@ int engine_eval_forward(std::string primitive, int sh_degree, bool packed) {
 
 int engine_preview_forward(int index, std::string primitive, int sh_degree,
                            bool packed, bool apply_color_correction,
-                           const LossConfig& loss, int pass, int* out_passes) {
+                           const EngineStepConfig& cfg, int pass,
+                           int* out_passes) {
     if (!engine().dm)
         throw std::runtime_error(
             "engine_preview_forward: DataManager not configured — call "
@@ -605,45 +603,26 @@ int engine_preview_forward(int index, std::string primitive, int sh_degree,
     // With the geometry GT and the training step's distortion channels: this
     // renders what the loss compares, so a loss map read off this forward
     // carries the same terms the trainer's does.
+    const LossConfig& loss = cfg.loss;
     const DistortionType dist_type = engine_distortion_type(
         engine_primitive_pixel_type(primitive),
         loss.weights[(int)LossWeightIndex::RgbDistReg],
         loss.weights[(int)LossWeightIndex::DepthDistReg],
         loss.weights[(int)LossWeightIndex::NormalDistReg]);
     // POST-split camera ids for this pass's faces, the same ones the training
-    // step hands the per-image tables. Built before the forward because the
-    // before-color-space order applies PPISP inside it.
+    // step hands the per-image tables; the forward's fused stages read them.
     const int views = _batch_views(b, pass);
     std::vector<int32_t> cam_idx((size_t)views);
     for (int v = 0; v < views; ++v)
         cam_idx[(size_t)v] = b.post_offsets[0] + k0 + v;
     TorchTensorView cam_view((uint64_t)cam_idx.data(), 4,
                              {(int64_t)views, 1LL});
-    const bool ppisp_in_forward = apply_color_correction &&
-                                  engine().ppisp.enabled &&
-                                  engine().ppisp.cur_run_before_color_space;
-    if (ppisp_in_forward) {
-        _set_cur_cam_indices(cam_view);
-        engine().ppisp.forward_pending = true;
-    }
+    _set_cur_cam_indices(cam_view);
 
-    _install_and_forward(
-        b, std::move(primitive), sh_degree, packed,
-        /*with_geometry=*/true, loss.input_depth_is_ray_depth, (int)dist_type,
-        pass);
-
-    if (apply_color_correction) {
-        const bool ppisp_after = engine().ppisp.enabled && !ppisp_in_forward;
-        const bool bg_enabled = engine().bilagrid_rgb.enabled ||
-                                engine().bilagrid_depth.enabled ||
-                                engine().bilagrid_normal.enabled;
-        if (engine().ppisp.cur_run_before_bilagrid) {
-            if (ppisp_after) engine_ppisp_forward(cam_view);
-            if (bg_enabled)  engine_bilagrid_forward(cam_view);
-        } else {
-            if (bg_enabled)  engine_bilagrid_forward(cam_view);
-            if (ppisp_after) engine_ppisp_forward(cam_view);
-        }
-    }
+    _install_batch(b, /*with_geometry=*/true, loss.input_depth_is_ray_depth, pass);
+    _engine_arm_step_forward(cfg, dist_type, apply_color_correction);
+    forward_3dgs(std::move(primitive), sh_degree, packed,
+                 /*output_median=*/false, (int)dist_type);
+    if (apply_color_correction) _engine_step_image_stages(cam_view);
     return views;
 }

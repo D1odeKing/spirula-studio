@@ -53,7 +53,8 @@ public:
     // refresh.
     void draw(bool training, int step);
 
-    // Free the GL textures. Call while the GL context is still current.
+    // Free the GL textures; the next draw() uploads them again from the shot.
+    // Call while the GL context is still current.
     void destroy_gl();
 
 private:

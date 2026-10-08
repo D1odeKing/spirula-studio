@@ -148,6 +148,29 @@ grid, not at the colour the splats accumulated. The RGB distortion gradient
 was computed against the wrong mean. `ForwardCache::raw_rgb` now carries the
 rasterizer's own colour to the backward.
 
+## The GUI's images view
+
+The images view renders one training frame between steps
+(`engine_preview_forward`) and reads a loss map off it. Its forward used to
+skip the arming a step does before its own: float32 images, the rendered
+depth, PPISP as a stage of its own, the grid's input in an owned buffer. The
+map-only loss also gave `v_rgb` and `v_depth` buffers of their own. The pool
+never shrinks, so the first refresh grew it for the rest of the run: `hdr` at
+60 MP went from 4026 to 7327 MiB, with the arena growing from 648 to 1005 MiB
+at the next step.
+
+The preview now arms its forward with the step's own function
+(`_engine_arm_step_forward`), runs PPISP and the grids in the step's order
+(`_engine_step_image_stages`), and its loss puts `v_rgb` where a step's does.
+The same refresh adds 0 MiB on either backend, and its render and error map
+match the previous float32 ones to float16 rounding. With colour matching off
+the chain's output keeps a float16 buffer of its own (345 MiB at 60 MP),
+because no grid follows it to make it transient.
+
+The view's three textures are ~0.7 GB at 60 MP. The GUI frees them while the
+3D view is shown, but NVIDIA's GL driver hands back only about a third and
+keeps the rest cached.
+
 ## float16 without 16-bit storage
 
 The Vulkan baseline has no `storageBuffer16BitAccess`, so a kernel that
