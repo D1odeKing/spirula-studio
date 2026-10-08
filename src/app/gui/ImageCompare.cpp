@@ -226,6 +226,7 @@ void ImageCompare::destroy_gl() {
     for (Pane* p : {&_gt, &_render, &_gt_depth, &_render_depth,
                     &_gt_normal, &_render_normal, &_err_map})
         if (p->tex) { glDeleteTextures(1, &p->tex); p->tex = 0; }
+    _tex_dirty = true;
 }
 
 void ImageCompare::worker_loop() {
@@ -290,8 +291,9 @@ void ImageCompare::run_job(const Job& j, Shot& out) {
     bool got_err = false;
     // This step's config, so the forward renders the channels the trainer's
     // does and the error map is weighted the way this step weights it.
-    const LossConfig loss =
-        spirula::build_step_config(s.cfg, s.st, out.step).loss;
+    const EngineStepConfig step_cfg =
+        spirula::build_step_config(s.cfg, s.st, out.step);
+    const LossConfig& loss = step_cfg.loss;
 
     // One pass per run of equal-size faces (Engine.h, engine_preview_forward).
     // Views of one pass share a size, so each pass appends a block to every
@@ -311,7 +313,7 @@ void ImageCompare::run_job(const Job& j, Shot& out) {
         std::lock_guard<std::mutex> lk(s.engine_mutex);
         const int views = engine_preview_forward(
             j.index, s.cfg.primitive, sh_deg, s.cfg.packed || s.cfg.use_bvh,
-            j.color_correct, loss, pi, &npass);
+            j.color_correct, step_cfg, pi, &npass);
         auto shape = engine_get_render_rgb_shape();
         Pass q;
         q.views = (int)std::get<0>(shape);

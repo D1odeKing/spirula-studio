@@ -8220,8 +8220,9 @@ void GuiApp::draw_train() {
     const bool stepping = _runner.phase() == TrainRunner::Phase::Training;
     // The step both previews pace their refresh by while nobody is steering.
     const int step = stepping ? _runner.latest_progress().step : -1;
+    // The images view's textures are ~0.7 GB at 60 MP; hidden, training can have them.
     if (_preview_images) _images.draw(stepping, step);
-    else                 _viewport.draw(stepping, step);
+    else                 { _images.destroy_gl(); _viewport.draw(stepping, step); }
     ImGui::EndChild();
     draw_status_strip();
     draw_log_panel(log_h);
