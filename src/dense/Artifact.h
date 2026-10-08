@@ -4,6 +4,7 @@
 #include "core/Sha256.h"
 #include "dense/Generation.h"
 
+#include <chrono>
 #include <filesystem>
 #include <algorithm>
 #include <cstdio>
@@ -27,7 +28,9 @@ inline std::string input_stamp(const std::vector<std::string>& paths) {
         const auto name = fs::absolute(p).lexically_normal().generic_string();
         if (fs::is_regular_file(p))
             entries.push_back(name + ":" + std::to_string(fs::file_size(p)) + ":" +
-                              std::to_string(fs::last_write_time(p).time_since_epoch().count()));
+                              std::to_string(static_cast<long long>(
+                                  std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      fs::last_write_time(p).time_since_epoch()).count())));
         else entries.push_back(name + ":missing");
     };
     for (const auto& path : paths) {
