@@ -6591,7 +6591,7 @@ void GuiApp::reset_dataset_preview(bool sweep) {
 bool GuiApp::preview_has_content() const {
     return _film_frames.has_frames() || _film_masks.has_frames() ||
            _film_features.has_frames() || !_matrix.empty() || _model_attached ||
-           _film_geometry.has_frames();
+           _film_geometry.has_frames() || !_image_stats.empty();
 }
 
 // The frames / match map / model area. Which one it shows follows the running

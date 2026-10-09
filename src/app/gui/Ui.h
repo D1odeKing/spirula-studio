@@ -32,6 +32,7 @@
 #include "i18n/Message.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include <cstddef>
@@ -75,7 +76,27 @@ inline bool named_combo(const char* label, Draw&& draw) {
     const ImGuiID id = ImGui::GetID(label);
     const bool r = draw();
     ::gui::automation::name_item(id, label);
+    view_locked_combo(id);
     return r;
+}
+
+// A running dataset job disables its form, which also stops a combo from
+// listing its choices and a header from opening. A click on one still gets
+// through to look: popups inherit the disabled state, so nothing can change.
+inline bool locked_click() {
+    return (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) &&
+           ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
+           ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+}
+// After a combo: `id` is its own, since an open popup moves the last item.
+inline void view_locked_combo(ImGuiID id) {
+    if (ImGui::GetItemID() == id && locked_click())
+        ImGui::OpenPopupEx(ImHashStr("##ComboPopup", 0, id));
+}
+// After a header or tree node that drew as `open`.
+inline bool view_locked_node(bool open) {
+    if (locked_click()) ImGui::TreeNodeSetOpen(ImGui::GetItemID(), !open);
+    return open;
 }
 
 // Msg* list -> the const char*[] ImGui's Combo wants.
@@ -347,11 +368,13 @@ inline bool BeginTabItem(const Msg& m, ImGuiTabItemFlags flags = 0) {
     return ImGui::BeginTabItem(detail::label(m), nullptr, flags);
 }
 inline bool CollapsingHeader(const Msg& m, ImGuiTreeNodeFlags flags = 0) {
-    return ImGui::CollapsingHeader(detail::label(m), flags);
+    return detail::view_locked_node(ImGui::CollapsingHeader(detail::label(m), flags));
 }
-inline bool TreeNode(const Msg& m) { return ImGui::TreeNode(detail::label(m)); }
+inline bool TreeNode(const Msg& m) {
+    return detail::view_locked_node(ImGui::TreeNode(detail::label(m)));
+}
 inline bool TreeNode(const Msg& m, std::initializer_list<Arg> a) {
-    return ImGui::TreeNode(detail::label(format(m, a), m));
+    return detail::view_locked_node(ImGui::TreeNode(detail::label(format(m, a), m)));
 }
 inline void SeparatorText(const Msg& m) {
     ImGui::SeparatorText(detail::label(m));
@@ -381,27 +404,39 @@ inline bool Combo(const Msg& m, int* cur, std::initializer_list<const Msg*> its)
 }
 inline bool ComboRaw(const char* id, int* cur, const char* const items[],
                      int count) {
-    return ImGui::Combo(id, cur, items, count);
+    const ImGuiID iid = ImGui::GetID(id);
+    const bool r = ImGui::Combo(id, cur, items, count);
+    detail::view_locked_combo(iid);
+    return r;
 }
 // Unlabelled combo, translated items: the viewport's toolbar is a single row
 // of controls with no room for labels, but what they offer is still words.
 inline bool ComboRaw(const char* id, int* cur,
                      std::initializer_list<const Msg*> its) {
     const auto& v = detail::items(its);
-    return ImGui::Combo(id, cur, v.data(), (int)v.size());
+    const ImGuiID iid = ImGui::GetID(id);
+    const bool r = ImGui::Combo(id, cur, v.data(), (int)v.size());
+    detail::view_locked_combo(iid);
+    return r;
 }
 inline bool ComboRaw(const char* id, int* cur, const std::vector<const Msg*>& its) {
     static thread_local std::vector<const char*> v;
     v.clear();
     for (const Msg* m : its) v.push_back(m->get());
-    return ImGui::Combo(id, cur, v.data(), (int)v.size());
+    const ImGuiID iid = ImGui::GetID(id);
+    const bool r = ImGui::Combo(id, cur, v.data(), (int)v.size());
+    detail::view_locked_combo(iid);
+    return r;
 }
 inline bool BeginCombo(const Msg& m, const char* preview, ImGuiComboFlags flags = 0) {
     const char* l = detail::label(m);
     return detail::named_combo(l, [&] { return ImGui::BeginCombo(l, preview, flags); });
 }
 inline bool BeginComboRaw(const char* id, const char* preview) {
-    return ImGui::BeginCombo(id, preview);
+    const ImGuiID iid = ImGui::GetID(id);
+    const bool r = ImGui::BeginCombo(id, preview);
+    detail::view_locked_combo(iid);
+    return r;
 }
 
 inline bool SliderInt(const Msg& m, int* v, int lo, int hi) {
