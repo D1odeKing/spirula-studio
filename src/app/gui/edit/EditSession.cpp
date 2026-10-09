@@ -2,7 +2,6 @@
 
 #include "app/gui/edit/EditSession.h"
 
-#include "app/gui/GlLoader.h"
 #include "app/gui/Layout.h"
 #include "app/gui/ViewportPanel.h"
 #include "i18n/Message.h"
@@ -75,37 +74,10 @@ void EditSession::open(std::unique_ptr<EditDoc> doc, ViewportPanel* panel) {
     _seen_placement = Sim3();
     _seen_head = 0;
     push_placement();
-    // Placements a kept repair could not register outlive the reopen.
-    if (_doc && _doc->kind() == EditDoc::Kind::Points && !_placed_carry.empty() &&
-        static_cast<PointsDoc&>(*_doc).dataset_dir() == _placed_carry_dir) {
-        static_cast<PointsDoc&>(*_doc).set_placed(std::move(_placed_carry));
-        _tab = 2;
-    }
-    _placed_carry.clear();
 }
 
 void EditSession::close() {
     _cancel = true;
-    _repair_cancel = true;
-    if (_repair_worker.joinable()) _repair_worker.join();
-    _repair_cancel = false;
-    _repair_busy = false;
-    discard_repair();
-    _repair_avail = -1;
-    _cam_xform = false;
-    if (_photo.worker.joinable()) _photo.worker.join();
-    if (_photo.tex) {
-        GLuint t = _photo.tex;
-        glDeleteTextures(1, &t);
-        _photo.tex = 0;
-    }
-    _photo.want.clear();
-    _photo.loaded.clear();
-    _photo.shown.clear();
-    _photo.pic = Picture{};
-    _missing.clear();
-    _missing_read = false;
-    _missing_at = -1;
     if (_comp_worker.joinable()) _comp_worker.join();
     if (_save_worker.joinable()) _save_worker.join();
     if (_attr_worker.joinable()) _attr_worker.join();
@@ -145,12 +117,7 @@ void EditSession::close() {
 
 std::vector<std::string> EditSession::drain_log() {
     std::vector<std::string> out;
-    {
-        std::lock_guard<std::mutex> lk(_repair_log_mtx);
-        out.swap(_repair_log);
-    }
-    out.insert(out.end(), _log.begin(), _log.end());
-    _log.clear();
+    out.swap(_log);
     return out;
 }
 
@@ -213,20 +180,6 @@ bool EditSession::on_viewport_input(const ViewportInput& in) {
             return true;
         }
         const TransformTool::Result r = _xform.update(in, f);
-        if (_cam_xform) {
-            auto& pd = static_cast<PointsDoc&>(*_doc);
-            const bool moved = !_xform.delta().is_identity();
-            if (r != TransformTool::Result::Confirmed && r != TransformTool::Result::Cancelled) {
-                pd.set_moved_cameras(moved_by(_xform.delta()));
-            } else {
-                PointsDoc::Poses next = moved_by(_xform.delta());
-                pd.set_moved_cameras(_cam_from);  // the op records the move from here
-                if (r == TransformTool::Result::Confirmed && moved)
-                    _doc->run(make_camera_move_op(pd, std::move(next), msg::op_move_cameras.get()));
-                _cam_xform = false;
-            }
-            return true;
-        }
         const Sim3 base = base_frame();
         const Sim3 preview = base.inverse() * _xform.delta() * base * _xform_from;
         if (r == TransformTool::Result::Confirmed) {
@@ -260,7 +213,6 @@ bool EditSession::on_viewport_input(const ViewportInput& in) {
             _xform_hot = _xform.hit_handle(_xform_mode, f, in.x, in.y);
             if (_xform_hot >= 0 && in.clicked) {
                 _xform_from = _doc->placement();
-                begin_camera_move();
                 const int axis = _xform_hot < 3 ? _xform_hot
                                : _xform_hot < 6 ? _xform_hot - 3 : -1;
                 _xform.begin(_xform_mode, f, in.x, in.y, /*drag=*/true, axis,
@@ -288,7 +240,6 @@ bool EditSession::on_viewport_input(const ViewportInput& in) {
 
 void EditSession::draw_viewport_overlay(const ViewportOverlay& v) {
     if (!_doc) return;
-    draw_photo_overlay(v);
     const ImVec2 origin(v.x, v.y);
     XformFrame f;
     const bool have = xform_frame(f);
@@ -558,7 +509,6 @@ bool EditSession::components_ready() {
 
 void EditSession::cancel_work() {
     _cancel = true;
-    _repair_cancel = true;
     _pending.reset();
 }
 
@@ -652,8 +602,6 @@ void EditSession::poll() {
         _cancel = false;
     }
     if (!_save_busy.load() && _save_worker.joinable()) take_save_result();
-    poll_repair();
-    if (!_doc) return;
     if (busy()) {
         if (_panel) _panel->invalidate();
         return;
