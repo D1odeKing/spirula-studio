@@ -107,6 +107,9 @@ std::vector<Reconstruction> ProgressiveAligner::run(AssembleStats& ast) {
             ao.verbose = verbose;
             ao.tag = "map";
             models = assembleModels(*mapper_, std::move(models), cfg_.manager, ao, ast);
+            if (k + 1 == errors.size())
+                for (Reconstruction& m : models)
+                    if (m.numRegistered() >= 2) m = mapper_->retriangulate(m);
         }
         std::set<uint32_t> any;
         for (const Reconstruction& m : models) {
