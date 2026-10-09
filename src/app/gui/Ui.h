@@ -68,18 +68,6 @@ inline const char* label(const std::string& text, const Msg& m) {
     return label(text.c_str(), m.id);
 }
 
-// ImGui's combo reports no label to the item hooks (Automation.h), so a script
-// could not find it by its message id. The id is taken first: an open popup
-// moves ImGui's last item.
-template <class Draw>
-inline bool named_combo(const char* label, Draw&& draw) {
-    const ImGuiID id = ImGui::GetID(label);
-    const bool r = draw();
-    ::gui::automation::name_item(id, label);
-    view_locked_combo(id);
-    return r;
-}
-
 // A running dataset job disables its form, which also stops a combo from
 // listing its choices and a header from opening. A click on one still gets
 // through to look: popups inherit the disabled state, so nothing can change.
@@ -93,6 +81,19 @@ inline void view_locked_combo(ImGuiID id) {
     if (ImGui::GetItemID() == id && locked_click())
         ImGui::OpenPopupEx(ImHashStr("##ComboPopup", 0, id));
 }
+
+// ImGui's combo reports no label to the item hooks (Automation.h), so a script
+// could not find it by its message id. The id is taken first: an open popup
+// moves ImGui's last item.
+template <class Draw>
+inline bool named_combo(const char* label, Draw&& draw) {
+    const ImGuiID id = ImGui::GetID(label);
+    const bool r = draw();
+    ::gui::automation::name_item(id, label);
+    view_locked_combo(id);
+    return r;
+}
+
 // After a header or tree node that drew as `open`.
 inline bool view_locked_node(bool open) {
     if (locked_click()) ImGui::TreeNodeSetOpen(ImGui::GetItemID(), !open);
