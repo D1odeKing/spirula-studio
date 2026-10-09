@@ -177,41 +177,32 @@ SS_MSG(pairs_help,
        "kapatmayla), diğer durumlarda exhaustive demektir"));
 
 SS_MSG(overlap_help,
-    EN("Neighbours each image is paired with under --pairs sequential and along a "
-       "--sequence, and how far apart two images of a sequence still count as "
-       "neighbours in mapping"),
-    JA("--pairs sequential および --sequence に沿って各画像がペアを組む近傍の数、"
-       "またマッピングでシーケンスの 2 画像を近傍とみなす最大の間隔"),
-    ZH_HANS("在 --pairs sequential 下以及沿 --sequence，每张图像与多少个相邻图像配对；"
-            "也是建图时序列中两张图像相隔多远仍算相邻"),
-    ZH_HANT("在 --pairs sequential 下以及沿 --sequence，每張影像與多少個相鄰影像配對；"
-            "也是建圖時序列中兩張影像相隔多遠仍算相鄰"),
-    KO("--pairs sequential 일 때와 --sequence 를 따라 각 이미지가 짝을 이루는 이웃의 수, "
-       "그리고 매핑에서 시퀀스의 두 이미지가 얼마나 떨어져도 이웃으로 치는지"),
-    DE("Nachbarn, mit denen jedes Bild unter --pairs sequential und entlang einer "
-       "--sequence gepaart wird, und wie weit zwei Bilder einer Sequenz beim Mapping "
-       "noch als Nachbarn gelten"),
-    FR("Voisins avec lesquels chaque image est appariée sous --pairs sequential et le "
-       "long d'une --sequence, et jusqu'à quel écart deux images d'une séquence "
-       "comptent encore comme voisines au mapping"),
-    ES("Vecinos con los que se empareja cada imagen bajo --pairs sequential y a lo "
-       "largo de una --sequence, y a qué distancia dos imágenes de una secuencia aún "
-       "cuentan como vecinas al mapear"),
-    PT("Vizinhos com que cada imagem é emparelhada sob --pairs sequential e ao longo "
-       "de uma --sequence, e a que distância duas imagens de uma sequência ainda "
-       "contam como vizinhas no mapeamento"),
-    IT("Vicini con cui ogni immagine viene abbinata sotto --pairs sequential e lungo "
-       "una --sequence, e a quale distanza due immagini di una sequenza contano "
-       "ancora come vicine nel mapping"),
-    NL("Buren waarmee elk beeld gepaard wordt onder --pairs sequential en langs een "
-       "--sequence, en hoe ver twee beelden van een reeks bij het mappen nog als "
-       "buren gelden"),
-    RU("Сколько соседей получает каждое изображение при --pairs sequential и вдоль "
-       "--sequence, и на каком расстоянии два изображения последовательности ещё "
-       "считаются соседями при построении"),
-    TR("--pairs sequential altında ve bir --sequence boyunca her görüntünün eşleştiği "
-       "komşu sayısı ve haritalamada bir dizinin iki görüntüsünün ne kadar uzakken "
-       "hâlâ komşu sayıldığı"));
+    EN("Neighbours in file order each image is paired with under --pairs sequential "
+       "and --prefilter-sequential"),
+    JA("--pairs sequential および --prefilter-sequential で、各画像がファイル順で"
+       "ペアを組む近傍の数"),
+    ZH_HANS("在 --pairs sequential 和 --prefilter-sequential 下，每张图像按文件顺序"
+            "与多少个相邻图像配对"),
+    ZH_HANT("在 --pairs sequential 和 --prefilter-sequential 下，每張影像按檔案順序"
+            "與多少個相鄰影像配對"),
+    KO("--pairs sequential 일 때와 --prefilter-sequential 일 때 각 이미지가 파일 순서로 "
+       "짝을 이루는 이웃의 수"),
+    DE("Nachbarn in Dateireihenfolge, mit denen jedes Bild unter --pairs sequential "
+       "und --prefilter-sequential gepaart wird"),
+    FR("Voisins dans l'ordre des fichiers avec lesquels chaque image est appariée "
+       "sous --pairs sequential et --prefilter-sequential"),
+    ES("Vecinos en el orden de archivos con los que se empareja cada imagen bajo "
+       "--pairs sequential y --prefilter-sequential"),
+    PT("Vizinhos na ordem dos arquivos com que cada imagem é emparelhada sob "
+       "--pairs sequential e --prefilter-sequential"),
+    IT("Vicini nell'ordine dei file con cui ogni immagine viene abbinata sotto "
+       "--pairs sequential e --prefilter-sequential"),
+    NL("Buren in bestandsvolgorde waarmee elk beeld gepaard wordt onder "
+       "--pairs sequential en --prefilter-sequential"),
+    RU("Сколько соседей в порядке файлов получает каждое изображение при "
+       "--pairs sequential и --prefilter-sequential"),
+    TR("--pairs sequential ve --prefilter-sequential altında her görüntünün dosya "
+       "sırasında eşleştiği komşu sayısı"));
 
 SS_MSG(loop_closure_help,
     EN("Under --pairs sequential, also match the content-similar pairs GPU pair "
@@ -250,35 +241,35 @@ SS_MSG(loop_closure_help,
        "bağlanır"));
 
 SS_MSG(quadratic_overlap_help,
-    EN("A sequential window also pairs each image with the ones 16, 32, 64 ... "
+    EN("A sequential window also pairs each image with the ones 2, 4, 8 ... "
        "apart in file order, up to 2^(overlap-1), as COLMAP does"),
-    JA("逐次ウィンドウで、各画像をファイル順で 16、32、64 … 離れた画像とも"
+    JA("逐次ウィンドウで、各画像をファイル順で 2、4、8 … 離れた画像とも"
        "組にします（2^(overlap-1) まで、COLMAP と同じ）"),
-    ZH_HANS("顺序窗口也把每张图像与文件顺序中相隔 16、32、64 … 张的图像配对，"
+    ZH_HANS("顺序窗口也把每张图像与文件顺序中相隔 2、4、8 … 张的图像配对，"
             "直到 2^(overlap-1)，与 COLMAP 相同"),
-    ZH_HANT("循序視窗也把每張影像與檔案順序中相隔 16、32、64 … 張的影像配對，"
+    ZH_HANT("循序視窗也把每張影像與檔案順序中相隔 2、4、8 … 張的影像配對，"
             "直到 2^(overlap-1)，與 COLMAP 相同"),
-    KO("순차 창에서 각 이미지를 파일 순서로 16, 32, 64 … 장 떨어진 이미지와도 "
+    KO("순차 창에서 각 이미지를 파일 순서로 2, 4, 8 … 장 떨어진 이미지와도 "
        "짝짓습니다(2^(overlap-1)까지, COLMAP 과 같음)"),
     DE("Ein sequenzielles Fenster paart jedes Bild auch mit den Bildern, die in "
-       "Dateireihenfolge 16, 32, 64 ... entfernt liegen, bis 2^(overlap-1), wie "
+       "Dateireihenfolge 2, 4, 8 ... entfernt liegen, bis 2^(overlap-1), wie "
        "COLMAP"),
     FR("Une fenêtre séquentielle apparie aussi chaque image avec celles situées "
-       "à 16, 32, 64 ... dans l'ordre des fichiers, jusqu'à 2^(overlap-1), comme "
+       "à 2, 4, 8 ... dans l'ordre des fichiers, jusqu'à 2^(overlap-1), comme "
        "COLMAP"),
     ES("Una ventana secuencial también empareja cada imagen con las que están a "
-       "16, 32, 64 ... en el orden de archivos, hasta 2^(overlap-1), como COLMAP"),
+       "2, 4, 8 ... en el orden de archivos, hasta 2^(overlap-1), como COLMAP"),
     PT("Uma janela sequencial também emparelha cada imagem com as que estão a "
-       "16, 32, 64 ... na ordem dos arquivos, até 2^(overlap-1), como o COLMAP"),
+       "2, 4, 8 ... na ordem dos arquivos, até 2^(overlap-1), como o COLMAP"),
     IT("Una finestra sequenziale abbina ogni immagine anche a quelle distanti "
-       "16, 32, 64 ... nell'ordine dei file, fino a 2^(overlap-1), come COLMAP"),
+       "2, 4, 8 ... nell'ordine dei file, fino a 2^(overlap-1), come COLMAP"),
     NL("Een sequentieel venster paart elk beeld ook met de beelden die in "
-       "bestandsvolgorde 16, 32, 64 ... verder liggen, tot 2^(overlap-1), zoals "
+       "bestandsvolgorde 2, 4, 8 ... verder liggen, tot 2^(overlap-1), zoals "
        "COLMAP"),
     RU("Последовательное окно также сопоставляет каждое изображение с теми, что "
-       "стоят через 16, 32, 64 ... в порядке файлов, вплоть до 2^(overlap-1), "
+       "стоят через 2, 4, 8 ... в порядке файлов, вплоть до 2^(overlap-1), "
        "как в COLMAP"),
-    TR("Sıralı pencere her görüntüyü dosya sırasında 16, 32, 64 ... uzaktaki "
+    TR("Sıralı pencere her görüntüyü dosya sırasında 2, 4, 8 ... uzaktaki "
        "görüntülerle de eşleştirir; COLMAP gibi 2^(overlap-1)'e kadar"));
 
 SS_MSG(prefilter_sequential_help,
