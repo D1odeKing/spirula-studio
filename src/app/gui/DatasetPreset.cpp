@@ -92,6 +92,11 @@ namespace {
     X("sfm_progressive_error_start", sfm.progressive_error_start)             \
     X("sfm_progressive_error_end",  sfm.progressive_error_end)                \
     X("sfm_progressive_error_steps", sfm.progressive_error_steps)             \
+    X("sfm_progressive_features",   sfm.progressive_features)                 \
+    X("sfm_progressive_max_features_end", sfm.progressive_max_features_end)   \
+    X("sfm_progressive_image_size_end", sfm.progressive_image_size_end)       \
+    X("sfm_progressive_feature_steps", sfm.progressive_feature_steps)         \
+    X("sfm_progressive_patience",   sfm.progressive_patience)                 \
     X("sfm_use_sequence",           sfm.use_sequence)                         \
     X("sfm_init_focal_px",          sfm.init_focal_px)                        \
     X("sfm_init_distortion",        sfm.init_distortion)                      \

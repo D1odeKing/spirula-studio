@@ -1472,7 +1472,7 @@ bool featuresAreCurrent(const fs::path& feat, const fs::path& img,
 
 int extractDirectory(const std::string& imagedir, const fs::path& outdir,
                      const SfmConfig& cfg, ExtractStats& stats, bool reuse,
-                     std::vector<fs::path>* trusted) {
+                     std::vector<fs::path>* trusted, const std::set<std::string>* only) {
     const SiftOptions& opt = cfg.sift;
     const std::string& maskdir = cfg.mask_dir;
     const std::string& fmaskdir = cfg.feature_mask_dir;
@@ -1497,6 +1497,15 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
         if (it->is_regular_file() && isImageExt(it->path().extension().string()) &&
             !isSidecar(it->path()))
             found.push_back(it->path());
+    }
+    if (only) {
+        found.erase(std::remove_if(found.begin(), found.end(),
+                                   [&](const fs::path& p) {
+                                       fs::path stem = relativeTo(p, imagedir);
+                                       stem.replace_extension();
+                                       return !only->count(stem.generic_string());
+                                   }),
+                    found.end());
     }
     if (found.empty()) {
         L::fail(Tag::Extract, M::extract_no_images, {imagedir});
@@ -2540,8 +2549,9 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // whole of mapping for nothing.
     for (FeatureSet& fs : feats) fs.dropDescriptors();
     // After writeMatches, never before: the file on disk indexes the feature
-    // files, which keep every row.
-    if (cfg.compact_unused_features) {
+    // files, which keep every row. Not under progressive feature passes, which
+    // match against those files' rows again.
+    if (cfg.compact_unused_features && !(cfg.progressive && cfg.progressive_features)) {
         FeatureCompactionPlan plan = buildFeatureCompactionPlan(db);
         for (size_t i = 0; i < feats.size(); i++)
             feats[i] = compactFeatureSet(std::move(feats[i]), plan.old_to_new[i],
@@ -2587,7 +2597,8 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     std::unique_ptr<ProgressiveAligner> progressive;
     std::unique_ptr<Mapper> single;
     if (cfg.progressive) {
-        progressive = std::make_unique<ProgressiveAligner>(db, feats, cfg, calib, rigs, seqs);
+        progressive = std::make_unique<ProgressiveAligner>(db, feats, cfg, calib, rigs, seqs,
+                                                           _imagedir, ws);
         models = progressive->run(ast);
     } else {
         single = std::make_unique<Mapper>(db, feats, mapopt, cs.ids, &rigs, &seqs,

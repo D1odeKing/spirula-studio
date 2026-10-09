@@ -7465,6 +7465,29 @@ void GuiApp::draw_sfm_advanced() {
         ui::InputInt(dmsg::progressive_attempts, &_sfm_job.progressive_error_steps);
         ui::help_on_hover(dmsg::progressive_attempts_help);
         _sfm_job.progressive_error_steps = std::clamp(_sfm_job.progressive_error_steps, 2, 50);
+        ui::Checkbox(dmsg::progressive_redetect, &_sfm_job.progressive_features);
+        ui::help_on_hover(dmsg::progressive_redetect_help);
+        if (_sfm_job.progressive_features) {
+            ImGui::Indent();
+            ImGui::SetNextItemWidth(px(240.0f));
+            ui::InputInt(dmsg::progressive_features_end, &_sfm_job.progressive_max_features_end);
+            ui::help_on_hover(dmsg::progressive_features_end_help);
+            ImGui::SetNextItemWidth(px(240.0f));
+            ui::InputInt(dmsg::progressive_size_end, &_sfm_job.progressive_image_size_end);
+            ui::help_on_hover(dmsg::progressive_size_end_help);
+            ImGui::SetNextItemWidth(px(240.0f));
+            ui::InputInt(dmsg::progressive_passes, &_sfm_job.progressive_feature_steps);
+            ui::help_on_hover(dmsg::progressive_passes_help);
+            ImGui::SetNextItemWidth(px(240.0f));
+            ui::InputInt(dmsg::progressive_patience, &_sfm_job.progressive_patience);
+            ui::help_on_hover(dmsg::progressive_patience_help);
+            SfmJob& j = _sfm_job;
+            j.progressive_max_features_end = std::max(0, j.progressive_max_features_end);
+            j.progressive_image_size_end = std::max(0, j.progressive_image_size_end);
+            j.progressive_feature_steps = std::clamp(j.progressive_feature_steps, 1, 20);
+            j.progressive_patience = std::clamp(j.progressive_patience, 1, 20);
+            ImGui::Unindent();
+        }
         if (settle) {
             // The run refuses a start at or below the end; 0 is --max-error, 3 by default.
             SfmJob& j = _sfm_job;

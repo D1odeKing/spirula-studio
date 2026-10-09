@@ -691,6 +691,18 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
         }
         argv.push_back("--progressive-error-steps");
         argv.push_back(std::to_string(job.progressive_error_steps));
+        if (!job.progressive_features) {
+            argv.push_back("--no-progressive-features");
+        } else {
+            argv.push_back("--progressive-max-features-end");
+            argv.push_back(std::to_string(job.progressive_max_features_end));
+            argv.push_back("--progressive-image-size-end");
+            argv.push_back(std::to_string(job.progressive_image_size_end));
+            argv.push_back("--progressive-feature-steps");
+            argv.push_back(std::to_string(job.progressive_feature_steps));
+            argv.push_back("--progressive-patience");
+            argv.push_back(std::to_string(job.progressive_patience));
+        }
     }
     if (job.init_focal_px > 0) {
         char buf[32];

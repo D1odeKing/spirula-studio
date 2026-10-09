@@ -117,6 +117,15 @@ struct SfmConfig {
     double progressive_error_start = 20.0;
     double progressive_error_end = 0.0;
     int progressive_error_steps = 5;
+    // Then feature passes on images outside the largest model with enough
+    // verified inliers: features and resolution from the run's own to the ends
+    // (0: 4x the features, the source size), in `progressive_feature_steps`.
+    bool progressive_features = true;
+    int progressive_max_features_end = 0;
+    int progressive_image_size_end = 0;
+    int progressive_feature_steps = 3;
+    int progressive_patience = 2;
+    int progressive_min_matches = 50;
     // 0 means "whatever the selected frontend wants" -- 3200 for SIFT, 1600
     // for a learned one, mirroring COLMAP's EffMaxImageSize(). Resolved in
     // finalize(), so a command that applies no presets (extract, match) still
@@ -368,6 +377,18 @@ struct SfmConfig {
       1000, "", progressive_error_end)                                                             \
     F(progressive_error_steps, "progressive-error-steps", CMD_AUTO, Tier::Advanced, "progressive", \
       2, 50, "", progressive_error_steps)                                                          \
+    F(progressive_features, "progressive-features", CMD_AUTO, Tier::Advanced, "progressive", 0, 0, \
+      "", progressive_features)                                                                    \
+    F(progressive_max_features_end, "progressive-max-features-end", CMD_AUTO, Tier::Advanced,      \
+      "progressive", 0, 1000000, "", progressive_max_features_end)                                 \
+    F(progressive_image_size_end, "progressive-image-size-end", CMD_AUTO, Tier::Advanced,          \
+      "progressive", 0, 20000, "", progressive_image_size_end)                                     \
+    F(progressive_feature_steps, "progressive-feature-steps", CMD_AUTO, Tier::Advanced,            \
+      "progressive", 1, 20, "", progressive_feature_steps)                                         \
+    F(progressive_patience, "progressive-patience", CMD_AUTO, Tier::Advanced, "progressive", 1,    \
+      20, "", progressive_patience)                                                                \
+    F(progressive_min_matches, "progressive-min-matches", CMD_AUTO, Tier::Advanced, "progressive", \
+      0, 1000000, "", progressive_min_matches)                                                     \
     F(max_image_size, "max-image-size", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "pipeline", 0,     \
       20000, "", max_image_size)                                                                   \
     F(mask_dir, "masks", CMD_AUTO | CMD_EXTRACT, Tier::Basic, "pipeline", 0, 0, "", masks)         \

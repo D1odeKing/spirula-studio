@@ -255,6 +255,8 @@ ModelPart field_part(const std::string& key) {
         "mapper",         "distortion_refine", "final_per_image_intrinsics",
         "final_free_rig", "metric_gps",        "sensor_gauge",
         "exif_attitude",  "progressive_error_end", "progressive_error_steps",
+        "progressive_features", "progressive_max_features_end", "progressive_image_size_end",
+        "progressive_feature_steps", "progressive_patience",
     };
     for (const char* k : matching)
         if (key == k) return ModelPart::Matching;
@@ -478,6 +480,10 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
     job.progressive_error_start = 20.0f;
     job.progressive_error_end = 0.0f;
     job.progressive_error_steps = 5;
+    job.progressive_features = true;
+    job.progressive_max_features_end = job.progressive_image_size_end = 0;
+    job.progressive_feature_steps = 3;
+    job.progressive_patience = 2;
     job.metric_gps = 0;
     job.sensor_gauge = job.exif_attitude = 2;
     job.distortion_refine = 0;
@@ -509,6 +515,14 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
         else if (flag == "--progressive-error-end") job.progressive_error_end = to_float(take());
         else if (flag == "--progressive-error-steps")
             job.progressive_error_steps = (int)to_float(take());
+        else if (flag == "--no-progressive-features") job.progressive_features = false;
+        else if (flag == "--progressive-max-features-end")
+            job.progressive_max_features_end = (int)to_float(take());
+        else if (flag == "--progressive-image-size-end")
+            job.progressive_image_size_end = (int)to_float(take());
+        else if (flag == "--progressive-feature-steps")
+            job.progressive_feature_steps = (int)to_float(take());
+        else if (flag == "--progressive-patience") job.progressive_patience = (int)to_float(take());
         else if (flag == "--focal") job.init_focal_px = to_float(take());
         else if (flag == "--distortion") job.init_distortion = take();
         else if (flag == "--no-refine-extra-params")
@@ -697,6 +711,13 @@ StepFields model_fields(const SfmJob& job) {
         add(f, "progressive_error_start", "", num(job.progressive_error_start));
         add(f, "progressive_error_end", "", num(job.progressive_error_end));
         add(f, "progressive_error_steps", "", num(job.progressive_error_steps));
+        add(f, "progressive_features", "", onoff(job.progressive_features));
+        if (job.progressive_features) {
+            add(f, "progressive_max_features_end", "", num(job.progressive_max_features_end));
+            add(f, "progressive_image_size_end", "", num(job.progressive_image_size_end));
+            add(f, "progressive_feature_steps", "", num(job.progressive_feature_steps));
+            add(f, "progressive_patience", "", num(job.progressive_patience));
+        }
     }
     if (job.init_focal_px > 0) add(f, "focal_px", "", num(job.init_focal_px));
     if (!job.init_distortion.empty()) add(f, "distortion", "", job.init_distortion);

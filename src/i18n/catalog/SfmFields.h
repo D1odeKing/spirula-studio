@@ -1687,6 +1687,142 @@ SS_MSG(progressive_error_end_help,
     TR("Son kademeli denemenin, dolayısıyla yazılan modelin piksel hatası; "
        "0, --max-error demektir"));
 
+SS_MSG(progressive_features_help,
+    EN("After the error steps, detect features again on images still outside the "
+       "largest model, with more features and resolution each pass"),
+    JA("誤差の段階の後、最大モデルに入っていない画像で、パスごとに特徴点数と解像度を"
+       "増やして特徴点を検出し直します"),
+    ZH_HANS("误差各步之后，对仍不在最大模型中的图像重新检测特征，每一遍增加特征数和分辨率"),
+    ZH_HANT("誤差各步之後，對仍不在最大模型中的影像重新偵測特徵，每一遍增加特徵數和解析度"),
+    KO("오차 단계 뒤에, 아직 가장 큰 모델 밖에 있는 이미지에서 매 패스마다 특징점 수와 "
+       "해상도를 늘려 특징점을 다시 검출합니다"),
+    DE("Nach den Fehlerstufen auf Bildern, die noch außerhalb des größten Modells "
+       "liegen, erneut Merkmale erkennen, mit mehr Merkmalen und Auflösung je Durchgang"),
+    FR("Après les paliers d'erreur, redétecter les points des images encore hors du "
+       "plus grand modèle, avec plus de points et de résolution à chaque passe"),
+    ES("Tras los pasos de error, volver a detectar rasgos en las imágenes que siguen "
+       "fuera del modelo mayor, con más rasgos y resolución en cada pasada"),
+    PT("Após os passos de erro, detectar de novo os traços das imagens ainda fora do "
+       "maior modelo, com mais traços e resolução a cada passagem"),
+    IT("Dopo i passi di errore, rilevare di nuovo i punti sulle immagini ancora fuori "
+       "dal modello più grande, con più punti e risoluzione a ogni passaggio"),
+    NL("Na de foutstappen opnieuw kenmerken detecteren in beelden die nog buiten het "
+       "grootste model liggen, met meer kenmerken en resolutie per ronde"),
+    RU("После шагов ошибки заново искать признаки на снимках вне крупнейшей модели, "
+       "с большим числом признаков и разрешением на каждом проходе"),
+    TR("Hata adımlarından sonra, hâlâ en büyük modelin dışındaki görüntülerde her "
+       "geçişte daha çok öznitelik ve çözünürlükle öznitelikleri yeniden bulur"));
+
+SS_MSG(progressive_max_features_end_help,
+    EN("Feature limit of the last feature pass; the first uses the run's own. 0 is "
+       "four times the run's"),
+    JA("最後の特徴点パスの特徴点上限。最初のパスは実行自体の値を使います。0 はその 4 倍"),
+    ZH_HANS("最后一遍特征检测的特征上限；第一遍使用本次运行自身的值。0 为其 4 倍"),
+    ZH_HANT("最後一遍特徵偵測的特徵上限；第一遍使用本次執行自身的值。0 為其 4 倍"),
+    KO("마지막 특징점 패스의 특징점 한도. 첫 패스는 실행 자체의 값을 씁니다. 0 은 그 4 배"),
+    DE("Merkmalsgrenze des letzten Merkmalsdurchgangs; der erste nimmt die des Laufs. "
+       "0 ist das Vierfache davon"),
+    FR("Limite de points de la dernière passe ; la première prend celle de "
+       "l'exécution. 0 vaut quatre fois celle-ci"),
+    ES("Límite de rasgos de la última pasada; la primera usa el de la ejecución. 0 "
+       "es cuatro veces ese"),
+    PT("Limite de traços da última passagem; a primeira usa o da execução. 0 é quatro "
+       "vezes esse"),
+    IT("Limite di punti dell'ultimo passaggio; il primo usa quello dell'esecuzione. 0 "
+       "è quattro volte quello"),
+    NL("Kenmerkgrens van de laatste ronde; de eerste neemt die van de run. 0 is vier "
+       "keer die"),
+    RU("Предел признаков последнего прохода; первый берёт значение запуска. 0 — в "
+       "четыре раза больше"),
+    TR("Son öznitelik geçişinin öznitelik sınırı; ilki çalıştırmanınkini kullanır. 0, "
+       "bunun dört katıdır"));
+
+SS_MSG(progressive_image_size_end_help,
+    EN("Image size limit of the last feature pass, in pixels on the long edge; the "
+       "first uses the run's own. 0 is the images' full size"),
+    JA("最後の特徴点パスの画像サイズ上限（長辺のピクセル数）。最初のパスは実行自体の値。"
+       "0 は画像の元のサイズ"),
+    ZH_HANS("最后一遍特征检测的图像尺寸上限（长边像素）；第一遍使用本次运行自身的值。"
+            "0 为图像原始尺寸"),
+    ZH_HANT("最後一遍特徵偵測的影像尺寸上限（長邊像素）；第一遍使用本次執行自身的值。"
+            "0 為影像原始尺寸"),
+    KO("마지막 특징점 패스의 이미지 크기 한도(긴 변의 픽셀). 첫 패스는 실행 자체의 값을 "
+       "씁니다. 0 은 이미지 원래 크기"),
+    DE("Bildgrößengrenze des letzten Merkmalsdurchgangs, in Pixeln der langen Kante; "
+       "der erste nimmt die des Laufs. 0 ist die volle Bildgröße"),
+    FR("Taille d'image limite de la dernière passe, en pixels sur le grand côté ; la "
+       "première prend celle de l'exécution. 0 est la taille complète des images"),
+    ES("Límite de tamaño de imagen de la última pasada, en píxeles del lado largo; la "
+       "primera usa el de la ejecución. 0 es el tamaño completo de las imágenes"),
+    PT("Limite de tamanho de imagem da última passagem, em pixels no lado maior; a "
+       "primeira usa o da execução. 0 é o tamanho completo das imagens"),
+    IT("Limite di dimensione dell'immagine dell'ultimo passaggio, in pixel sul lato "
+       "lungo; il primo usa quello dell'esecuzione. 0 è la dimensione piena"),
+    NL("Grens voor de beeldgrootte van de laatste ronde, in pixels aan de lange kant; "
+       "de eerste neemt die van de run. 0 is de volle beeldgrootte"),
+    RU("Предел размера снимка для последнего прохода, в пикселях длинной стороны; "
+       "первый берёт значение запуска. 0 — полный размер снимков"),
+    TR("Son öznitelik geçişinin görüntü boyutu sınırı, uzun kenarda piksel; ilki "
+       "çalıştırmanınkini kullanır. 0, görüntülerin tam boyutudur"));
+
+SS_MSG(progressive_feature_steps_help,
+    EN("Feature passes from the run's settings to the ends"),
+    JA("実行自体の設定から上限まで行う特徴点パスの回数"),
+    ZH_HANS("从本次运行的设置到上限所进行的特征检测遍数"),
+    ZH_HANT("從本次執行的設定到上限所進行的特徵偵測遍數"),
+    KO("실행 자체의 설정에서 한도까지 진행하는 특징점 패스 횟수"),
+    DE("Merkmalsdurchgänge von den Einstellungen des Laufs bis zu den Grenzen"),
+    FR("Passes de détection des réglages de l'exécution jusqu'aux limites"),
+    ES("Pasadas de detección desde los ajustes de la ejecución hasta los límites"),
+    PT("Passagens de detecção dos ajustes da execução até os limites"),
+    IT("Passaggi di rilevamento dalle impostazioni dell'esecuzione fino ai limiti"),
+    NL("Detectierondes van de instellingen van de run tot de grenzen"),
+    RU("Проходы поиска признаков от настроек запуска до пределов"),
+    TR("Çalıştırmanın ayarlarından sınırlara kadar öznitelik geçişi sayısı"));
+
+SS_MSG(progressive_patience_help,
+    EN("Stop the feature passes after this many in a row that align no new image"),
+    JA("新しい画像を 1 枚も位置合わせできないパスがこの回数続いたら特徴点パスを止めます"),
+    ZH_HANS("连续这么多遍都没有对齐新图像时，停止特征检测"),
+    ZH_HANT("連續這麼多遍都沒有對齊新影像時，停止特徵偵測"),
+    KO("새 이미지를 하나도 정렬하지 못한 패스가 이만큼 이어지면 특징점 패스를 멈춥니다"),
+    DE("Merkmalsdurchgänge beenden, wenn so viele nacheinander kein neues Bild "
+       "ausrichten"),
+    FR("Arrêter les passes après autant de passes de suite sans nouvelle image alignée"),
+    ES("Detener las pasadas tras tantas seguidas que no alinean ninguna imagen nueva"),
+    PT("Parar as passagens após tantas seguidas que não alinham nenhuma imagem nova"),
+    IT("Fermare i passaggi dopo questi tanti di fila che non allineano immagini nuove"),
+    NL("Stop de rondes na zoveel achter elkaar die geen nieuw beeld uitlijnen"),
+    RU("Остановить проходы после стольких подряд без новых выровненных снимков"),
+    TR("Arka arkaya bu kadar geçiş yeni görüntü hizalamazsa öznitelik geçişlerini "
+       "durdurur"));
+
+SS_MSG(progressive_min_matches_help,
+    EN("Verified matches an unaligned image needs to be worked on; below it, the "
+       "image is taken for an outlier and left alone"),
+    JA("位置合わせされていない画像が処理対象になるのに必要な検証済みマッチ数。"
+       "これ未満は外れ値とみなして手を付けません"),
+    ZH_HANS("未对齐图像需要多少已验证匹配才会被处理；低于此值视为离群图像，不做处理"),
+    ZH_HANT("未對齊影像需要多少已驗證匹配才會被處理；低於此值視為離群影像，不做處理"),
+    KO("정렬되지 않은 이미지가 처리 대상이 되는 데 필요한 검증된 매치 수. 그보다 적으면 "
+       "이상치로 보고 건드리지 않습니다"),
+    DE("Geprüfte Zuordnungen, die ein nicht ausgerichtetes Bild braucht, um "
+       "bearbeitet zu werden; darunter gilt es als Ausreißer und bleibt liegen"),
+    FR("Correspondances vérifiées qu'une image non alignée doit avoir pour être "
+       "traitée ; en dessous, elle est prise pour aberrante et laissée de côté"),
+    ES("Correspondencias verificadas que necesita una imagen sin alinear para "
+       "tratarla; por debajo, se toma como atípica y se deja"),
+    PT("Correspondências verificadas que uma imagem não alinhada precisa para ser "
+       "tratada; abaixo disso, é tida como atípica e deixada de lado"),
+    IT("Corrispondenze verificate che un'immagine non allineata deve avere per "
+       "essere trattata; sotto, è presa per anomala e lasciata stare"),
+    NL("Gecontroleerde overeenkomsten die een niet-uitgelijnd beeld nodig heeft om "
+       "behandeld te worden; daaronder geldt het als uitschieter en blijft liggen"),
+    RU("Сколько проверенных соответствий нужно невыровненному снимку, чтобы им "
+       "занялись; меньше — снимок считается выбросом и не трогается"),
+    TR("Hizalanmamış bir görüntünün işlenmesi için gereken doğrulanmış eşleşme "
+       "sayısı; altında aykırı sayılır ve bırakılır"));
+
 SS_MSG(progressive_error_steps_help,
     EN("Progressive attempts from the start error to the end error, both "
        "included, spaced evenly in ratio"),

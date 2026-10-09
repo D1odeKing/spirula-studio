@@ -8227,6 +8227,237 @@ SS_MSG(progressive_attempts_help,
        "çalışacağı. Her adım hatayı aynı oranda düşürür: 5 adımda 20'den 3'e "
        "20, 12.4, 7.7, 4.8, 3."));
 
+SS_MSG(progressive_redetect,
+    EN("Detect features again on unaligned images"),
+    JA("位置合わせされていない画像で特徴点を再検出"),
+    ZH_HANS("对未对齐的图像重新检测特征"),
+    ZH_HANT("對未對齊的影像重新偵測特徵"),
+    KO("정렬되지 않은 이미지에서 특징점 재검출"),
+    DE("Merkmale auf nicht ausgerichteten Bildern neu erkennen"),
+    FR("Redétecter les points des images non alignées"),
+    ES("Volver a detectar rasgos en las imágenes sin alinear"),
+    PT("Detectar de novo os traços das imagens não alinhadas"),
+    IT("Rilevare di nuovo i punti delle immagini non allineate"),
+    NL("Kenmerken opnieuw detecteren op niet-uitgelijnde beelden"),
+    RU("Заново искать признаки на невыровненных снимках"),
+    TR("Hizalanmamış görüntülerde öznitelikleri yeniden bul"));
+
+SS_MSG(progressive_redetect_help,
+    EN("After the pixel error steps, images still outside the main model that have "
+       "real matches are detected again, each pass with more features and a larger "
+       "working size, and matched against the main model with the same matcher. A "
+       "pass is kept only if the model gains images. Images with almost no matches "
+       "are left alone."),
+    JA("ピクセル誤差の段階の後、まだメインモデルに入らず、実際のマッチを持つ画像を、"
+       "パスごとにより多くの特徴点とより大きな作業サイズで再検出し、同じマッチャーで"
+       "メインモデルと照合します。モデルの画像が増えたパスだけを採用します。"
+       "マッチがほとんどない画像には手を付けません。"),
+    ZH_HANS("像素误差各步之后，对仍不在主模型中、但有真实匹配的图像重新检测特征，每一遍"
+            "增加特征数和工作尺寸，并用同一匹配器与主模型匹配。只有让模型增加图像的那一遍"
+            "才会保留。几乎没有匹配的图像不做处理。"),
+    ZH_HANT("像素誤差各步之後，對仍不在主模型中、但有真實匹配的影像重新偵測特徵，每一遍"
+            "增加特徵數和工作尺寸，並用同一匹配器與主模型匹配。只有讓模型增加影像的那一遍"
+            "才會保留。幾乎沒有匹配的影像不做處理。"),
+    KO("픽셀 오차 단계 뒤에, 아직 메인 모델 밖에 있지만 실제 매치가 있는 이미지를 매 "
+       "패스마다 더 많은 특징점과 더 큰 작업 크기로 재검출하고 같은 매처로 메인 모델과 "
+       "매칭합니다. 모델의 이미지가 늘어난 패스만 유지합니다. 매치가 거의 없는 이미지는 "
+       "건드리지 않습니다."),
+    DE("Nach den Pixelfehlerstufen werden Bilder, die noch außerhalb des Hauptmodells "
+       "liegen, aber echte Zuordnungen haben, neu erkannt, je Durchgang mit mehr "
+       "Merkmalen und größerer Arbeitsgröße, und mit demselben Matcher gegen das "
+       "Hauptmodell abgeglichen. Ein Durchgang bleibt nur, wenn das Modell Bilder "
+       "gewinnt. Bilder fast ohne Zuordnungen bleiben liegen."),
+    FR("Après les paliers d'erreur, les images encore hors du modèle principal qui "
+       "ont de vraies correspondances sont redétectées, chaque passe avec plus de "
+       "points et une taille de travail plus grande, puis appariées au modèle "
+       "principal avec le même apparieur. Une passe n'est gardée que si le modèle "
+       "gagne des images. Les images presque sans correspondances sont laissées."),
+    ES("Tras los pasos de error, las imágenes que siguen fuera del modelo principal "
+       "y tienen correspondencias reales se detectan de nuevo, cada pasada con más "
+       "rasgos y un tamaño de trabajo mayor, y se emparejan con el modelo principal "
+       "con el mismo emparejador. Una pasada solo se conserva si el modelo gana "
+       "imágenes. Las imágenes casi sin correspondencias se dejan."),
+    PT("Após os passos de erro, as imagens ainda fora do modelo principal que têm "
+       "correspondências reais são detectadas de novo, cada passagem com mais traços "
+       "e um tamanho de trabalho maior, e emparelhadas com o modelo principal pelo "
+       "mesmo emparelhador. Uma passagem só é mantida se o modelo ganhar imagens. "
+       "Imagens quase sem correspondências são deixadas de lado."),
+    IT("Dopo i passi di errore, le immagini ancora fuori dal modello principale che "
+       "hanno corrispondenze reali vengono rilevate di nuovo, ogni passaggio con più "
+       "punti e una dimensione di lavoro maggiore, e abbinate al modello principale "
+       "con lo stesso abbinatore. Un passaggio resta solo se il modello guadagna "
+       "immagini. Le immagini quasi senza corrispondenze restano escluse."),
+    NL("Na de foutstappen worden beelden die nog buiten het hoofdmodel liggen maar "
+       "echte overeenkomsten hebben opnieuw gedetecteerd, elke ronde met meer "
+       "kenmerken en een grotere werkgrootte, en met dezelfde matcher tegen het "
+       "hoofdmodel gezet. Een ronde blijft alleen als het model beelden wint. "
+       "Beelden met bijna geen overeenkomsten blijven liggen."),
+    RU("После шагов ошибки снимки вне основной модели, у которых есть настоящие "
+       "соответствия, просматриваются заново, на каждом проходе с большим числом "
+       "признаков и рабочим размером, и сопоставляются с основной моделью тем же "
+       "сопоставителем. Проход сохраняется, только если модель получает снимки. "
+       "Снимки почти без соответствий не трогаются."),
+    TR("Piksel hatası adımlarından sonra, hâlâ ana modelin dışında olup gerçek "
+       "eşleşmeleri olan görüntüler her geçişte daha çok öznitelik ve daha büyük "
+       "çalışma boyutuyla yeniden bulunur ve aynı eşleştiriciyle ana modele "
+       "eşleştirilir. Bir geçiş yalnızca model görüntü kazanırsa tutulur. Neredeyse "
+       "hiç eşleşmesi olmayan görüntüler bırakılır."));
+
+SS_MSG(progressive_features_end,
+    EN("Feature limit at the end"),
+    JA("最後の特徴点上限"),
+    ZH_HANS("最终特征上限"),
+    ZH_HANT("最終特徵上限"),
+    KO("마지막 특징점 한도"),
+    DE("Merkmalsgrenze am Ende"),
+    FR("Limite de points à la fin"),
+    ES("Límite de rasgos al final"),
+    PT("Limite de traços no fim"),
+    IT("Limite di punti alla fine"),
+    NL("Kenmerkgrens aan het eind"),
+    RU("Предел признаков в конце"),
+    TR("Sondaki öznitelik sınırı"));
+
+SS_MSG(progressive_features_end_help,
+    EN("Features per image on the last pass; the first uses the reconstruction's "
+       "own limit. 0 is four times that."),
+    JA("最後のパスでの画像あたりの特徴点数。最初のパスは再構成自体の上限を使います。"
+       "0 はその 4 倍です。"),
+    ZH_HANS("最后一遍每张图像的特征数；第一遍使用重建本身的上限。0 为其 4 倍。"),
+    ZH_HANT("最後一遍每張影像的特徵數；第一遍使用重建本身的上限。0 為其 4 倍。"),
+    KO("마지막 패스의 이미지당 특징점 수. 첫 패스는 재구성 자체의 한도를 씁니다. "
+       "0 은 그 4 배입니다."),
+    DE("Merkmale je Bild im letzten Durchgang; der erste nimmt die Grenze der "
+       "Rekonstruktion. 0 ist das Vierfache davon."),
+    FR("Points par image à la dernière passe ; la première prend la limite de la "
+       "reconstruction. 0 vaut quatre fois celle-ci."),
+    ES("Rasgos por imagen en la última pasada; la primera usa el límite de la "
+       "reconstrucción. 0 es cuatro veces ese."),
+    PT("Traços por imagem na última passagem; a primeira usa o limite da "
+       "reconstrução. 0 é quatro vezes esse."),
+    IT("Punti per immagine all'ultimo passaggio; il primo usa il limite della "
+       "ricostruzione. 0 è quattro volte quello."),
+    NL("Kenmerken per beeld in de laatste ronde; de eerste neemt de grens van de "
+       "reconstructie. 0 is vier keer die."),
+    RU("Признаков на снимок в последнем проходе; первый берёт предел "
+       "реконструкции. 0 — в четыре раза больше."),
+    TR("Son geçişte görüntü başına öznitelik; ilki yeniden yapılandırmanın "
+       "sınırını kullanır. 0, bunun dört katıdır."));
+
+SS_MSG(progressive_size_end,
+    EN("Image size at the end"),
+    JA("最後の画像サイズ"),
+    ZH_HANS("最终图像尺寸"),
+    ZH_HANT("最終影像尺寸"),
+    KO("마지막 이미지 크기"),
+    DE("Bildgröße am Ende"),
+    FR("Taille d'image à la fin"),
+    ES("Tamaño de imagen al final"),
+    PT("Tamanho de imagem no fim"),
+    IT("Dimensione dell'immagine alla fine"),
+    NL("Beeldgrootte aan het eind"),
+    RU("Размер снимка в конце"),
+    TR("Sondaki görüntü boyutu"));
+
+SS_MSG(progressive_size_end_help,
+    EN("Longest edge, in pixels, the last pass detects at; the first uses the "
+       "reconstruction's own. 0 is the images' full size."),
+    JA("最後のパスで検出に使う長辺のピクセル数。最初のパスは再構成自体の値を使います。"
+       "0 は画像の元のサイズです。"),
+    ZH_HANS("最后一遍检测时长边的像素数；第一遍使用重建本身的值。0 为图像原始尺寸。"),
+    ZH_HANT("最後一遍偵測時長邊的像素數；第一遍使用重建本身的值。0 為影像原始尺寸。"),
+    KO("마지막 패스가 검출에 쓰는 긴 변의 픽셀 수. 첫 패스는 재구성 자체의 값을 씁니다. "
+       "0 은 이미지 원래 크기입니다."),
+    DE("Längste Kante in Pixeln, mit der der letzte Durchgang erkennt; der erste "
+       "nimmt die der Rekonstruktion. 0 ist die volle Bildgröße."),
+    FR("Plus grand côté, en pixels, de la dernière passe ; la première prend celui "
+       "de la reconstruction. 0 est la taille complète des images."),
+    ES("Lado más largo, en píxeles, de la última pasada; la primera usa el de la "
+       "reconstrucción. 0 es el tamaño completo de las imágenes."),
+    PT("Lado maior, em pixels, da última passagem; a primeira usa o da "
+       "reconstrução. 0 é o tamanho completo das imagens."),
+    IT("Lato più lungo, in pixel, dell'ultimo passaggio; il primo usa quello della "
+       "ricostruzione. 0 è la dimensione piena delle immagini."),
+    NL("Langste kant in pixels van de laatste ronde; de eerste neemt die van de "
+       "reconstructie. 0 is de volle beeldgrootte."),
+    RU("Длинная сторона в пикселях для последнего прохода; первый берёт значение "
+       "реконструкции. 0 — полный размер снимков."),
+    TR("Son geçişin piksel cinsinden en uzun kenarı; ilki yeniden yapılandırmanınkini "
+       "kullanır. 0, görüntülerin tam boyutudur."));
+
+SS_MSG(progressive_passes,
+    EN("Feature passes"),
+    JA("特徴点パス数"),
+    ZH_HANS("特征检测遍数"),
+    ZH_HANT("特徵偵測遍數"),
+    KO("특징점 패스 수"),
+    DE("Merkmalsdurchgänge"),
+    FR("Passes de détection"),
+    ES("Pasadas de detección"),
+    PT("Passagens de detecção"),
+    IT("Passaggi di rilevamento"),
+    NL("Detectierondes"),
+    RU("Проходы поиска признаков"),
+    TR("Öznitelik geçişleri"));
+
+SS_MSG(progressive_passes_help,
+    EN("How many passes go from the reconstruction's settings to the ends above. "
+       "The last one also looks into flatter, darker texture."),
+    JA("再構成の設定から上の上限まで何回のパスで進むかです。最後のパスはより平坦で暗い"
+       "模様も探します。"),
+    ZH_HANS("从重建的设置到上述上限分几遍进行。最后一遍还会在更平坦、更暗的纹理中查找。"),
+    ZH_HANT("從重建的設定到上述上限分幾遍進行。最後一遍還會在更平坦、更暗的紋理中尋找。"),
+    KO("재구성의 설정에서 위의 한도까지 몇 번의 패스로 갈지입니다. 마지막 패스는 더 "
+       "평평하고 어두운 질감도 살핍니다."),
+    DE("Wie viele Durchgänge von den Einstellungen der Rekonstruktion bis zu den "
+       "obigen Grenzen gehen. Der letzte sucht auch in flacherer, dunklerer Textur."),
+    FR("Combien de passes vont des réglages de la reconstruction aux limites "
+       "ci-dessus. La dernière cherche aussi dans les textures plus plates et "
+       "sombres."),
+    ES("Cuántas pasadas van de los ajustes de la reconstrucción a los límites de "
+       "arriba. La última busca también en texturas más planas y oscuras."),
+    PT("Quantas passagens vão dos ajustes da reconstrução aos limites acima. A "
+       "última procura também em texturas mais planas e escuras."),
+    IT("Quanti passaggi vanno dalle impostazioni della ricostruzione ai limiti qui "
+       "sopra. L'ultimo cerca anche nelle texture più piatte e scure."),
+    NL("Hoeveel rondes gaan van de instellingen van de reconstructie naar de "
+       "grenzen hierboven. De laatste zoekt ook in vlakkere, donkerdere textuur."),
+    RU("Сколько проходов идёт от настроек реконструкции до пределов выше. "
+       "Последний ищет и в более гладкой и тёмной текстуре."),
+    TR("Yeniden yapılandırmanın ayarlarından yukarıdaki sınırlara kaç geçişle "
+       "gidileceği. Sonuncusu daha düz ve koyu dokulara da bakar."));
+
+SS_MSG(progressive_patience,
+    EN("Stop after"),
+    JA("打ち切りまでの回数"),
+    ZH_HANS("停止前的遍数"),
+    ZH_HANT("停止前的遍數"),
+    KO("중단 기준"),
+    DE("Abbruch nach"),
+    FR("Arrêt après"),
+    ES("Parar tras"),
+    PT("Parar após"),
+    IT("Fermarsi dopo"),
+    NL("Stoppen na"),
+    RU("Остановка после"),
+    TR("Durdurma eşiği"));
+
+SS_MSG(progressive_patience_help,
+    EN("Passes in a row that align no new image before the feature passes stop."),
+    JA("新しい画像を位置合わせできないパスがこの回数続くと、特徴点パスを止めます。"),
+    ZH_HANS("连续这么多遍都没有对齐新图像时，停止特征检测。"),
+    ZH_HANT("連續這麼多遍都沒有對齊新影像時，停止特徵偵測。"),
+    KO("새 이미지를 정렬하지 못한 패스가 이만큼 이어지면 특징점 패스를 멈춥니다."),
+    DE("So viele Durchgänge nacheinander ohne neu ausgerichtetes Bild beenden die "
+       "Merkmalsdurchgänge."),
+    FR("Autant de passes de suite sans nouvelle image alignée arrêtent les passes."),
+    ES("Tantas pasadas seguidas sin alinear ninguna imagen nueva detienen las pasadas."),
+    PT("Tantas passagens seguidas sem alinhar nenhuma imagem nova param as passagens."),
+    IT("Questi passaggi di fila senza nuove immagini allineate fermano i passaggi."),
+    NL("Zoveel rondes achter elkaar zonder nieuw uitgelijnd beeld stoppen de rondes."),
+    RU("Столько проходов подряд без новых выровненных снимков останавливают проходы."),
+    TR("Arka arkaya bu kadar geçiş yeni görüntü hizalamazsa geçişler durur."));
+
 SS_MSG(mapper_schedule_help,
     EN("How the scene is built. Flat grows one reconstruction image by image, "
        "and is the default for any capture. Bottom-up cuts the view graph "

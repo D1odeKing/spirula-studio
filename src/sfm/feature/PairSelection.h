@@ -311,4 +311,63 @@ inline std::vector<std::pair<uint32_t, uint32_t>> prefilterPairs(
     return top.pairs();
 }
 
+// prefilterPairs over target x partner pairs only (and target x target), each
+// target keeping its `opt.num_neighbors` best. Every listed image needs
+// descriptors; the rest of `feats` is not read.
+inline std::vector<std::pair<uint32_t, uint32_t>> prefilterPairsFor(
+    const std::vector<FeatureSet>& feats, const PairSelectionOptions& opt,
+    const std::vector<uint32_t>& targets, const std::vector<uint32_t>& partners,
+    const FileOrder* order = nullptr) {
+    const uint32_t n = (uint32_t)feats.size();
+    std::vector<char> is_target(n, 0);
+    for (uint32_t t : targets) is_target[t] = 1;
+    std::vector<std::pair<uint32_t, uint32_t>> cand;
+    for (uint32_t t : targets) {
+        for (uint32_t p : partners)
+            if (!is_target[p]) cand.emplace_back(std::min(t, p), std::max(t, p));
+        for (uint32_t u : targets)
+            if (u > t) cand.emplace_back(t, u);
+    }
+    std::sort(cand.begin(), cand.end());
+    cand.erase(std::unique(cand.begin(), cand.end()), cand.end());
+    if (cand.empty()) return {};
+
+    std::vector<uint32_t> used;
+    for (const auto& c : cand) {
+        used.push_back(c.first);
+        used.push_back(c.second);
+    }
+    std::sort(used.begin(), used.end());
+    used.erase(std::unique(used.begin(), used.end()), used.end());
+    // The matcher sizes itself over every entry, so the rest point at an empty set.
+    const FeatureSet none;
+    std::vector<FeatureSet> owned(n);
+    std::vector<const FeatureSet*> sets(2 * (size_t)n, &none);
+    for (uint32_t i : used) {
+        owned[i] = topScaleSubset(feats[i], opt.num_features);
+        sets[i] = &owned[i];
+        sets[(size_t)n + i] = &feats[i];
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> ordered;
+    ordered.reserve(2 * cand.size());
+    for (const auto& c : cand) {
+        ordered.emplace_back(c.first, n + c.second);
+        ordered.emplace_back(c.second, n + c.first);
+    }
+    BruteForceMatcher matcher(detail::countingOptions(opt));
+    const std::vector<uint32_t> s =
+        detail::scoreOrderedPairs(matcher, sets, ordered, opt, 0, ordered.size(), nullptr);
+    detail::TopPartners top(n, opt.num_neighbors, opt.min_score);
+    for (size_t e = 0; e < cand.size(); e++) {
+        const uint32_t score = std::max(s[2 * e], s[2 * e + 1]);
+        const uint32_t a = cand[e].first, b = cand[e].second;
+        top.add(a, b, score,
+                order ? score * order->boost(a, b, opt.order_weight, opt.order_decay) : (double)score);
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> out;
+    for (const auto& p : top.pairs())
+        if (is_target[p.first] || is_target[p.second]) out.push_back(p);
+    return out;
+}
+
 }  // namespace sfm

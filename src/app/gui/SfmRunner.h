@@ -165,6 +165,13 @@ struct SfmJob {
     float progressive_error_start = 20.0f;
     float progressive_error_end = 0.0f;
     int progressive_error_steps = 5;
+    // Then images still outside the largest model detected again, from the
+    // run's features and size to these ends (0: 4x the features, full size).
+    bool progressive_features = true;
+    int progressive_max_features_end = 0;
+    int progressive_image_size_end = 0;
+    int progressive_feature_steps = 3;
+    int progressive_patience = 2;
     // An index into kSfmFeatures. A frontend choice, not a quality level: the
     // learned ones run on their own resolution ladder, so the quality preset
     // means something different for each.

@@ -2511,6 +2511,85 @@ SS_MSG(progressive_attempt_done,
     TR("kademeli deneme {0}/{1} bitti -- en büyük model: {2}, hizalanan: {3}, "
        "model: {4}, {5}"));
 
+SS_MSG(progressive_feature_pass,
+    EN("feature pass {0}/{1}: {2} unaligned image(s) detected again at {3} px, {4} features"),
+    JA("特徴点パス {0}/{1}: 位置合わせされていない画像 {2} 枚を {3} px、特徴点 {4} で再検出"),
+    ZH_HANS("特征检测第 {0}/{1} 遍：以 {3} px、{4} 个特征重新检测 {2} 张未对齐图像"),
+    ZH_HANT("特徵偵測第 {0}/{1} 遍：以 {3} px、{4} 個特徵重新偵測 {2} 張未對齊影像"),
+    KO("특징점 패스 {0}/{1}: 정렬되지 않은 이미지 {2} 장을 {3} px, 특징점 {4} 로 재검출"),
+    DE("Merkmalsdurchgang {0}/{1}: {2} nicht ausgerichtete(s) Bild(er) neu erkannt "
+       "bei {3} px, {4} Merkmale"),
+    FR("passe de détection {0}/{1} : {2} image(s) non alignée(s) redétectée(s) à "
+       "{3} px, {4} points"),
+    ES("pasada de detección {0}/{1}: {2} imagen(es) sin alinear detectada(s) de "
+       "nuevo a {3} px, {4} rasgos"),
+    PT("passagem de detecção {0}/{1}: {2} imagem(ns) não alinhada(s) detectada(s) de "
+       "novo a {3} px, {4} traços"),
+    IT("passaggio di rilevamento {0}/{1}: {2} immagine/i non allineata/e rilevata/e "
+       "di nuovo a {3} px, {4} punti"),
+    NL("detectieronde {0}/{1}: {2} niet-uitgelijnd(e) beeld(en) opnieuw gedetecteerd "
+       "op {3} px, {4} kenmerken"),
+    RU("проход поиска признаков {0}/{1}: невыровненных снимков заново: {2}, "
+       "{3} px, признаков: {4}"),
+    TR("öznitelik geçişi {0}/{1}: hizalanmamış {2} görüntü {3} px'te, {4} "
+       "öznitelikle yeniden bulundu"));
+
+SS_MSG(progressive_feature_kept,
+    EN("feature pass {0}/{1} kept -- pairs: {3}/{2} verified, largest model {4} -> {5} "
+       "images, mean error {6} -> {7} px, {8}"),
+    JA("特徴点パス {0}/{1} を採用 -- ペア: {3}/{2} 検証済み、最大モデル {4} -> {5} 枚、"
+       "平均誤差 {6} -> {7} px、{8}"),
+    ZH_HANS("保留特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型 {4} -> {5} 张，"
+            "平均误差 {6} -> {7} px，{8}"),
+    ZH_HANT("保留特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型 {4} -> {5} 張，"
+            "平均誤差 {6} -> {7} px，{8}"),
+    KO("특징점 패스 {0}/{1} 유지 -- 쌍: {3}/{2} 검증됨, 최대 모델 {4} -> {5} 장, "
+       "평균 오차 {6} -> {7} px, {8}"),
+    DE("Merkmalsdurchgang {0}/{1} behalten -- Paare: {3}/{2} geprüft, größtes Modell "
+       "{4} -> {5} Bilder, mittlerer Fehler {6} -> {7} px, {8}"),
+    FR("passe de détection {0}/{1} gardée -- paires : {3}/{2} vérifiées, plus grand "
+       "modèle {4} -> {5} images, erreur moyenne {6} -> {7} px, {8}"),
+    ES("pasada de detección {0}/{1} conservada: pares: {3}/{2} verificados, modelo "
+       "mayor {4} -> {5} imágenes, error medio {6} -> {7} px, {8}"),
+    PT("passagem de detecção {0}/{1} mantida -- pares: {3}/{2} verificados, maior "
+       "modelo {4} -> {5} imagens, erro médio {6} -> {7} px, {8}"),
+    IT("passaggio di rilevamento {0}/{1} tenuto -- coppie: {3}/{2} verificate, modello "
+       "più grande {4} -> {5} immagini, errore medio {6} -> {7} px, {8}"),
+    NL("detectieronde {0}/{1} behouden -- paren: {3}/{2} gecontroleerd, grootste model "
+       "{4} -> {5} beelden, gemiddelde fout {6} -> {7} px, {8}"),
+    RU("проход поиска признаков {0}/{1} сохранён -- пары: {3}/{2} проверено, "
+       "крупнейшая модель {4} -> {5} снимков, средняя ошибка {6} -> {7} px, {8}"),
+    TR("öznitelik geçişi {0}/{1} tutuldu -- çiftler: {3}/{2} doğrulandı, en büyük "
+       "model {4} -> {5} görüntü, ortalama hata {6} -> {7} px, {8}"));
+
+SS_MSG(progressive_feature_undone,
+    EN("feature pass {0}/{1} undone -- pairs: {3}/{2} verified, largest model {4} -> {5} "
+       "images, mean error {6} -> {7} px, {8}"),
+    JA("特徴点パス {0}/{1} を取り消し -- ペア: {3}/{2} 検証済み、最大モデル {4} -> {5} 枚、"
+       "平均誤差 {6} -> {7} px、{8}"),
+    ZH_HANS("撤销特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型 {4} -> {5} 张，"
+            "平均误差 {6} -> {7} px，{8}"),
+    ZH_HANT("撤銷特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型 {4} -> {5} 張，"
+            "平均誤差 {6} -> {7} px，{8}"),
+    KO("특징점 패스 {0}/{1} 취소 -- 쌍: {3}/{2} 검증됨, 최대 모델 {4} -> {5} 장, "
+       "평균 오차 {6} -> {7} px, {8}"),
+    DE("Merkmalsdurchgang {0}/{1} verworfen -- Paare: {3}/{2} geprüft, größtes Modell "
+       "{4} -> {5} Bilder, mittlerer Fehler {6} -> {7} px, {8}"),
+    FR("passe de détection {0}/{1} annulée -- paires : {3}/{2} vérifiées, plus grand "
+       "modèle {4} -> {5} images, erreur moyenne {6} -> {7} px, {8}"),
+    ES("pasada de detección {0}/{1} deshecha: pares: {3}/{2} verificados, modelo "
+       "mayor {4} -> {5} imágenes, error medio {6} -> {7} px, {8}"),
+    PT("passagem de detecção {0}/{1} desfeita -- pares: {3}/{2} verificados, maior "
+       "modelo {4} -> {5} imagens, erro médio {6} -> {7} px, {8}"),
+    IT("passaggio di rilevamento {0}/{1} annullato -- coppie: {3}/{2} verificate, "
+       "modello più grande {4} -> {5} immagini, errore medio {6} -> {7} px, {8}"),
+    NL("detectieronde {0}/{1} ongedaan -- paren: {3}/{2} gecontroleerd, grootste model "
+       "{4} -> {5} beelden, gemiddelde fout {6} -> {7} px, {8}"),
+    RU("проход поиска признаков {0}/{1} отменён -- пары: {3}/{2} проверено, "
+       "крупнейшая модель {4} -> {5} снимков, средняя ошибка {6} -> {7} px, {8}"),
+    TR("öznitelik geçişi {0}/{1} geri alındı -- çiftler: {3}/{2} doğrulandı, en büyük "
+       "model {4} -> {5} görüntü, ortalama hata {6} -> {7} px, {8}"));
+
 SS_MSG(match_order_weight,
     EN("pair selection -- file order weight: {0}, decay: {1}"),
     JA("ペア選択 -- ファイル順の重み: {0}、減衰: {1}"),
