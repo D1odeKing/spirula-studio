@@ -2606,6 +2606,8 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         models = runMapper(*single, db, feats, cfg, ast);
     }
     Mapper& mapper = progressive ? progressive->mapper() : *single;
+    if (progressive && !progressive->writeReport(ws / "progressive.txt"))
+        L::err_raw(Tag::Map, "cannot write " + (ws / "progressive.txt").string());
     double t_map = now() - t0;
 
     {

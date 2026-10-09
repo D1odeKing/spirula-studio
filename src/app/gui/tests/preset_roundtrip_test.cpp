@@ -140,6 +140,7 @@ static void test_dataset_preset() {
     s.sfm.progressive_image_size_end = 4000;
     s.sfm.progressive_feature_steps = 4;
     s.sfm.progressive_patience = 3;
+    s.sfm.progressive_time = 45.0f;
     s.sfm.use_sequence = false;
     s.sfm.init_focal_px = 1500.0f;
     s.sfm.init_distortion = "0.1,0.02";
@@ -272,6 +273,7 @@ static void test_dataset_preset() {
     CHECK_EQ(b.sfm.progressive_image_size_end, s.sfm.progressive_image_size_end);
     CHECK_EQ(b.sfm.progressive_feature_steps, s.sfm.progressive_feature_steps);
     CHECK_EQ(b.sfm.progressive_patience, s.sfm.progressive_patience);
+    CHECK_EQ(b.sfm.progressive_time, s.sfm.progressive_time);
     CHECK_EQ(b.sfm.use_sequence, s.sfm.use_sequence);
     CHECK_EQ(b.sfm.init_focal_px, s.sfm.init_focal_px);
     CHECK_EQ(b.sfm.init_distortion, s.sfm.init_distortion);

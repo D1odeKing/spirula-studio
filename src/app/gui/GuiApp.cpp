@@ -7481,7 +7481,12 @@ void GuiApp::draw_sfm_advanced() {
             ImGui::SetNextItemWidth(px(240.0f));
             ui::InputInt(dmsg::progressive_patience, &_sfm_job.progressive_patience);
             ui::help_on_hover(dmsg::progressive_patience_help);
+            ImGui::SetNextItemWidth(px(240.0f));
+            ui::InputFloat(dmsg::progressive_time_limit, &_sfm_job.progressive_time, 0, 0,
+                           "%.3g");
+            ui::help_on_hover(dmsg::progressive_time_limit_help);
             SfmJob& j = _sfm_job;
+            j.progressive_time = std::max(0.0f, j.progressive_time);
             j.progressive_max_features_end = std::max(0, j.progressive_max_features_end);
             j.progressive_image_size_end = std::max(0, j.progressive_image_size_end);
             j.progressive_feature_steps = std::clamp(j.progressive_feature_steps, 1, 20);

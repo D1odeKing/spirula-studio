@@ -51,7 +51,7 @@ bool sfm_option_panel_owned(const std::string& flag) {
         "loma-descriptor-model", "loma-matcher-model", "progressive", "progressive-error-start",
         "progressive-error-end", "progressive-error-steps", "progressive-features",
         "progressive-max-features-end", "progressive-image-size-end", "progressive-feature-steps",
-        "progressive-patience",
+        "progressive-patience", "progressive-time",
     };
     for (const char* o : kOwned)
         if (flag == o) return true;

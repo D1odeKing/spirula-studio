@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <set>
 
 #include "sfm/core/Cancel.h"
+#include "sfm/core/Events.h"
 #include "sfm/core/Log.h"
 #include "sfm/core/Progress.h"
 #include "sfm/feature/LearnedMatcher.h"
@@ -125,6 +127,7 @@ void ProgressiveAligner::ladder(std::vector<Reconstruction>& models, size_t from
             a.pairs = db_->pairs.size();
         }
         prev.reset();
+        if (!in_pass_) announce();
         if (verbose)
             L::out(Tag::Map, M::progressive_attempt,
                    {(long long)(k + 1), (long long)errors_.size(), L::num(e, 1),
@@ -203,8 +206,15 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
         cancel::check();
         const std::vector<uint32_t> tg = targets(models);
         if (tg.empty() || models.empty()) break;
+        if (cfg_.progressive_time > 0 && now() - start_ > 60.0 * cfg_.progressive_time) {
+            if (verbose)
+                L::out(Tag::Map, M::progressive_time_up,
+                       {L::num(cfg_.progressive_time, 1), (long long)(p - 1)});
+            break;
+        }
         const double t0 = now();
         const double frac = (double)p / passes;
+        announce();
         int end_size = cfg_.progressive_image_size_end;
         if (end_size <= 0)
             for (uint32_t t : tg) end_size = std::max({end_size, feats_[t].width, feats_[t].height});
@@ -305,7 +315,9 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
         // ---- the ladder's tail, from the largest model alone ----
         // The other models' observations of the targets index their old rows.
         models.resize(1);
+        in_pass_ = true;
         ladder(models, tail, ast);
+        in_pass_ = false;
 
         const uint32_t after = models.empty() ? 0 : models.front().numRegistered();
         const double after_err = models.empty() ? 0 : meanError(models.front(), feats_);
@@ -315,16 +327,61 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
                    {(long long)p, (long long)passes, (long long)pairs.size(),
                     (long long)verified, (long long)before, (long long)after,
                     L::num(before_err, 2), L::num(after_err, 2), format_duration(now() - t0)});
+        ProgressivePass rec;
+        rec.pass = p;
+        rec.targets = tg.size();
+        rec.image_size = pc.max_image_size;
+        rec.features = nf;
+        rec.pairs = pairs.size();
+        rec.verified = verified;
+        rec.before = before;
+        rec.after = after;
+        rec.error_before = before_err;
+        rec.error_after = after_err;
+        rec.seconds = now() - t0;
+        rec.kept = kept;
         if (kept) {
             dry = 0;
         } else {
             restore();
             dry++;
         }
+        passes_.push_back(rec);
     }
 }
 
+bool ProgressiveAligner::writeReport(const fs::path& path) const {
+    std::ofstream f(path);
+    if (!f) return false;
+    f << "# attempt error_px pairs largest aligned models seconds\n";
+    for (size_t k = 0; k < attempts_.size(); k++) {
+        const ProgressiveAttempt& a = attempts_[k];
+        f << "attempt " << k + 1 << ' ' << a.error << ' ' << a.pairs << ' ' << a.largest << ' '
+          << a.registered << ' ' << a.models << ' ' << a.seconds << '\n';
+    }
+    f << "# pass images image_size features pairs verified largest_before largest_after "
+         "error_before error_after seconds outcome\n";
+    for (const ProgressivePass& p : passes_)
+        f << "pass " << p.pass << ' ' << p.targets << ' ' << p.image_size << ' ' << p.features
+          << ' ' << p.pairs << ' ' << p.verified << ' ' << p.before << ' ' << p.after << ' '
+          << p.error_before << ' ' << p.error_after << ' ' << p.seconds << ' '
+          << (p.kept ? "kept" : "undone") << '\n';
+    return (bool)f;
+}
+
+// The mapper begins stages of its own (seed, refine) inside an attempt, so the
+// step is announced again each time rather than once.
+void ProgressiveAligner::announce() {
+    const int64_t total = (int64_t)errors_.size() +
+                          (cfg_.progressive_features ? std::max(1, cfg_.progressive_feature_steps) : 0);
+    const int64_t done = std::min<int64_t>(total, (int64_t)(++steps_));
+    events::stage_begin(Stage::Progressive, total);
+    events::progress(Stage::Progressive, done, total);
+}
+
 std::vector<Reconstruction> ProgressiveAligner::run(AssembleStats& ast) {
+    start_ = now();
+    steps_ = 0;
     std::vector<Reconstruction> models;
     ladder(models, 0, ast);
     if (cfg_.progressive_features) featurePasses(models, ast);

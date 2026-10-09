@@ -288,6 +288,21 @@ SS_MSG(stage_measuring_focals,
     RU("Измерение фокусного расстояния каждой камеры"),
     TR("Her kameranın odak uzaklığı ölçülüyor"));
 
+SS_MSG(stage_progressive,
+    EN("Progressive alignment: step {0} of {1}"),
+    JA("段階的な位置合わせ: {1} 段中 {0} 段目"),
+    ZH_HANS("渐进对齐：第 {0} 步，共 {1} 步"),
+    ZH_HANT("漸進對齊：第 {0} 步，共 {1} 步"),
+    KO("단계적 정렬: {1} 단계 중 {0} 단계"),
+    DE("Schrittweise Ausrichtung: Schritt {0} von {1}"),
+    FR("Alignement progressif : étape {0} sur {1}"),
+    ES("Alineación progresiva: paso {0} de {1}"),
+    PT("Alinhamento progressivo: passo {0} de {1}"),
+    IT("Allineamento progressivo: passo {0} di {1}"),
+    NL("Stapsgewijze uitlijning: stap {0} van {1}"),
+    RU("Постепенное выравнивание: шаг {0} из {1}"),
+    TR("Kademeli hizalama: {1} adımın {0}. adımı"));
+
 SS_MSG(stage_seeding,
     EN("Choosing the lens and a starting pair"),
     JA("レンズと最初のペアを決めています"),

@@ -126,6 +126,7 @@ struct SfmConfig {
     int progressive_feature_steps = 3;
     int progressive_patience = 2;
     int progressive_min_matches = 50;
+    double progressive_time = 0;   // minutes before no further feature pass starts; 0 = none
     // 0 means "whatever the selected frontend wants" -- 3200 for SIFT, 1600
     // for a learned one, mirroring COLMAP's EffMaxImageSize(). Resolved in
     // finalize(), so a command that applies no presets (extract, match) still
@@ -389,6 +390,8 @@ struct SfmConfig {
       20, "", progressive_patience)                                                                \
     F(progressive_min_matches, "progressive-min-matches", CMD_AUTO, Tier::Advanced, "progressive", \
       0, 1000000, "", progressive_min_matches)                                                     \
+    F(progressive_time, "progressive-time", CMD_AUTO, Tier::Advanced, "progressive", 0, 100000,    \
+      "", progressive_time)                                                                        \
     F(max_image_size, "max-image-size", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "pipeline", 0,     \
       20000, "", max_image_size)                                                                   \
     F(mask_dir, "masks", CMD_AUTO | CMD_EXTRACT, Tier::Basic, "pipeline", 0, 0, "", masks)         \

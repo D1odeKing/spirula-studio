@@ -2590,6 +2590,25 @@ SS_MSG(progressive_feature_undone,
     TR("öznitelik geçişi {0}/{1} geri alındı -- çiftler: {3}/{2} doğrulandı, en büyük "
        "model {4} -> {5} görüntü, ortalama hata {6} -> {7} px, {8}"));
 
+SS_MSG(progressive_time_up,
+    EN("progressive alignment: the {0} minute limit is up after {1} feature pass(es)"),
+    JA("段階的な位置合わせ: {1} 回の特徴点パスで {0} 分の上限に達しました"),
+    ZH_HANS("渐进对齐：{1} 遍特征检测后已到 {0} 分钟的上限"),
+    ZH_HANT("漸進對齊：{1} 遍特徵偵測後已到 {0} 分鐘的上限"),
+    KO("단계적 정렬: 특징점 패스 {1} 회 후 {0} 분 한도에 도달했습니다"),
+    DE("schrittweise Ausrichtung: die Grenze von {0} Minuten ist nach {1} "
+       "Merkmalsdurchgang/-gängen erreicht"),
+    FR("alignement progressif : la limite de {0} minutes est atteinte après {1} "
+       "passe(s)"),
+    ES("alineación progresiva: se alcanzó el límite de {0} minutos tras {1} pasada(s)"),
+    PT("alinhamento progressivo: o limite de {0} minutos foi atingido após {1} "
+       "passagem(ns)"),
+    IT("allineamento progressivo: raggiunto il limite di {0} minuti dopo {1} "
+       "passaggio/i"),
+    NL("stapsgewijze uitlijning: de grens van {0} minuten is bereikt na {1} ronde(s)"),
+    RU("постепенное выравнивание: предел {0} мин достигнут после проходов: {1}"),
+    TR("kademeli hizalama: {1} geçişten sonra {0} dakikalık sınıra ulaşıldı"));
+
 SS_MSG(match_order_weight,
     EN("pair selection -- file order weight: {0}, decay: {1}"),
     JA("ペア選択 -- ファイル順の重み: {0}、減衰: {1}"),

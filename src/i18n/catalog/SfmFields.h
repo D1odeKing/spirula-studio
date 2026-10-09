@@ -1823,6 +1823,32 @@ SS_MSG(progressive_min_matches_help,
     TR("Hizalanmamış bir görüntünün işlenmesi için gereken doğrulanmış eşleşme "
        "sayısı; altında aykırı sayılır ve bırakılır"));
 
+SS_MSG(progressive_time_help,
+    EN("Minutes into progressive alignment after which no further feature pass "
+       "starts; 0 is no limit"),
+    JA("段階的な位置合わせの開始からこの分数を過ぎたら、次の特徴点パスを始めません。"
+       "0 で無制限"),
+    ZH_HANS("渐进对齐开始后超过这么多分钟，就不再开始新的特征检测；0 为不限"),
+    ZH_HANT("漸進對齊開始後超過這麼多分鐘，就不再開始新的特徵偵測；0 為不限"),
+    KO("단계적 정렬을 시작하고 이 분이 지나면 다음 특징점 패스를 시작하지 않습니다. "
+       "0 은 제한 없음"),
+    DE("Minuten nach Beginn der schrittweisen Ausrichtung, nach denen kein weiterer "
+       "Merkmalsdurchgang beginnt; 0 ist ohne Grenze"),
+    FR("Minutes après le début de l'alignement progressif au-delà desquelles aucune "
+       "passe ne démarre ; 0 est sans limite"),
+    ES("Minutos desde el inicio de la alineación progresiva tras los que no empieza "
+       "otra pasada; 0 es sin límite"),
+    PT("Minutos desde o início do alinhamento progressivo após os quais nenhuma "
+       "passagem começa; 0 é sem limite"),
+    IT("Minuti dall'inizio dell'allineamento progressivo dopo i quali non parte altro "
+       "passaggio; 0 è senza limite"),
+    NL("Minuten na het begin van de stapsgewijze uitlijning waarna geen nieuwe "
+       "ronde begint; 0 is zonder grens"),
+    RU("Минуты от начала постепенного выравнивания, после которых новый проход не "
+       "начинается; 0 — без ограничения"),
+    TR("Kademeli hizalama başladıktan sonra yeni geçiş başlatılmayan dakika sayısı; "
+       "0 sınırsızdır"));
+
 SS_MSG(progressive_error_steps_help,
     EN("Progressive attempts from the start error to the end error, both "
        "included, spaced evenly in ratio"),

@@ -256,7 +256,7 @@ ModelPart field_part(const std::string& key) {
         "final_free_rig", "metric_gps",        "sensor_gauge",
         "exif_attitude",  "progressive_error_end", "progressive_error_steps",
         "progressive_features", "progressive_max_features_end", "progressive_image_size_end",
-        "progressive_feature_steps", "progressive_patience",
+        "progressive_feature_steps", "progressive_patience", "progressive_time",
     };
     for (const char* k : matching)
         if (key == k) return ModelPart::Matching;
@@ -484,6 +484,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
     job.progressive_max_features_end = job.progressive_image_size_end = 0;
     job.progressive_feature_steps = 3;
     job.progressive_patience = 2;
+    job.progressive_time = 0.0f;
     job.metric_gps = 0;
     job.sensor_gauge = job.exif_attitude = 2;
     job.distortion_refine = 0;
@@ -523,6 +524,7 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
         else if (flag == "--progressive-feature-steps")
             job.progressive_feature_steps = (int)to_float(take());
         else if (flag == "--progressive-patience") job.progressive_patience = (int)to_float(take());
+        else if (flag == "--progressive-time") job.progressive_time = to_float(take());
         else if (flag == "--focal") job.init_focal_px = to_float(take());
         else if (flag == "--distortion") job.init_distortion = take();
         else if (flag == "--no-refine-extra-params")
@@ -717,6 +719,8 @@ StepFields model_fields(const SfmJob& job) {
             add(f, "progressive_image_size_end", "", num(job.progressive_image_size_end));
             add(f, "progressive_feature_steps", "", num(job.progressive_feature_steps));
             add(f, "progressive_patience", "", num(job.progressive_patience));
+            if (job.progressive_time > 0)
+                add(f, "progressive_time", "", num(job.progressive_time));
         }
     }
     if (job.init_focal_px > 0) add(f, "focal_px", "", num(job.init_focal_px));

@@ -8458,6 +8458,50 @@ SS_MSG(progressive_patience_help,
     RU("Столько проходов подряд без новых выровненных снимков останавливают проходы."),
     TR("Arka arkaya bu kadar geçiş yeni görüntü hizalamazsa geçişler durur."));
 
+SS_MSG(progressive_time_limit,
+    EN("Time limit (minutes)"),
+    JA("制限時間（分）"),
+    ZH_HANS("时间上限（分钟）"),
+    ZH_HANT("時間上限（分鐘）"),
+    KO("시간 한도(분)"),
+    DE("Zeitgrenze (Minuten)"),
+    FR("Limite de temps (minutes)"),
+    ES("Límite de tiempo (minutos)"),
+    PT("Limite de tempo (minutos)"),
+    IT("Limite di tempo (minuti)"),
+    NL("Tijdgrens (minuten)"),
+    RU("Предел времени (минуты)"),
+    TR("Süre sınırı (dakika)"));
+
+SS_MSG(progressive_time_limit_help,
+    EN("No further feature pass starts once progressive alignment has run this "
+       "long. The pixel error steps always finish. 0 is no limit."),
+    JA("段階的な位置合わせがこの時間を過ぎたら、次の特徴点パスは始めません。"
+       "ピクセル誤差の段階は必ず最後まで行います。0 で無制限。"),
+    ZH_HANS("渐进对齐运行超过这么久后，不再开始新的特征检测。像素误差各步总会完成。"
+            "0 为不限。"),
+    ZH_HANT("漸進對齊執行超過這麼久後，不再開始新的特徵偵測。像素誤差各步總會完成。"
+            "0 為不限。"),
+    KO("단계적 정렬이 이만큼 진행되면 다음 특징점 패스는 시작하지 않습니다. 픽셀 오차 "
+       "단계는 항상 끝까지 합니다. 0 은 제한 없음."),
+    DE("Ist die schrittweise Ausrichtung so lange gelaufen, beginnt kein weiterer "
+       "Merkmalsdurchgang. Die Pixelfehlerstufen laufen immer zu Ende. 0 ist ohne "
+       "Grenze."),
+    FR("Une fois l'alignement progressif arrivé à cette durée, aucune nouvelle passe "
+       "ne démarre. Les paliers d'erreur vont toujours au bout. 0 est sans limite."),
+    ES("Cuando la alineación progresiva lleva este tiempo, no empieza otra pasada. "
+       "Los pasos de error siempre terminan. 0 es sin límite."),
+    PT("Quando o alinhamento progressivo chega a esse tempo, nenhuma passagem nova "
+       "começa. Os passos de erro sempre terminam. 0 é sem limite."),
+    IT("Quando l'allineamento progressivo arriva a questa durata, non parte altro "
+       "passaggio. I passi di errore arrivano sempre in fondo. 0 è senza limite."),
+    NL("Heeft de stapsgewijze uitlijning zo lang gelopen, dan begint geen nieuwe "
+       "ronde. De foutstappen lopen altijd af. 0 is zonder grens."),
+    RU("Когда постепенное выравнивание идёт столько времени, новый проход не "
+       "начинается. Шаги ошибки всегда доходят до конца. 0 — без ограничения."),
+    TR("Kademeli hizalama bu kadar sürdüğünde yeni geçiş başlamaz. Piksel hatası "
+       "adımları her zaman biter. 0 sınırsızdır."));
+
 SS_MSG(mapper_schedule_help,
     EN("How the scene is built. Flat grows one reconstruction image by image, "
        "and is the default for any capture. Bottom-up cuts the view graph "

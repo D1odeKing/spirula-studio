@@ -172,6 +172,7 @@ struct SfmJob {
     int progressive_image_size_end = 0;
     int progressive_feature_steps = 3;
     int progressive_patience = 2;
+    float progressive_time = 0.0f;   // minutes; 0 = no limit
     // An index into kSfmFeatures. A frontend choice, not a quality level: the
     // learned ones run on their own resolution ladder, so the quality preset
     // means something different for each.
@@ -346,6 +347,7 @@ private:
     std::atomic<bool> _not_metric{false};
     // The child said how it ended, so the exit code need not be interpreted.
     bool _have_status = false;
+    std::string _progressive_label;   // set while progressive attempts run
     int64_t _status_mtime = 0;
     RunProgress _prog;
     RunFilms _films;
