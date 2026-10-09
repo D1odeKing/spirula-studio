@@ -2471,6 +2471,21 @@ SS_MSG(match_prefilter_params,
     RU("отбор пар -- лучших признаков: {0}, соседей: {1}"),
     TR("çift seçimi -- en iyi öznitelik: {0}, komşu: {1}"));
 
+SS_MSG(match_order_weight,
+    EN("pair selection -- file order weight: {0}, decay: {1}"),
+    JA("ペア選択 -- ファイル順の重み: {0}、減衰: {1}"),
+    ZH_HANS("像对筛选 —— 文件顺序权重 {0}，衰减 {1}"),
+    ZH_HANT("影像對篩選 —— 檔案順序權重 {0}，衰減 {1}"),
+    KO("쌍 선택 -- 파일 순서 가중치: {0}, 감쇠: {1}"),
+    DE("Paarauswahl -- Gewicht der Dateireihenfolge: {0}, Abfall: {1}"),
+    FR("sélection de paires -- poids de l'ordre des fichiers : {0}, décroissance : {1}"),
+    ES("selección de pares: peso del orden de archivos: {0}, caída: {1}"),
+    PT("seleção de pares -- peso da ordem dos arquivos: {0}, decaimento: {1}"),
+    IT("selezione delle coppie -- peso dell'ordine dei file: {0}, decadimento: {1}"),
+    NL("paarselectie -- gewicht van de bestandsvolgorde: {0}, verval: {1}"),
+    RU("отбор пар -- вес порядка файлов: {0}, спад: {1}"),
+    TR("çift seçimi -- dosya sırası ağırlığı: {0}, azalma: {1}"));
+
 // The matcher's name is an identifier (`lightglue`), so it stays as it is.
 SS_MSG(match_matcher_name,
     EN("matcher: {0}"),

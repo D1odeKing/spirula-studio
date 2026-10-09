@@ -1556,6 +1556,65 @@ SS_MSG(prefilter_ratio_help,
     TR("Puanlama geçişinin Lowe oranı; yalnızca sıraladığı için eşleştiricininki "
        "kadar sıkı değildir"));
 
+SS_MSG(order_weight_help,
+    EN("How much pair selection favours images close in file order within a folder; "
+       "an adjacent image's score counts 1 + this times. 0 is off"),
+    JA("ペア選択が同じフォルダ内でファイル順の近い画像をどれだけ優先するか。"
+       "隣の画像のスコアは 1 + この値 倍になります。0 で無効"),
+    ZH_HANS("像对筛选对同一文件夹中文件顺序相近的图像的偏好程度；"
+            "相邻图像的分数按 1 + 此值 倍计。0 为关闭"),
+    ZH_HANT("影像對篩選對同一資料夾中檔案順序相近的影像的偏好程度；"
+            "相鄰影像的分數按 1 + 此值 倍計。0 為關閉"),
+    KO("같은 폴더 안에서 파일 순서가 가까운 이미지를 쌍 선택이 얼마나 우대하는지. "
+       "바로 옆 이미지의 점수는 1 + 이 값 배가 됩니다. 0 은 끔"),
+    DE("Wie stark die Paarauswahl Bilder bevorzugt, die in einem Ordner in "
+       "Dateireihenfolge nahe liegen; der Wert eines direkten Nachbarn zählt "
+       "1 + diesen Wert fach. 0 ist aus"),
+    FR("À quel point la sélection de paires favorise les images proches dans "
+       "l'ordre des fichiers d'un même dossier ; le score d'une image voisine "
+       "compte 1 + cette valeur fois. 0 désactive"),
+    ES("Cuánto favorece la selección de pares a las imágenes cercanas en el orden "
+       "de archivos de una carpeta; la puntuación de una imagen contigua cuenta "
+       "1 + este valor veces. 0 lo desactiva"),
+    PT("Quanto a seleção de pares favorece imagens próximas na ordem dos arquivos "
+       "de uma pasta; a pontuação de uma imagem vizinha conta 1 + este valor "
+       "vezes. 0 desliga"),
+    IT("Quanto la selezione delle coppie favorisce le immagini vicine nell'ordine "
+       "dei file di una cartella; il punteggio di un'immagine adiacente conta "
+       "1 + questo valore volte. 0 la disattiva"),
+    NL("Hoeveel de paarselectie beelden voortrekt die binnen een map dicht bij "
+       "elkaar in bestandsvolgorde liggen; de score van een naastgelegen beeld "
+       "telt 1 + deze waarde keer. 0 is uit"),
+    RU("Насколько отбор пар предпочитает изображения, близкие в порядке файлов "
+       "одной папки; оценка соседнего изображения умножается на 1 + это значение. "
+       "0 выключает"),
+    TR("Çift seçiminin bir klasörde dosya sırasında yakın görüntüleri ne kadar "
+       "kayırdığı; bitişik bir görüntünün puanı 1 + bu değer kat sayılır. 0 kapalı"));
+
+SS_MSG(order_decay_help,
+    EN("File-order distance, in images, over which the --order-weight bonus falls "
+       "to about a third"),
+    JA("--order-weight の加点がおよそ 3 分の 1 に下がるファイル順の距離（画像数）"),
+    ZH_HANS("--order-weight 的加成降到约三分之一时的文件顺序距离（图像数）"),
+    ZH_HANT("--order-weight 的加成降到約三分之一時的檔案順序距離（影像數）"),
+    KO("--order-weight 가산이 약 3분의 1 로 줄어드는 파일 순서 거리(이미지 수)"),
+    DE("Abstand in Dateireihenfolge, in Bildern, über den der Bonus von "
+       "--order-weight auf etwa ein Drittel fällt"),
+    FR("Distance dans l'ordre des fichiers, en images, sur laquelle le bonus de "
+       "--order-weight tombe à environ un tiers"),
+    ES("Distancia en el orden de archivos, en imágenes, en la que la bonificación "
+       "de --order-weight cae a cerca de un tercio"),
+    PT("Distância na ordem dos arquivos, em imagens, em que o bônus de "
+       "--order-weight cai para cerca de um terço"),
+    IT("Distanza nell'ordine dei file, in immagini, entro cui il bonus di "
+       "--order-weight scende a circa un terzo"),
+    NL("Afstand in bestandsvolgorde, in beelden, waarover de bonus van "
+       "--order-weight tot ongeveer een derde zakt"),
+    RU("Расстояние в порядке файлов, в изображениях, на котором надбавка "
+       "--order-weight падает примерно до трети"),
+    TR("--order-weight ekinin yaklaşık üçte bire düştüğü dosya sırası uzaklığı "
+       "(görüntü sayısı)"));
+
 // ===========================================================================
 // mapper
 // ===========================================================================

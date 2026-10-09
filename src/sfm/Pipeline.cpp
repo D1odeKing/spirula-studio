@@ -1887,13 +1887,18 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
     // list for the journal below to line up with it.
     const bool reused_pairs =
         res && resume::readPairs(res->dir / "pairs.bin", res->signature, pairs);
+    const FileOrder order = fileOrder(image_names);
+    const FileOrder* by_order = popt.order_weight > 0 ? &order : nullptr;
+    if (by_order && verbose && !reused_pairs)
+        L::err(Tag::Match, M::match_order_weight,
+               {L::num(popt.order_weight, 2), L::num(popt.order_decay, 1)});
     if (reused_pairs) {
         L::out(Tag::Match, M::match_reusing_pairs, {(long long)pairs.size()});
     } else if (mode == PairMode::Prefilter) {
         stats.scored = n_images * (n_images - 1) / 2;
         double t0 = now();
         events::stage_begin(Stage::Select, (int64_t)(n_images * (n_images - 1)));
-        pairs = prefilterPairs(feats, popt, sp);
+        pairs = prefilterPairs(feats, popt, sp, by_order);
         events::stage_end(Stage::Select);
         stats.select_seconds = now() - t0;
         if (verbose)
@@ -1930,7 +1935,8 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
             stats.scored = n_images * (n_images - 1) / 2;
             double t0 = now();
             events::stage_begin(Stage::Select, (int64_t)(n_images * (n_images - 1)));
-            std::vector<std::pair<uint32_t, uint32_t>> extra = prefilterPairs(feats, popt, sp);
+            std::vector<std::pair<uint32_t, uint32_t>> extra =
+                prefilterPairs(feats, popt, sp, by_order);
             events::stage_end(Stage::Select);
             stats.select_seconds = now() - t0;
             pairs.insert(pairs.end(), extra.begin(), extra.end());

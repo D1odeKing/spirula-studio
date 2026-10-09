@@ -445,6 +445,10 @@ struct SfmConfig {
       "matching", 0, 1000000, "", prefilter_min_score)                                             \
     F(prefilter.ratio, "prefilter-ratio", CMD_AUTO | CMD_MATCH, Tier::Advanced, "matching", 0, 1,  \
       "", prefilter_ratio)                                                                         \
+    F(prefilter.order_weight, "order-weight", CMD_AUTO | CMD_MATCH, Tier::Advanced, "matching", 0, \
+      100, "", order_weight)                                                                       \
+    F(prefilter.order_decay, "order-decay", CMD_AUTO | CMD_MATCH, Tier::Advanced, "matching",      \
+      0.1, 100000, "", order_decay)                                                                \
     /* ---- mapper ---- */                                                                         \
     F(compact_unused_features, "compact-unused-features", CMD_AUTO | CMD_MAP, Tier::Advanced,     \
       "mapper", 0, 0, "", compact_unused_features)                                                 \
