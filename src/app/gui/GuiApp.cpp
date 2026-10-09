@@ -6309,11 +6309,11 @@ struct FitScale {
 };
 
 // 0 for an image that fits the model well, 1 for one that barely does: by its
-// largest reprojection error, linear from the final gate (green) to the first
-// (red), or by its 3D points against the median, an eighth of it being red.
+// mean reprojection error against the gates, or by its 3D points against the
+// median, an eighth of it being red.
 float image_badness(const ImageStat& s, int by, const FitScale& f) {
     if (by == 1)
-        return std::clamp((s.max_error - f.green_px) / std::max(f.red_px - f.green_px, 1e-3f),
+        return std::clamp((s.mean_error - f.green_px) / std::max(f.red_px - f.green_px, 1e-3f),
                           0.0f, 1.0f);
     const float n = (float)std::max<uint32_t>(s.points, 1);
     return std::clamp(std::log2(std::max(f.median_points, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
@@ -6343,14 +6343,18 @@ ImVec4 badness_color(float b) {
 // --max-error's default: the run's own final gate when nothing sets it.
 constexpr float kDefaultMaxErrorPx = 3.0f;
 
-// Progressive: red at the first attempt's gate, green at the last. Otherwise
-// the one gate is red.
+// A gate bounds every observation; an image's mean sat near a third of it in
+// the 260-image runs (1.5 px at 20, 0.9 px at 3). Progressive: red at a third
+// of the first attempt's gate, green at a third of the last's.
+constexpr float kMeanPerGate = 1.0f / 3.0f;
+
 FitScale fit_scale(const std::vector<ImageStat>& stats, const SfmJob& j) {
     FitScale f;
     f.median_points = median_points(stats);
     const float end = j.progressive_error_end > 0 ? j.progressive_error_end : kDefaultMaxErrorPx;
-    f.green_px = j.progressive ? end : 0.0f;
-    f.red_px = j.progressive ? std::max(j.progressive_error_start, end * 1.5f) : end;
+    f.green_px = (j.progressive ? end : 0.0f) * kMeanPerGate;
+    f.red_px = (j.progressive ? std::max(j.progressive_error_start, end * 1.5f) : end) *
+               kMeanPerGate;
     return f;
 }
 
@@ -6511,12 +6515,12 @@ void GuiApp::draw_image_list(float height) {
                 char num[32];
                 if (s.placed && s.points) {
                     std::snprintf(num, sizeof num, "%.2f", s.mean_error);
-                    ui::TextRaw(num);
+                    ui::TextColoredRaw(badness_color(image_badness(s, 1, scale)), num);
                 }
                 ImGui::TableNextColumn();
                 if (s.placed && s.points) {
                     std::snprintf(num, sizeof num, "%.2f", s.max_error);
-                    ui::TextColoredRaw(badness_color(image_badness(s, 1, scale)), num);
+                    ui::TextRaw(num);
                 }
             }
         ImGui::EndTable();
