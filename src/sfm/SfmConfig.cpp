@@ -425,9 +425,16 @@ std::string SfmConfig::finalize(uint32_t cmd) {
     // question --camera-model answers for the ones that have entries.
     mapper.camera_model = camera.model;
 
-    // One tolerance, two fields (D47).
-    twoview.ransac.max_error = max_error;
-    mapper.max_reproj_error = max_error;
+    // One tolerance, two fields (D47). Progressive: matches are verified at the
+    // start, and what the mapper is left holding is the end.
+    if (progressive) {
+        if (progressive_error_end <= 0) progressive_error_end = max_error;
+        if (progressive_error_start <= progressive_error_end)
+            return "--progressive-error-start must be above --progressive-error-end (" +
+                   std::to_string(progressive_error_end) + ")";
+    }
+    twoview.ransac.max_error = progressive ? progressive_error_start : max_error;
+    mapper.max_reproj_error = progressive ? progressive_error_end : max_error;
     // mapper.sequence_window = overlap;
 
     if (!colorspace::parse_exposure(image_exposure, exposure))
@@ -511,6 +518,17 @@ std::string SfmConfig::finalize(uint32_t cmd) {
     manager.merge = merge;
     manager.merge.verbose = v;
     return "";
+}
+
+std::vector<double> SfmConfig::progressiveErrors() const {
+    std::vector<double> e;
+    if (!progressive) return e;
+    const double a = progressive_error_start;
+    const double b = progressive_error_end > 0 ? progressive_error_end : max_error;
+    const int n = std::max(2, progressive_error_steps);
+    for (int i = 0; i < n; i++) e.push_back(a * std::pow(b / a, (double)i / (n - 1)));
+    e.back() = b;
+    return e;
 }
 
 PairMode SfmConfig::pairMode() const {

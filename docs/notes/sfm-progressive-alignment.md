@@ -364,8 +364,9 @@ rest, indented beneath it; unticked, none of it is on screen:
 
 - The "from" values of the feature passes are the quality preset's own (or
   the advanced editor's), shown read-only, so the range reads as a range.
-- "to" for the pixel error defaults to the run's `--max-error`, and is
-  refused below it: the written model is held to the run's tolerance.
+- "to" for the pixel error defaults to the run's `--max-error`. Set
+  explicitly, it is the tolerance the written model is held to (`finalize`
+  hands it to the mapper); a start at or below it is refused.
 - `SfmJob` gets one field per row: `progressive`, `progressive_error_start`,
   `progressive_error_end`, `progressive_error_steps`, `progressive_features`,
   `progressive_max_features_end`, `progressive_image_size_end`,

@@ -9,6 +9,7 @@
 // still be replaced by COLMAP's equivalent to bisect a failure.
 
 #include "sfm/Pipeline.h"
+#include "sfm/Progressive.h"
 
 #include <algorithm>
 #include <array>
@@ -2581,10 +2582,19 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         r.exit_code = 2;
         return r;
     }
-    Mapper mapper(db, feats, mapopt, cs.ids, &rigs, &seqs,
-                  cfg.sensor_map ? calib.positionPriors() : nullptr);
     AssembleStats ast;
-    std::vector<Reconstruction> models = runMapper(mapper, db, feats, cfg, ast);
+    std::vector<Reconstruction> models;
+    std::unique_ptr<ProgressiveAligner> progressive;
+    std::unique_ptr<Mapper> single;
+    if (cfg.progressive) {
+        progressive = std::make_unique<ProgressiveAligner>(db, feats, cfg, calib, rigs, seqs);
+        models = progressive->run(ast);
+    } else {
+        single = std::make_unique<Mapper>(db, feats, mapopt, cs.ids, &rigs, &seqs,
+                                          cfg.sensor_map ? calib.positionPriors() : nullptr);
+        models = runMapper(*single, db, feats, cfg, ast);
+    }
+    Mapper& mapper = progressive ? progressive->mapper() : *single;
     double t_map = now() - t0;
 
     {

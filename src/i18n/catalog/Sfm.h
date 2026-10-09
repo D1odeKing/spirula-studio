@@ -2471,6 +2471,46 @@ SS_MSG(match_prefilter_params,
     RU("отбор пар -- лучших признаков: {0}, соседей: {1}"),
     TR("çift seçimi -- en iyi öznitelik: {0}, komşu: {1}"));
 
+SS_MSG(progressive_attempt,
+    EN("progressive attempt {0}/{1}: {2} px over {3} verified pairs"),
+    JA("段階的な試行 {0}/{1}: {2} px、検証済みペア {3}"),
+    ZH_HANS("渐进尝试 {0}/{1}：{2} px，已验证像对 {3} 个"),
+    ZH_HANT("漸進嘗試 {0}/{1}：{2} px，已驗證影像對 {3} 個"),
+    KO("단계적 시도 {0}/{1}: {2} px, 검증된 쌍 {3}"),
+    DE("schrittweiser Versuch {0}/{1}: {2} px über {3} geprüfte Paare"),
+    FR("essai progressif {0}/{1} : {2} px sur {3} paires vérifiées"),
+    ES("intento progresivo {0}/{1}: {2} px sobre {3} pares verificados"),
+    PT("tentativa progressiva {0}/{1}: {2} px sobre {3} pares verificados"),
+    IT("tentativo progressivo {0}/{1}: {2} px su {3} coppie verificate"),
+    NL("stapsgewijze poging {0}/{1}: {2} px over {3} gecontroleerde paren"),
+    RU("постепенная попытка {0}/{1}: {2} px, проверенных пар: {3}"),
+    TR("kademeli deneme {0}/{1}: {3} doğrulanmış çift üzerinde {2} px"));
+
+SS_MSG(progressive_attempt_done,
+    EN("progressive attempt {0}/{1} done -- largest model: {2}, aligned: {3}, "
+       "models: {4}, {5}"),
+    JA("段階的な試行 {0}/{1} 完了 -- 最大モデル: {2}、位置合わせ済み: {3}、"
+       "モデル: {4}、{5}"),
+    ZH_HANS("渐进尝试 {0}/{1} 完成 —— 最大模型：{2}，已对齐：{3}，模型：{4}，{5}"),
+    ZH_HANT("漸進嘗試 {0}/{1} 完成 —— 最大模型：{2}，已對齊：{3}，模型：{4}，{5}"),
+    KO("단계적 시도 {0}/{1} 완료 -- 최대 모델: {2}, 정렬됨: {3}, 모델: {4}, {5}"),
+    DE("schrittweiser Versuch {0}/{1} fertig -- größtes Modell: {2}, "
+       "ausgerichtet: {3}, Modelle: {4}, {5}"),
+    FR("essai progressif {0}/{1} terminé -- plus grand modèle : {2}, alignées : "
+       "{3}, modèles : {4}, {5}"),
+    ES("intento progresivo {0}/{1} hecho: modelo mayor: {2}, alineadas: {3}, "
+       "modelos: {4}, {5}"),
+    PT("tentativa progressiva {0}/{1} feita -- maior modelo: {2}, alinhadas: {3}, "
+       "modelos: {4}, {5}"),
+    IT("tentativo progressivo {0}/{1} fatto -- modello più grande: {2}, "
+       "allineate: {3}, modelli: {4}, {5}"),
+    NL("stapsgewijze poging {0}/{1} klaar -- grootste model: {2}, uitgelijnd: "
+       "{3}, modellen: {4}, {5}"),
+    RU("постепенная попытка {0}/{1} готова -- крупнейшая модель: {2}, "
+       "выровнено: {3}, моделей: {4}, {5}"),
+    TR("kademeli deneme {0}/{1} bitti -- en büyük model: {2}, hizalanan: {3}, "
+       "model: {4}, {5}"));
+
 SS_MSG(match_order_weight,
     EN("pair selection -- file order weight: {0}, decay: {1}"),
     JA("ペア選択 -- ファイル順の重み: {0}、減衰: {1}"),

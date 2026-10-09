@@ -110,6 +110,13 @@ struct SfmConfig {
     // verifier's inlier radius and the mapper's reprojection cap are the same
     // quantity in the same frame. finalize() writes both.
     double max_error = 3.0;
+    // Progressive alignment (docs/notes/sfm-progressive-alignment.md): verify at
+    // the start error, map once there, then map again at each step down to the
+    // end error, every attempt continuing from the last. End 0 is max_error.
+    bool progressive = false;
+    double progressive_error_start = 20.0;
+    double progressive_error_end = 0.0;
+    int progressive_error_steps = 5;
     // 0 means "whatever the selected frontend wants" -- 3200 for SIFT, 1600
     // for a learned one, mirroring COLMAP's EffMaxImageSize(). Resolved in
     // finalize(), so a command that applies no presets (extract, match) still
@@ -297,6 +304,9 @@ struct SfmConfig {
     // additionally switches to pair selection above 100 images, which it can
     // only decide once extraction has counted them -- see cmdAuto.
     PairMode pairMode() const;
+    // The pixel error of each progressive attempt, start to end, geometrically
+    // spaced; empty when progressive is off.
+    std::vector<double> progressiveErrors() const;
     // Whether the GPS sets the written metric frame; an unresolved "auto" does not.
     bool metricGps() const { return metric_gps == "horizontal" || metric_gps == "full"; }
 };
@@ -350,6 +360,14 @@ struct SfmConfig {
       "pipeline", 0, 100000, "", rig_pair_min_inliers)                                             \
     F(max_error, "max-error", CMD_AUTO | CMD_MATCH | CMD_MAP, Tier::Advanced, "pipeline", 0.1,     \
       100, "", max_error)                                                                          \
+    F(progressive, "progressive", CMD_AUTO | CMD_MATCH, Tier::Advanced, "progressive", 0, 0, "",   \
+      progressive)                                                                                 \
+    F(progressive_error_start, "progressive-error-start", CMD_AUTO | CMD_MATCH, Tier::Advanced,    \
+      "progressive", 0.1, 1000, "", progressive_error_start)                                       \
+    F(progressive_error_end, "progressive-error-end", CMD_AUTO, Tier::Advanced, "progressive", 0,  \
+      1000, "", progressive_error_end)                                                             \
+    F(progressive_error_steps, "progressive-error-steps", CMD_AUTO, Tier::Advanced, "progressive", \
+      2, 50, "", progressive_error_steps)                                                          \
     F(max_image_size, "max-image-size", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "pipeline", 0,     \
       20000, "", max_image_size)                                                                   \
     F(mask_dir, "masks", CMD_AUTO | CMD_EXTRACT, Tier::Basic, "pipeline", 0, 0, "", masks)         \

@@ -1615,6 +1615,102 @@ SS_MSG(order_decay_help,
     TR("--order-weight ekinin yaklaşık üçte bire düştüğü dosya sırası uzaklığı "
        "(görüntü sayısı)"));
 
+SS_MSG(progressive_help,
+    EN("Progressive alignment: map at a loose pixel error first, then again at "
+       "tighter ones, each attempt continuing from the last"),
+    JA("段階的な位置合わせ: まず緩いピクセル誤差でマッピングし、"
+       "その後より厳しい誤差で、前の試行から続けて繰り返します"),
+    ZH_HANS("渐进对齐：先以宽松的像素误差建图，再以更严格的误差重复，每次都从上一次继续"),
+    ZH_HANT("漸進對齊：先以寬鬆的像素誤差建圖，再以更嚴格的誤差重複，每次都從上一次繼續"),
+    KO("단계적 정렬: 먼저 느슨한 픽셀 오차로 매핑한 뒤 더 엄격한 오차로 다시, "
+       "매번 앞의 시도에서 이어서 합니다"),
+    DE("Schrittweise Ausrichtung: zuerst mit großzügigem Pixelfehler kartieren, "
+       "dann mit strengeren, jeder Versuch setzt den vorigen fort"),
+    FR("Alignement progressif : un premier mapping avec une erreur en pixels "
+       "large, puis d'autres plus strictes, chaque essai reprenant le précédent"),
+    ES("Alineación progresiva: primero se mapea con un error en píxeles amplio, "
+       "luego con otros más estrictos, y cada intento continúa el anterior"),
+    PT("Alinhamento progressivo: primeiro mapeia com um erro em pixels folgado, "
+       "depois com outros mais estritos, cada tentativa continuando a anterior"),
+    IT("Allineamento progressivo: prima il mapping con un errore in pixel largo, "
+       "poi con altri più stretti, ogni tentativo riprende il precedente"),
+    NL("Stapsgewijze uitlijning: eerst mappen met een ruime pixelfout, dan met "
+       "strengere, elke poging gaat verder waar de vorige stopte"),
+    RU("Постепенное выравнивание: сначала построение с мягкой ошибкой в "
+       "пикселях, затем со всё более строгой, каждая попытка продолжает предыдущую"),
+    TR("Kademeli hizalama: önce gevşek bir piksel hatasıyla haritalar, sonra daha "
+       "sıkılarıyla; her deneme bir öncekinden devam eder"));
+
+SS_MSG(progressive_error_start_help,
+    EN("Pixel error of the first progressive attempt; matches are verified at it"),
+    JA("段階的な位置合わせの最初の試行のピクセル誤差。マッチはこの値で検証されます"),
+    ZH_HANS("渐进对齐第一次尝试的像素误差；匹配按此值验证"),
+    ZH_HANT("漸進對齊第一次嘗試的像素誤差；匹配按此值驗證"),
+    KO("단계적 정렬 첫 시도의 픽셀 오차. 매치는 이 값으로 검증됩니다"),
+    DE("Pixelfehler des ersten schrittweisen Versuchs; die Zuordnungen werden "
+       "damit geprüft"),
+    FR("Erreur en pixels du premier essai progressif ; les correspondances sont "
+       "vérifiées avec elle"),
+    ES("Error en píxeles del primer intento progresivo; las correspondencias se "
+       "verifican con él"),
+    PT("Erro em pixels da primeira tentativa progressiva; as correspondências "
+       "são verificadas com ele"),
+    IT("Errore in pixel del primo tentativo progressivo; le corrispondenze sono "
+       "verificate con esso"),
+    NL("Pixelfout van de eerste stapsgewijze poging; de overeenkomsten worden "
+       "ermee gecontroleerd"),
+    RU("Ошибка в пикселях первой попытки; соответствия проверяются с ней"),
+    TR("İlk kademeli denemenin piksel hatası; eşleşmeler bununla doğrulanır"));
+
+SS_MSG(progressive_error_end_help,
+    EN("Pixel error of the last progressive attempt, and so of the written "
+       "model; 0 is --max-error"),
+    JA("段階的な位置合わせの最後の試行、つまり書き出すモデルのピクセル誤差。"
+       "0 は --max-error"),
+    ZH_HANS("渐进对齐最后一次尝试的像素误差，也就是写出的模型的误差；0 表示 --max-error"),
+    ZH_HANT("漸進對齊最後一次嘗試的像素誤差，也就是寫出的模型的誤差；0 表示 --max-error"),
+    KO("단계적 정렬 마지막 시도, 곧 기록되는 모델의 픽셀 오차. 0 은 --max-error"),
+    DE("Pixelfehler des letzten schrittweisen Versuchs und damit des "
+       "geschriebenen Modells; 0 ist --max-error"),
+    FR("Erreur en pixels du dernier essai progressif, donc du modèle écrit ; "
+       "0 vaut --max-error"),
+    ES("Error en píxeles del último intento progresivo, y por tanto del modelo "
+       "escrito; 0 es --max-error"),
+    PT("Erro em pixels da última tentativa progressiva, e portanto do modelo "
+       "gravado; 0 é --max-error"),
+    IT("Errore in pixel dell'ultimo tentativo progressivo, e quindi del modello "
+       "scritto; 0 è --max-error"),
+    NL("Pixelfout van de laatste stapsgewijze poging, en dus van het "
+       "weggeschreven model; 0 is --max-error"),
+    RU("Ошибка в пикселях последней попытки, а значит и записанной модели; "
+       "0 — это --max-error"),
+    TR("Son kademeli denemenin, dolayısıyla yazılan modelin piksel hatası; "
+       "0, --max-error demektir"));
+
+SS_MSG(progressive_error_steps_help,
+    EN("Progressive attempts from the start error to the end error, both "
+       "included, spaced evenly in ratio"),
+    JA("開始誤差から終了誤差までの段階的な試行の回数（両端を含み、比で等間隔）"),
+    ZH_HANS("从起始误差到结束误差的渐进尝试次数，含两端，按比例均匀分布"),
+    ZH_HANT("從起始誤差到結束誤差的漸進嘗試次數，含兩端，按比例均勻分佈"),
+    KO("시작 오차부터 끝 오차까지의 단계적 시도 횟수(양 끝 포함, 비율로 고르게)"),
+    DE("Schrittweise Versuche vom Start- bis zum Endfehler, beide "
+       "eingeschlossen, im Verhältnis gleichmäßig verteilt"),
+    FR("Essais progressifs de l'erreur de départ à l'erreur finale, les deux "
+       "comprises, espacés régulièrement en rapport"),
+    ES("Intentos progresivos del error inicial al final, ambos incluidos, "
+       "espaciados por igual en proporción"),
+    PT("Tentativas progressivas do erro inicial ao final, ambos incluídos, "
+       "espaçadas igualmente em proporção"),
+    IT("Tentativi progressivi dall'errore iniziale a quello finale, entrambi "
+       "inclusi, distanziati in rapporto costante"),
+    NL("Stapsgewijze pogingen van de begin- tot de eindfout, beide inbegrepen, "
+       "gelijkmatig verdeeld in verhouding"),
+    RU("Число попыток от начальной ошибки до конечной, включая обе, "
+       "равномерно по отношению"),
+    TR("Başlangıç hatasından bitiş hatasına kadar kademeli deneme sayısı; "
+       "ikisi de dahil, oranca eşit aralıklı"));
+
 // ===========================================================================
 // mapper
 // ===========================================================================
