@@ -171,6 +171,17 @@ Three things that cost time:
   run there says nothing about their barriers; SfM binds descriptors and is
   covered.
 
+### At wave64
+
+AMD GCN runs every kernel 64 lanes wide, and RDNA runs the `kWave64Entries`
+kernels that way. An RDNA device stands in for GCN: dump each test's
+reference at `SS_VK_SUBGROUP=32`, then compare at `SS_VK_SUBGROUP=64` on the
+same device, so only the width differs. On a Ryzen 7000 iGPU (RADV,
+2026-10-08) every dump-compare and self-checking test passed at 64, with
+errors at the level of a wave32 run compared against itself (float-atomic
+order): raster_bwd_parity max_abs 9.8e-4 against 7.3e-4, engine_train_parity
+loose rel_rms 1.3e-10 against 1.4e-10.
+
 ## 2. GUI / viewer checks
 
 The web viewer can be driven headlessly over the Chrome DevTools Protocol.

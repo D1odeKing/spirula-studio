@@ -30,13 +30,12 @@ struct Capabilities {
     bool memory_budget = false;       // VK_EXT_memory_budget (usage reporting)
     bool timestamps = false;
     double timestamp_period_ns = 0.0;
-    uint32_t subgroup_size = 0;       // advertised default; may be 64 where pinning lowers it
-    // Non-zero when VK_EXT_subgroup_size_control is enabled: every compute
-    // pipeline is created with this REQUIRED subgroup size + full subgroups,
-    // pinning WaveGetLaneCount() to a launch-time constant. Essential on
-    // Intel (ANV), whose default is a VARYING SIMD width that breaks
-    // tid/WaveGetLaneCount() subgroup indexing.
-    uint32_t required_subgroup_size = 0;
+    uint32_t subgroup_size = 0;       // advertised default
+    // Non-zero with VK_EXT_subgroup_size_control: each pipeline requires a width
+    // in this range, chosen per kernel (VulkanPipelines.cpp). Unpinned, Intel's
+    // width varies per dispatch and breaks tid / WaveGetLaneCount() indexing.
+    uint32_t subgroup_min = 0, subgroup_max = 0;
+    uint32_t subgroup_force = 0;      // SS_VK_SUBGROUP: one width for every kernel
     uint32_t max_push_constants = 128;
     uint32_t max_workgroup_invocations = 0;
     uint32_t max_shared_memory = 0;

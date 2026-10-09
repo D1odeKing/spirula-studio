@@ -3,6 +3,7 @@
 
 #include "backend/api/BackendRuntime.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -134,9 +135,7 @@ DeviceProbe probe_device(VkPhysicalDevice pd) {
         out.min_subgroup = sp.minSubgroupSize;
         out.max_subgroup = sp.maxSubgroupSize;
     }
-    // Kernels count waves as 32 / WaveGetLaneCount() (rasterize_bwd's survivor
-    // compaction), so a wider subgroup counts none and trains silently wrong.
-    // AMD GCN is wave64-only; RDNA pins to 32.
+    // 64 is the widest the kernels are tested at (AMD GCN has nothing narrower).
     const uint32_t narrowest =
         out.subgroup_control ? out.min_subgroup : out.subgroup.subgroupSize;
 
@@ -144,8 +143,8 @@ DeviceProbe probe_device(VkPhysicalDevice pd) {
     if (out.props.apiVersion < VK_API_VERSION_1_2 || !f12.bufferDeviceAddress ||
         !f12.timelineSemaphore || out.queue_family == UINT32_MAX)
         out.unusable = "needs Vulkan 1.2 + bufferDeviceAddress + timelineSemaphore";
-    else if (narrowest > 32)
-        out.unusable = "needs compute subgroups of 32 lanes or fewer";
+    else if (narrowest > 64)
+        out.unusable = "needs compute subgroups of 64 lanes or fewer";
     out.required_ok = out.unusable == nullptr;
     out.atomic_float = fatomic.shaderBufferFloat32AtomicAdd;
     // Optional: without shaderInt64 the pipeline layer loads the ".noint64"
@@ -544,17 +543,17 @@ void Context::init() {
         _caps.memory_budget = true;
     }
 
-    // Pin the compute subgroup size when the device lets us (see
-    // Capabilities::required_subgroup_size). The probe refused any device
-    // whose narrowest compute subgroup is over 32.
     VkPhysicalDeviceSubgroupSizeControlFeaturesEXT fsgc{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
     if (probe.subgroup_control) {
-        uint32_t want = _caps.subgroup_size;
-        if (want < probe.min_subgroup) want = probe.min_subgroup;
-        if (want > probe.max_subgroup) want = probe.max_subgroup;
-        if (want > 32) want = 32;
-        _caps.required_subgroup_size = want;
+        _caps.subgroup_min = probe.min_subgroup;
+        _caps.subgroup_max = probe.max_subgroup;
+        if (const char* env = spirula::env("VK_SUBGROUP"); env && env[0]) {
+            const uint32_t w = (uint32_t)std::strtoul(env, nullptr, 10);
+            if (w && !(w & (w - 1)))  // a power of two
+                _caps.subgroup_force =
+                    std::min(std::max(w, _caps.subgroup_min), _caps.subgroup_max);
+        }
         extensions.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
         fsgc.subgroupSizeControl = VK_TRUE;
         fsgc.computeFullSubgroups = VK_TRUE;
@@ -607,16 +606,18 @@ void Context::init() {
     g_context_created.store(true);
 
     if (spirula::env("VK_VERBOSE")) {
-        // The pinned size is what the shaders actually run at; printing the
-        // device default alone reads as "the pin did not happen".
-        char subgroup[48];
-        if (_caps.required_subgroup_size == _caps.subgroup_size)
+        char subgroup[64];
+        if (_caps.subgroup_force)
+            std::snprintf(subgroup, sizeof(subgroup), "%u (SS_VK_SUBGROUP)",
+                          _caps.subgroup_force);
+        else if (_caps.subgroup_min == _caps.subgroup_max && _caps.subgroup_max)
             std::snprintf(subgroup, sizeof(subgroup), "%u (pinned)",
-                          _caps.required_subgroup_size);
-        else if (_caps.required_subgroup_size)
+                          _caps.subgroup_max);
+        else if (_caps.subgroup_max)
             std::snprintf(subgroup, sizeof(subgroup),
-                          "%u (pinned, device default %u)",
-                          _caps.required_subgroup_size, _caps.subgroup_size);
+                          "%u..%u (pinned per kernel, device default %u)",
+                          _caps.subgroup_min, _caps.subgroup_max,
+                          _caps.subgroup_size);
         else
             std::snprintf(subgroup, sizeof(subgroup), "%u (unpinned)",
                           _caps.subgroup_size);

@@ -610,7 +610,8 @@ void Context::createDevice(const ContextOptions& opts) {
         p2.pNext = &sp;
         vkGetPhysicalDeviceProperties2(physical_, &p2);
         // Pin the widest size the device offers that our 64-wide-X kernels can
-        // still fill; Intel/ANV's varying width is the failure this avoids.
+        // still fill; Intel/ANV's varying width is the failure this avoids. On
+        // RDNA2, 64 against 32: SAM 2 + GDINO 6% faster, MoGe 1.3% slower.
         preferred_subgroup_ = std::min<uint32_t>(sp.maxSubgroupSize, 64u);
         preferred_subgroup_ = std::max<uint32_t>(preferred_subgroup_, sp.minSubgroupSize);
         NN_LOG_DEBUG("[vk] subgroup size pinned to %u (range %u..%u)\n",

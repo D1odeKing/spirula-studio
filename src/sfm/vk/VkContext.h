@@ -58,6 +58,25 @@ inline bool hasDeviceExtension(VkPhysicalDevice phys, const char* name) {
     return false;
 }
 
+// Width for the kernels whose two RDNA widths differ, GPU time at that width over
+// the other on a Ryzen 7000 iGPU (RADV RDNA2, 2026-10-08); 0 leaves it to the
+// driver. Nothing here uses subgroup operations, so any width is correct.
+inline uint32_t rdnaSubgroupWidth(const std::string& entry) {
+    static const std::pair<const char*, uint32_t> kWidths[] = {
+        {"blur_dog", 32},     // 0.91
+        {"descriptor", 32},   // 0.88
+        {"orient", 32},       // 0.98
+        {"extrema", 64},      // 0.67
+        {"upsample", 64},     // 0.83
+        {"downsample", 64},   // 0.73
+        {"match_pair", 64},   // 0.99
+        {"reduce_cols", 64},  // 0.66
+    };
+    for (const auto& w : kWidths)
+        if (entry == w.first) return w.second;
+    return 0;
+}
+
 // A driver implementing only a subset of Vulkan (MoltenVK, the sole driver on
 // macOS) stays hidden from vkEnumeratePhysicalDevices unless the instance opts
 // in, and vkCreateInstance fails with VK_ERROR_INCOMPATIBLE_DRIVER when it is
@@ -444,6 +463,31 @@ public:
             exts.push_back(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
         }
 
+        // Only where the range holds both 32 and 64 (RDNA): Intel's compiler
+        // picks its own width per kernel, and pinning it would overrule that.
+        VkPhysicalDeviceSubgroupSizeControlFeaturesEXT fSgc{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+        if (hasDeviceExtension(phys_, VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2 sf2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+            sf2.pNext = &fSgc;
+            vkGetPhysicalDeviceFeatures2(phys_, &sf2);
+            VkPhysicalDeviceSubgroupSizeControlPropertiesEXT sp{
+                VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT};
+            VkPhysicalDeviceProperties2 sp2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+            sp2.pNext = &sp;
+            vkGetPhysicalDeviceProperties2(phys_, &sp2);
+            pinWidths_ = fSgc.subgroupSizeControl &&
+                         (sp.requiredSubgroupSizeStages & VK_SHADER_STAGE_COMPUTE_BIT) &&
+                         sp.minSubgroupSize <= 32 && sp.maxSubgroupSize >= 64;
+        }
+        if (pinWidths_) {
+            fSgc = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT};
+            fSgc.subgroupSizeControl = VK_TRUE;
+            fSgc.pNext = feat2.pNext;
+            feat2.pNext = &fSgc;
+            exts.push_back(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        }
+
         VkDeviceCreateInfo dci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dci.pNext = &feat2;
         dci.queueCreateInfoCount = 1;
@@ -736,6 +780,10 @@ public:
             cpi.stage.module = shaderModule_;
             cpi.stage.pName = e.c_str();
             cpi.stage.pSpecializationInfo = spec_.empty() ? nullptr : &specInfo;
+            VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT rss{
+                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT};
+            if (pinWidths_) rss.requiredSubgroupSize = rdnaSubgroupWidth(e);
+            if (rss.requiredSubgroupSize) cpi.stage.pNext = &rss;
             cpi.layout = pipeLayout_;
             VkPipeline p;
             VK_CHECK(vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &cpi, nullptr, &p));
@@ -1060,6 +1108,7 @@ private:
     VkInstance instance_ = VK_NULL_HANDLE;
     VkPhysicalDevice phys_ = VK_NULL_HANDLE;
     VkDeviceCaps caps_{};
+    bool pinWidths_ = false;  // rdnaSubgroupWidth() applies
     std::string selector_;   // canonical uuid:<hex> of phys_, empty before init
     std::string deviceName_;
     uint8_t deviceUUID_[VK_UUID_SIZE] = {};

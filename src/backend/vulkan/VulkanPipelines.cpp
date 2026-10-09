@@ -1,5 +1,6 @@
 #include "backend/vulkan/VulkanPipelines.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,7 +24,11 @@ extern const size_t g_spirv_blob_count;
 namespace {
 
 std::mutex g_pipeline_mutex;
-std::map<std::string, VkShaderModule> g_modules;         // by blob name
+struct Module {
+    VkShaderModule handle = VK_NULL_HANDLE;
+    uint32_t local_x = 0;  // workgroup X, 0 when not a literal
+};
+std::map<std::string, Module> g_modules;                 // by blob name
 std::map<uint32_t, VkPipelineLayout> g_layouts;          // by push size
 std::map<std::string, VkPipeline> g_pipelines;           // by full key
 
@@ -49,6 +54,46 @@ constexpr uint32_t kNumFeatures = 3;
 
 // [vk::constant_id] of kCasUniformExit in shaders/atomic_float.slang.
 constexpr uint32_t kCasUniformExitSpecId = 1000;
+
+// Entries that run at 64 lanes where the device offers 32 and 64 (RDNA); the
+// rest run at 32. Each is GPU time at 64 over 32, paired within 1500-step
+// runs of four presets on a Ryzen 7000 iGPU (RADV RDNA2, 2026-10-08).
+constexpr const char* kWave64Entries[] = {
+    "appearance_chain.appearance_fwd",          // 0.57-0.66
+    "appearance_chain.appearance_bwd",          // 0.81-0.95
+    "multi_scale_loss.ppl_bwd",                 // 0.90
+    "rasterize_fwd.rasterize_fwd_2d",           // 0.86-0.99
+    "fused_ssim.ssim_mask_cov",                 // 0.94
+    "background_sh.background_sh_bwd_reduce",   // 0.53
+    "intersect_tile.intersect_tile_count",      // 0.80
+    "intersect_tile.intersect_offset",          // 0.65-0.76
+    "sort_scan.sort_hist_u32",                  // 0.88-0.91
+    "sort_scan.sort_hist_u64",                  // 0.86-0.90
+    "sort_scan.sort_spine_local",               // 0.67
+    "sort_scan.scan_add_i32",                   // 0.81
+    "optimizer.increment_i32",                  // 0.60
+    "projection_qgrad.qgrad_camera_id_bounds",  // 0.62
+    "projection_qgrad.qgrad_iota",              // 0.77
+    "densify.normalize_clip_map",               // 0.71
+    "densify.densify_update_weight",            // 0.69
+    "densify.densify_accum_finalize",           // 0.66
+    "densify.densify_efraimidis_keys",          // 0.73-0.75
+};
+
+// The width `entry` requires, or 0 to leave it to the device: its default
+// capped at 32, or 64 for the entries above.
+uint32_t subgroup_width(const std::string& entry) {
+    const Capabilities& caps = Context::get().caps();
+    if (!caps.subgroup_max) return 0;
+    uint32_t want = caps.subgroup_force;
+    if (!want) {
+        want = std::min(caps.subgroup_size, 32u);
+        if (caps.subgroup_max >= 64)
+            for (const char* e : kWave64Entries)
+                if (entry == e) want = 64;
+    }
+    return std::min(std::max(want, caps.subgroup_min), caps.subgroup_max);
+}
 
 const SpirvBlob* find_variant_blob(const std::string& name) {
     const Capabilities& caps = Context::get().caps();
@@ -79,14 +124,27 @@ const SpirvBlob* find_variant_blob(const std::string& name) {
     return nullptr;
 }
 
-VkShaderModule get_module(const std::string& name) {
+// The X of OpExecutionMode LocalSize; 0 for LocalSizeId or none.
+uint32_t spirv_local_size_x(const uint32_t* words, size_t n) {
+    constexpr uint32_t kOpExecutionMode = 16, kLocalSize = 17;
+    for (size_t i = 5; i < n;) {
+        const uint32_t len = words[i] >> 16, op = words[i] & 0xffffu;
+        if (len == 0 || i + len > n) break;
+        if (op == kOpExecutionMode && len >= 6 && words[i + 2] == kLocalSize)
+            return words[i + 3];
+        i += len;
+    }
+    return 0;
+}
+
+const Module* get_module(const std::string& name) {
     auto it = g_modules.find(name);
-    if (it != g_modules.end()) return it->second;
+    if (it != g_modules.end()) return &it->second;
     const SpirvBlob* blob = find_variant_blob(name);
     if (!blob) {
         set_error("no embedded SPIR-V blob with this entry name (rerun "
                   "shaders/spirv_tool.cpp?)", VK_SUCCESS);
-        return VK_NULL_HANDLE;
+        return nullptr;
     }
     // Driver shader compilers can crash outright on a blob they dislike;
     // under SS_VK_VERBOSE the last line printed names the culprit.
@@ -97,15 +155,15 @@ VkShaderModule get_module(const std::string& name) {
     VkShaderModuleCreateInfo sci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
     sci.codeSize = blob->size_bytes;
     sci.pCode = blob->data;
-    VkShaderModule module = VK_NULL_HANDLE;
+    Module m;
     VkResult r = vkCreateShaderModule(Context::get().device(), &sci, nullptr,
-                                      &module);
+                                      &m.handle);
     if (r != VK_SUCCESS) {
         set_error("vkCreateShaderModule failed", r);
-        return VK_NULL_HANDLE;
+        return nullptr;
     }
-    g_modules[name] = module;
-    return module;
+    m.local_x = spirv_local_size_x(blob->data, blob->size_bytes / 4);
+    return &(g_modules[name] = m);
 }
 
 VkPipelineLayout get_layout(uint32_t push_size) {
@@ -147,8 +205,8 @@ VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
     auto it = g_pipelines.find(key);
     if (it != g_pipelines.end()) return it->second;
 
-    VkShaderModule module = get_module(blob_name);
-    if (module == VK_NULL_HANDLE) return VK_NULL_HANDLE;
+    const Module* module = get_module(blob_name);
+    if (!module) return VK_NULL_HANDLE;
 
     VkSpecializationMapEntry entries[SpecList::kMax + 1];
     uint32_t values[SpecList::kMax + 1];
@@ -173,22 +231,18 @@ VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
         VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
     pci.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     pci.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    pci.stage.module = module;
+    pci.stage.module = module->handle;
     // slangc emits each single-entry blob with the entry renamed to "main".
     pci.stage.pName = "main";
-    // Pin the subgroup size wherever the device allows it: with the default
-    // VARYING policy (notably Intel/ANV) WaveGetLaneCount() is not a
-    // reliable launch-time constant and tid/WaveGetLaneCount() subgroup
-    // indexing (radix sort ranking) miscounts. All kernel workgroup sizes
-    // are multiples of any required size, as REQUIRE_FULL_SUBGROUPS needs.
     VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT sgsz{
         VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT};
-    if (Context::get().caps().required_subgroup_size) {
-        sgsz.requiredSubgroupSize =
-            Context::get().caps().required_subgroup_size;
+    if (uint32_t width = subgroup_width(blob_name)) {
+        sgsz.requiredSubgroupSize = width;
         pci.stage.pNext = &sgsz;
-        pci.stage.flags |=
-            VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT;
+        // A 32-wide workgroup on a wave64-only device is one half-full wave.
+        if (module->local_x && module->local_x % width == 0)
+            pci.stage.flags |=
+                VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT;
     }
     if (n) pci.stage.pSpecializationInfo = &spec_info;
     pci.layout = layout;
@@ -265,7 +319,7 @@ void pipelines_shutdown() {
     for (auto& kv : g_layouts)
         vkDestroyPipelineLayout(dev, kv.second, nullptr);
     for (auto& kv : g_modules)
-        vkDestroyShaderModule(dev, kv.second, nullptr);
+        vkDestroyShaderModule(dev, kv.second.handle, nullptr);
     g_pipelines.clear();
     g_layouts.clear();
     g_modules.clear();

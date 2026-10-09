@@ -60,9 +60,10 @@ no in-shader branching:
 | `.int8` | `shaderInt8` + `storageBuffer8BitAccess` | packed u32 word access |
 
 Baseline is Vulkan 1.2 core with `bufferDeviceAddress` + `timelineSemaphore`,
-and compute subgroups of 32 lanes or fewer: `VK_EXT_subgroup_size_control`
-pins RDNA's wave64 default and Intel's variable width, and a device that cannot
-go below 64 (AMD GCN, Adreno) is refused. `SS_VK_NATIVE_ATOMICS=0`,
+and compute subgroups of 64 lanes or fewer. `VK_EXT_subgroup_size_control`
+pins Intel's variable width, and on RDNA picks wave32 or wave64 per kernel
+(`kWave64Entries`, src/backend/vulkan/VulkanPipelines.cpp);
+`SS_VK_SUBGROUP=N` forces one width everywhere. `SS_VK_NATIVE_ATOMICS=0`,
 `SS_VK_NATIVE_INT64=0`, `SS_VK_NATIVE_INT8=0` force the fallback blobs
 for A/B testing, and `SS_VK_CAS_UNIFORM_EXIT=0/1` the wave-uniform CAS
 loop that AMD's Windows driver gets by default (src/backend/vulkan/README.md).
