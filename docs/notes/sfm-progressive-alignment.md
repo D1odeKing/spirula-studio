@@ -177,15 +177,17 @@ it sees and its mean and max reprojection error. The workspace keeps a copy,
 `image_stats.bin`, which outlives `.progress`. The dataset screen's Images
 view lists it; picking an image shows the photo and can put the model view
 at its camera. The model's cameras are coloured red to green by an image's
-largest error, linear from the ladder's start (red) to its end (green), so a
-camera turns green as the gates close on it; or by 3D points against the
-placed images' median (an eighth of it up to the median).
+mean error -- the measure the run reports and passes are judged by -- linear
+from a third of the ladder's start (red) to a third of its end (green): an
+image's mean sat near a third of its gate (1.5 px at 20, 0.9 px at 3). Or by
+3D points against the placed images' median (an eighth of it up to it).
 
 `--quality` sets the ladder and the passes (`sfm/ProgressivePresets.h`), and
 the GUI's quality control fills the same values in: start 12/16/20/24 px over
-3/4/5/7 attempts, no feature pass at low, then 1/2/3. Chosen from the
-260-image measurements above, where nothing was placed past five attempts
-and a feature pass costs about one attempt.
+5/8/12/15 attempts, no feature pass at low, then 2/3/4 passes, patience
+1/2/3/4. Provisional: on the 260-image capture above nothing was placed past
+five attempts and a feature pass cost about one attempt, so these leave
+headroom for harder captures, which has not been measured yet.
 
 Stopping: `--progressive-patience` (default 2) feature passes in a row with no
 gain, all steps tried for all targets, `--progressive-time`, or cancel.
