@@ -58,6 +58,26 @@ reaches the optimum from above. A rejected direction is retried every 40
 windows, so the choice keeps following the splat size as training changes it.
 `SS_BIN_TILE_LOG=1` prints each decision.
 
+A coarser trial is the dangerous direction: every micro tile walks its whole
+macro tile's list, so one step up quadruples that scan, and on a dense scene
+at low resolution the pair count barely falls to pay for it. Two guards:
+
+- No coarser probe while the last measured pairs per visible splat is under
+  `(1 + 1/2)^2 = 2.25` -- a mean footprint under half a tile, where doubling
+  the tile cuts pairs by under a third.
+- A coarser trial whose first step (warm-up included) takes over twice its
+  baseline is abandoned on that step instead of running its whole 6-step
+  window.
+
+What made these necessary: a 5M-splat run on 432 px views (a 360 capture
+split into five faces, M2 Max) lost its device to macOS's GPU watchdog,
+`kIOGPUCommandBufferCallbackErrorImpactingInteractivity`, on the first step
+of a 128 px trial, after 3000 steps at 16-64 px; with `SS_VK_DEBUG_SYNC=1`
+the last kernel to finish was `rasterize_fwd_2d` at the 128 px grid. The
+Vulkan backend now also splits a rasterization past the submit budget
+(docs/notes/gpu-submit-budget.md), so a trial that still slips through costs
+time, not the device.
+
 The intersect additionally coarsens *within* a step, re-running the count pass
 (~0.3% of a step, and flat in tile size), whenever the exact pair total would
 overflow int32 — a forced size is a starting point, not a hard failure. That

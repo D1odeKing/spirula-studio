@@ -643,6 +643,9 @@ struct EngineState {
         double sum     = 0.0;
         double base    = 0.0;              // bracketing cost at `from`
         double trial   = 0.0;              // cost measured at `from + dir`
+        // Splat-tile pairs per visible splat at `macro_log2`, last measured
+        // outside a trial; gates the coarser probes.
+        double pairs_per_splat = 0.0;
     };
     std::map<uint64_t, BinTileChoice> bin_tile_auto;
     // PoolSlot::EngVLosses (the per-pixel loss cotangent seed) is uploaded
