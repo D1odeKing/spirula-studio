@@ -220,11 +220,11 @@ public:
     // training iteration that has just finished (< 0 when unknown), which is
     // what paces the refresh while nobody is steering the camera.
     void draw(bool training, int step = -1);
-    // A control of the caller's at the head of the toolbar row, `width` wide.
-    // Set before each draw(); cleared by it.
-    void lead_toolbar(std::function<void()> draw, float width) {
-        _lead = std::move(draw);
-        _lead_w = width;
+    // A control of the caller's at the right end of the toolbar row, `width`
+    // wide. Set before each draw(); cleared by it.
+    void trail_toolbar(std::function<void()> draw, float width) {
+        _trail = std::move(draw);
+        _trail_w = width;
     }
 
     // Free GL resources. Call while the GL context is still current
@@ -415,8 +415,8 @@ private:
     std::shared_ptr<const std::vector<uint8_t>> _roi_points_inside;
     bool _show_grid = false;         // axes + ground-plane grid overlay
     float _frustum_scale = 1.0f;     // camera-frustum size multiplier
-    std::function<void()> _lead;
-    float _lead_w = 0.0f;
+    std::function<void()> _trail;
+    float _trail_w = 0.0f;
     // 0 = auto (see render_scale), 1 = 50%, 2 = 75%, 3 = 100%
     int _scale_idx = 0;
     float _last_pose[11] = {};       // pos + rot + target + ortho, to spot motion

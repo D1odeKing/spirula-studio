@@ -176,9 +176,10 @@ view follows the run. Beside `model.bin` the run writes `images.bin`
 it sees and its mean and max reprojection error. The workspace keeps a copy,
 `image_stats.bin`, which outlives `.progress`. The dataset screen's Images
 view lists it; picking an image shows the photo and can put the model view
-at its camera. The model's cameras are coloured red to green by mean error
-(2 px down to 0.8 px, log scale) or by 3D points against the placed images'
-median (an eighth of it up to the median).
+at its camera. The model's cameras are coloured red to green by an image's
+largest error, linear from the ladder's start (red) to its end (green), so a
+camera turns green as the gates close on it; or by 3D points against the
+placed images' median (an eighth of it up to the median).
 
 `--quality` sets the ladder and the passes (`sfm/ProgressivePresets.h`), and
 the GUI's quality control fills the same values in: start 12/16/20/24 px over
