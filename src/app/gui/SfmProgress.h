@@ -101,6 +101,17 @@ float mapping_fraction(int64_t done, int64_t total);
 bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out,
                      uint64_t point_memory_budget = 0);
 
+// One image of the model in a snapshot (images.bin beside model.bin).
+struct ImageStat {
+    uint32_t id = 0;
+    bool placed = false;
+    uint32_t keypoints = 0;
+    uint32_t points = 0;            // its keypoints that see a 3D point
+    float mean_error = 0, max_error = 0;   // reprojection, pixels
+    std::string name;
+};
+bool read_image_stats(const std::string& dir, int64_t& mtime, std::vector<ImageStat>& out);
+
 // The similarity (row-major 3x4 [sR | t]) taking `from`'s normalized frame onto
 // `to`'s, fitted to the cameras both hold. False when too few are shared or they
 // disagree: a seed retry is a new model, not a moved one.

@@ -6092,11 +6092,31 @@ int draw_view_tabs(const Msg* const* names, const bool* avail, int n, int implie
 }  // namespace
 
 void GuiApp::draw_dataset_steps() {
+    // The plan last drawn or launched: what this run will do at each step.
+    auto planned = [&](Stage s) {
+        const bool staged = effective_engine() == Engine::BuiltIn;
+        switch (s) {
+            case Stage::Frames:   return _plan[Step::Frames].act != Act::None;
+            case Stage::Masks:    return _plan[Step::Masks].act != Act::None;
+            case Stage::Features: return staged ? _plan[ModelPart::Features].act != Act::None
+                                                : _plan[Step::Model].act != Act::None;
+            case Stage::Matching: return staged ? _plan[ModelPart::Matching].act != Act::None
+                                                : _plan[Step::Model].act != Act::None;
+            case Stage::Mapping:  return staged ? _plan[ModelPart::Mapping].act != Act::None
+                                                : _plan[Step::Model].act != Act::None;
+            case Stage::Align:    return !_lidar.empty();
+            case Stage::Dense:    return _plan[Step::Dense].act != Act::None;
+            case Stage::Geometry: return _plan[Step::Geometry].act != Act::None;
+            case Stage::Finishing: return true;
+        }
+        return true;
+    };
     std::vector<RunStep> all;
     for (int i = 0; i < kNumStages; i++) {
-        // Only a run with a laser scan has the step at all.
-        if ((Stage)i == Stage::Align && _lidar.empty() &&
-            dataset_steps()->stage(Stage::Align).status == StageStatus::Pending)
+        // A step this run does not take is left out, unless it has already
+        // said something about itself.
+        const StageStatus st = dataset_steps()->stage((Stage)i).status;
+        if ((st == StageStatus::Pending || st == StageStatus::Skipped) && !planned((Stage)i))
             continue;
         all.push_back({(Stage)i, &step_name((Stage)i)});
     }
@@ -6224,6 +6244,7 @@ void GuiApp::poll_sfm_progress() {
         read_pair_matrix_from_matches(_sfm.matches_path(), _matches_mtime, pm))
         _matrix.set(pm);
 
+    const bool stats = read_image_stats(dir, _image_stats_mtime, _image_stats);
     LiveModel lm;
     if (read_live_model(dir, _model_mtime, lm)) {
     #if 0
@@ -6254,14 +6275,132 @@ void GuiApp::poll_sfm_progress() {
                                  (long long)_live_model.n_points}),
                    /*detail=*/false);
         }
-        // Same key every time: the pose the user navigated to belongs to the
-        // scene, not to the snapshot, and re-framing on every one of them
-        // would make the view unusable while it is most worth watching.
-        _model_view.attach_preview_data(_live_model.ds, _live_model.post,
-                                        "sfm-live", /*radius=*/1.0f,
-                                        /*with_cameras=*/true);
-        _model_attached = true;
+        attach_live_model();
+    } else if (stats && _model_attached) {
+        attach_live_model();
     }
+}
+
+namespace {
+
+// 0 for an image that fits the model well, 1 for one that barely does: by
+// its mean reprojection error (0.5 to 2 px) or by its 3D points (400 to 40).
+float image_badness(const ImageStat& s, int by) {
+    if (by == 1) return std::clamp((s.mean_error - 0.5f) / 1.5f, 0.0f, 1.0f);
+    const float n = (float)std::max<uint32_t>(s.points, 1);
+    return std::clamp(std::log(400.0f / n) / std::log(10.0f), 0.0f, 1.0f);
+}
+
+// Green through yellow to red, in five steps: the renderer draws the
+// cameras one colour at a time.
+ImVec4 badness_color(float b) {
+    const float q = std::round(b * 4.0f) / 4.0f;
+    const ImVec4 good(0.30f, 0.85f, 0.35f, 1), mid(0.95f, 0.80f, 0.20f, 1),
+        bad(0.95f, 0.25f, 0.20f, 1);
+    const ImVec4& a = q < 0.5f ? good : mid;
+    const ImVec4& c = q < 0.5f ? mid : bad;
+    const float f = q < 0.5f ? q * 2.0f : (q - 0.5f) * 2.0f;
+    return ImVec4(a.x + (c.x - a.x) * f, a.y + (c.y - a.y) * f, a.z + (c.z - a.z) * f, 1);
+}
+
+}  // namespace
+
+void GuiApp::attach_live_model() {
+    std::vector<float> rgb;
+    const std::vector<uint32_t>& ids = _live_model.ids;
+    if (_camera_color != 0 && !_image_stats.empty() &&
+        ids.size() == (size_t)_live_model.ds.num_cameras) {
+        std::unordered_map<uint32_t, const ImageStat*> by_id;
+        for (const ImageStat& s : _image_stats) by_id[s.id] = &s;
+        rgb.resize(ids.size() * 3);
+        for (size_t i = 0; i < ids.size(); i++) {
+            const auto it = by_id.find(ids[i]);
+            const ImVec4 c = it == by_id.end() ? ImVec4(0.6f, 0.6f, 0.6f, 1)
+                                               : badness_color(image_badness(*it->second, _camera_color));
+            rgb[i * 3] = c.x;
+            rgb[i * 3 + 1] = c.y;
+            rgb[i * 3 + 2] = c.z;
+        }
+    }
+    // Same key every time: the pose the user navigated to belongs to the
+    // scene, not to the snapshot, and re-framing on every one of them
+    // would make the view unusable while it is most worth watching.
+    _model_view.attach_preview_data(_live_model.ds, _live_model.post, "sfm-live",
+                                    /*radius=*/1.0f, /*with_cameras=*/true, nullptr,
+                                    rgb.empty() ? nullptr : rgb.data());
+    _model_attached = true;
+}
+
+void GuiApp::draw_image_list(float height) {
+    uint32_t placed = 0;
+    for (const ImageStat& s : _image_stats) placed += s.placed ? 1 : 0;
+    ui::Text(dmsg::images_summary, {(long long)placed, (long long)_image_stats.size()});
+    ui::help_on_hover(dmsg::images_help);
+    const ImGuiTableFlags flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY |
+                                  ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                  ImGuiTableFlags_Resizable;
+    const float h = std::max(px(60.0f), height - ImGui::GetTextLineHeightWithSpacing());
+    if (!ImGui::BeginTable("##images", 6, flags, ImVec2(0, h))) return;
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ui::TableSetupColumn(dmsg::images_col_name,
+                         ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+    ui::TableSetupColumn(dmsg::images_col_status);
+    ui::TableSetupColumn(dmsg::images_col_points);
+    ui::TableSetupColumn(dmsg::images_col_keypoints);
+    ui::TableSetupColumn(dmsg::images_col_mean);
+    ui::TableSetupColumn(dmsg::images_col_max);
+    ImGui::TableHeadersRow();
+
+    std::vector<const ImageStat*> rows;
+    rows.reserve(_image_stats.size());
+    for (const ImageStat& s : _image_stats) rows.push_back(&s);
+    if (const ImGuiTableSortSpecs* spec = ImGui::TableGetSortSpecs(); spec && spec->SpecsCount) {
+        const int col = spec->Specs[0].ColumnIndex;
+        const bool up = spec->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
+        auto key = [col](const ImageStat* s) -> double {
+            switch (col) {
+                case 1: return s->placed ? 1 : 0;
+                case 2: return s->points;
+                case 3: return s->keypoints;
+                case 4: return s->mean_error;
+                case 5: return s->max_error;
+                default: return 0;
+            }
+        };
+        std::stable_sort(rows.begin(), rows.end(), [&](const ImageStat* a, const ImageStat* b) {
+            if (col == 0) return up ? a->name < b->name : b->name < a->name;
+            return up ? key(a) < key(b) : key(b) < key(a);
+        });
+    }
+    ImGuiListClipper clip;
+    clip.Begin((int)rows.size());
+    while (clip.Step())
+        for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
+            const ImageStat& s = *rows[(size_t)r];
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ui::TextRaw(s.name);
+            ImGui::TableNextColumn();
+            if (s.placed) ui::TextColored(kOk, dmsg::images_placed);
+            else ui::TextColored(kDim, dmsg::images_not_placed);
+            ImGui::TableNextColumn();
+            if (s.placed)
+                ui::TextColoredRaw(badness_color(image_badness(s, 2)), std::to_string(s.points));
+            ImGui::TableNextColumn();
+            ui::TextRaw(std::to_string(s.keypoints));
+            ImGui::TableNextColumn();
+            char num[32];
+            if (s.placed && s.points) {
+                std::snprintf(num, sizeof num, "%.2f", s.mean_error);
+                ui::TextColoredRaw(badness_color(image_badness(s, 1)), num);
+            }
+            ImGui::TableNextColumn();
+            if (s.placed && s.points) {
+                std::snprintf(num, sizeof num, "%.2f", s.max_error);
+                ui::TextRaw(num);
+            }
+        }
+    ImGui::EndTable();
 }
 
 // Everything the dataset screen holds about a run, given up: the previews, and
@@ -6286,6 +6425,8 @@ void GuiApp::reset_dataset_preview(bool sweep) {
         f->destroy_gl();
     }
     _model_mtime = _pairs_mtime = _matches_mtime = _dense_model_mtime = 0;
+    _image_stats.clear();
+    _image_stats_mtime = 0;
     _dense_model_read = {};
     _dense_preview_error.clear();
     _dense_polled_at = -1.0;
@@ -6309,12 +6450,12 @@ bool GuiApp::preview_has_content() const {
 // needs; a column of its own hands its own height down instead.
 void GuiApp::draw_dataset_preview(float height) {
     // Null where the view is not a reel: the match map, the model, the motion.
-    FilmReel* reels[7] = {&_film_frames, &_film_masks, &_film_features,
-                          nullptr, nullptr, &_film_geometry, nullptr};
-    const bool avail[7] = {_film_frames.has_frames(), _film_masks.has_frames(),
+    FilmReel* reels[8] = {&_film_frames, &_film_masks, &_film_features,
+                          nullptr, nullptr, &_film_geometry, nullptr, nullptr};
+    const bool avail[8] = {_film_frames.has_frames(), _film_masks.has_frames(),
                            _film_features.has_frames(), !_matrix.empty(),
                            _model_attached, _film_geometry.has_frames(),
-                           !dataset_steps()->scan().empty()};
+                           !dataset_steps()->scan().empty(), !_image_stats.empty()};
     bool any_avail = false;
     for (bool v : avail) any_avail = any_avail || v;
     if (!any_avail && _dense_preview_error.empty() && !_dense_live) return;
@@ -6340,11 +6481,11 @@ void GuiApp::draw_dataset_preview(float height) {
 
     const int implied = preview_for_stage();
     if (dataset_busy() && implied >= 0) _preview_last_stage = implied;
-    const Msg* names[7] = {&dmsg::view_frames, &dmsg::view_masks,
+    const Msg* names[8] = {&dmsg::view_frames, &dmsg::view_masks,
                            &dmsg::view_features, &dmsg::view_matrix,
                            &dmsg::view_model, &dmsg::view_geometry,
-                           &dmsg::view_motion};
-    const int tab = draw_view_tabs(names, avail, 7, implied, _preview_tab);
+                           &dmsg::view_motion, &dmsg::view_images};
+    const int tab = draw_view_tabs(names, avail, 8, implied, _preview_tab);
     if (tab == 3) ui::help_on_hover(dmsg::matrix_help);
     if (tab == 6) ui::help_on_hover(dmsg::frame_spacing_help);
 
@@ -6374,6 +6515,10 @@ void GuiApp::draw_dataset_preview(float height) {
     }
     if (tab == 6) {
         draw_scan_view(h - px(8.0f));
+        return;
+    }
+    if (tab == 7) {
+        draw_image_list(h - px(8.0f));
         return;
     }
     if (tab == 3) {
@@ -6415,6 +6560,15 @@ void GuiApp::draw_dataset_preview(float height) {
     if (_live_model.empty()) {
         ui::TextDisabledWrapped(dmsg::model_waiting);
         return;
+    }
+    if (!_image_stats.empty()) {
+        ImGui::SetNextItemWidth(px(220.0f));
+        if (ui::Combo(dmsg::camera_color, &_camera_color,
+                      {&dmsg::camera_color_plain, &dmsg::camera_color_error,
+                       &dmsg::camera_color_points}))
+            attach_live_model();
+        ui::help_on_hover(dmsg::camera_color_help);
+        h -= ImGui::GetFrameHeightWithSpacing();
     }
     // Width capped against the height: the band is as wide as the window, and
     // a 1600x150 letterbox of a 90-degree view shows a slice of the scene with

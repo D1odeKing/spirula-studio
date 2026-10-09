@@ -453,6 +453,10 @@ private:
     void draw_dataset_preview(float height);
     bool preview_has_content() const;
     void poll_sfm_progress();
+    // The live model onto the view, its cameras coloured by _camera_color.
+    void attach_live_model();
+    // Every image of the live model with how well it fits (images.bin).
+    void draw_image_list(float height);
     void poll_dense_progress();
     // Which of the three the running step implies, or -1 for none.
     int preview_for_stage();
@@ -847,6 +851,9 @@ private:
     bool _model_attached = false;
     // Snapshot files already read, by their write time; 0 means "not yet".
     int64_t _model_mtime = 0, _pairs_mtime = 0, _matches_mtime = 0;
+    std::vector<ImageStat> _image_stats;
+    int64_t _image_stats_mtime = 0;
+    int _camera_color = 1;   // 0 plain, 1 by reprojection error, 2 by 3D points
     double _sfm_polled_at = -1.0;
     // The dense step's own model.bin (dense::progress_dir), shown in the same view.
     int64_t _dense_model_mtime = 0;

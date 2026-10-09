@@ -2582,6 +2582,15 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     t0 = now();
     events::stage_begin(Stage::Map, (int64_t)db.images.size());
     events::map_begin(db.images.size());
+    {
+        std::vector<std::string> names;
+        std::vector<uint32_t> keypoints;
+        for (const ImageEntry& im : db.images) {
+            names.push_back(im.name);
+            keypoints.push_back(im.num_features);
+        }
+        progress::images(names, keypoints);
+    }
     RigTable rigs;
     SequenceTable seqs;
     try {

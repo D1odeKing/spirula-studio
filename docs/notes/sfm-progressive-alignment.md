@@ -160,7 +160,21 @@ A pass (one ladder step, or one feature step) is kept only if all of these hold:
   reported in the log, not a veto).
 
 A refused feature pass restores the targets' old feature files and pairs, so
-the next step starts from the same place.
+the next step starts from the same place. Each pass writes its own
+`features.progressive/<pass>/`; a kept pass's targets are read from there by
+the passes after it, never from `features/` again.
+
+A pass that fails outright (most often the GPU running out of memory at the
+larger size) is undone the same way and ends the passes; the ladder's model is
+kept and the run finishes. With `--progressive-image-size-end 0` the learned
+frontends stop at twice the run's `max-image-size`, not at the source size:
+LoMa's working set at 3869 px is 14.6 GB.
+
+Every attempt and every pass ends with a model snapshot, so the GUI's model
+view follows the run. Beside `model.bin` the run writes `images.bin`
+(`sfm/core/Progress.h`): per image, placed or not, its features, the 3D points
+it sees and its mean and max reprojection error. The dataset screen's Images
+view lists it, and colours the model's cameras by error or by 3D points.
 
 Stopping: `--progressive-patience` (default 2) feature passes in a row with no
 gain, all steps tried for all targets, `--progressive-time`, or cancel.
