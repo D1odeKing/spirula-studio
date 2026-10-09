@@ -1366,6 +1366,11 @@ void ViewportPanel::draw_controls(bool engine) {
     // enough for "SH 3" plus the grab.
     constexpr float kShW = 86.0f;
 
+    if (_lead) {
+        place(_lead_w);
+        _lead();
+        _lead = nullptr;
+    }
     // ---- display group ----
     if (engine && !_buffer_keys.empty()) {
         place(px(130.0f));

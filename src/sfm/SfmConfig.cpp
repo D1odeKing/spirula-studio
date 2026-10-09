@@ -3,6 +3,8 @@
 // table in SfmConfig.h, so a new knob is one row and never a fourth edit.
 #include "sfm/SfmConfig.h"
 
+#include "sfm/ProgressivePresets.h"
+
 #include "sfm/core/Log.h"
 #include "sfm/vk/VkContext.h"
 #include "i18n/catalog/SfmFields.h"
@@ -334,6 +336,20 @@ std::string applyPresets(SfmConfig& cfg, const std::set<std::string>& seen,
         presetSet(seen, moved, "prefilter-neighbors", cfg.prefilter.num_neighbors, 48);
     } else {
         return "unknown --quality '" + cfg.quality + "' (low, medium, high or extreme)";
+    }
+    if (cfg.progressive) {
+        const int level = cfg.quality == "low" ? 0 : cfg.quality == "medium" ? 1
+                          : cfg.quality == "high"                           ? 2
+                                                                            : 3;
+        const ProgressivePreset& pp = kProgressivePresets[level];
+        presetSet(seen, moved, "progressive-error-start", cfg.progressive_error_start,
+                  (double)pp.error_start);
+        presetSet(seen, moved, "progressive-error-steps", cfg.progressive_error_steps,
+                  pp.error_steps);
+        presetSet(seen, moved, "progressive-features", cfg.progressive_features, pp.features);
+        presetSet(seen, moved, "progressive-feature-steps", cfg.progressive_feature_steps,
+                  pp.feature_steps);
+        presetSet(seen, moved, "progressive-patience", cfg.progressive_patience, pp.patience);
     }
 
     // A learned descriptor needs a looser ratio than SIFT's 0.8, because its

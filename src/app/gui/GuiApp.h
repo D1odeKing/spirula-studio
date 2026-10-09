@@ -453,10 +453,16 @@ private:
     void draw_dataset_preview(float height);
     bool preview_has_content() const;
     void poll_sfm_progress();
+    void draw_progressive_options();
+    void apply_progressive_preset();
     // The live model onto the view, its cameras coloured by _camera_color.
     void attach_live_model();
     // Every image of the live model with how well it fits (images.bin).
     void draw_image_list(float height);
+    // The model view looking out of a placed image's camera, at its lens.
+    void view_from_camera(uint32_t id);
+    // A stem from images.bin to the file it was read from; "" when not found.
+    std::string image_file_for(const std::string& stem);
     void poll_dense_progress();
     // Which of the three the running step implies, or -1 for none.
     int preview_for_stage();
@@ -854,6 +860,10 @@ private:
     std::vector<ImageStat> _image_stats;
     int64_t _image_stats_mtime = 0;
     std::string _image_stats_path;
+    FilmReel _film_picked;                       // the Images view's chosen image
+    uint32_t _image_picked = UINT32_MAX;
+    std::map<std::string, std::string> _image_files;   // stem -> path, under _image_files_dir
+    std::string _image_files_dir;
     int _camera_color = 1;   // 0 plain, 1 by reprojection error, 2 by 3D points
     double _sfm_polled_at = -1.0;
     // The dense step's own model.bin (dense::progress_dir), shown in the same view.

@@ -74,6 +74,18 @@ bool child_line_is_notable(const std::string& l) {
 #else
     const std::string run = sfm::slog::prefix(sfm::slog::Tag::Run);
     if (l.compare(0, run.size(), run) == 0) return true;
+    // What each progressive attempt and pass runs with, and what it gave.
+    const std::string map = sfm::slog::prefix(sfm::slog::Tag::Map);
+    if (l.compare(0, map.size(), map) == 0) {
+        namespace M = spirula::i18n::msg::sfm;
+        const std::string rest = l.substr(map.size());
+        std::vector<std::string> got;
+        for (const spirula::i18n::Msg* m :
+             {&M::progressive_attempt, &M::progressive_attempt_done, &M::progressive_feature_pass,
+              &M::progressive_feature_kept, &M::progressive_feature_undone,
+              &M::progressive_feature_failed, &M::progressive_time_up})
+            if (spirula::i18n::scan(*m, rest, got)) return true;
+    }
     for (const char* word : {spirula::i18n::msg::sfm::word_warning.get(),
                              spirula::i18n::msg::sfm::word_error.get()}) {
         const size_t at = l.find(word);

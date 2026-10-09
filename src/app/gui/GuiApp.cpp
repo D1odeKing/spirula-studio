@@ -1,6 +1,8 @@
 // GuiApp.cpp -- see GuiApp.h.
 
 #include "app/gui/GuiApp.h"
+
+#include "sfm/ProgressivePresets.h"
 #include "i18n/catalog/Dense.h"
 #include "roma/model/Fetch.h"
 #include "dense/ConfigFields.h"
@@ -4786,9 +4788,10 @@ void GuiApp::draw_dataset_basics() {
     // different knobs, so it is one control.
     ImGui::SetNextItemWidth(px(220.0f));
     if (builtin) {
-        ui::Combo(dmsg::quality, &_sfm_job.quality,
-                  {&dmsg::quality_fast, &dmsg::quality_balanced,
-                   &dmsg::quality_high_recommended, &dmsg::quality_maximum});
+        if (ui::Combo(dmsg::quality, &_sfm_job.quality,
+                      {&dmsg::quality_fast, &dmsg::quality_balanced,
+                       &dmsg::quality_high_recommended, &dmsg::quality_maximum}))
+            apply_progressive_preset();
         ui::help_on_hover(dmsg::quality_help_builtin);
     } else {
         ui::Combo(dmsg::quality, &_colmap_job.quality,
@@ -4860,6 +4863,7 @@ void GuiApp::draw_dataset_basics() {
                   {&dmsg::matching_automatic, &dmsg::matching_every_pair,
                    &dmsg::matching_neighbours, &dmsg::matching_gpu_preselect});
         ui::help_on_hover(dmsg::matching_help_builtin);
+        draw_progressive_options();
     } else {
         int matcher_idx = _colmap_job.matcher - 1;
         if (matcher_idx < 0 || matcher_idx > 2)
@@ -6297,18 +6301,30 @@ void GuiApp::poll_sfm_progress() {
 
 namespace {
 
-// 0 for an image that fits the model well, 1 for one that barely does: by
-// its mean reprojection error (0.5 to 2 px) or by its 3D points (400 to 40).
-float image_badness(const ImageStat& s, int by) {
-    if (by == 1) return std::clamp((s.mean_error - 0.5f) / 1.5f, 0.0f, 1.0f);
+// 0 for an image that fits the model well, 1 for one that barely does: by its
+// mean reprojection error, 0.8 to 2 px on a log scale, or by its 3D points
+// against the placed images' median, which absolute counts never separated.
+float image_badness(const ImageStat& s, int by, float median_points) {
+    if (by == 1)
+        return std::clamp(std::log(std::max(s.mean_error, 1e-3f) / 0.8f) / std::log(2.5f), 0.0f,
+                          1.0f);
     const float n = (float)std::max<uint32_t>(s.points, 1);
-    return std::clamp(std::log(400.0f / n) / std::log(10.0f), 0.0f, 1.0f);
+    return std::clamp(std::log2(std::max(median_points, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
 }
 
-// Green through yellow to red, in five steps: the renderer draws the
-// cameras one colour at a time.
+float median_points(const std::vector<ImageStat>& stats) {
+    std::vector<uint32_t> v;
+    for (const ImageStat& s : stats)
+        if (s.placed) v.push_back(s.points);
+    if (v.empty()) return 1.0f;
+    std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+    return (float)v[v.size() / 2];
+}
+
+// Green through yellow to red in twelve steps: the renderer draws the cameras
+// one colour at a time.
 ImVec4 badness_color(float b) {
-    const float q = std::round(b * 4.0f) / 4.0f;
+    const float q = std::round(b * 11.0f) / 11.0f;
     const ImVec4 good(0.30f, 0.85f, 0.35f, 1), mid(0.95f, 0.80f, 0.20f, 1),
         bad(0.95f, 0.25f, 0.20f, 1);
     const ImVec4& a = q < 0.5f ? good : mid;
@@ -6325,12 +6341,13 @@ void GuiApp::attach_live_model() {
     if (_camera_color != 0 && !_image_stats.empty() &&
         ids.size() == (size_t)_live_model.ds.num_cameras) {
         std::unordered_map<uint32_t, const ImageStat*> by_id;
+        const float median = median_points(_image_stats);
         for (const ImageStat& s : _image_stats) by_id[s.id] = &s;
         rgb.resize(ids.size() * 3);
         for (size_t i = 0; i < ids.size(); i++) {
             const auto it = by_id.find(ids[i]);
             const ImVec4 c = it == by_id.end() ? ImVec4(0.6f, 0.6f, 0.6f, 1)
-                                               : badness_color(image_badness(*it->second, _camera_color));
+                                               : badness_color(image_badness(*it->second, _camera_color, median));
             rgb[i * 3] = c.x;
             rgb[i * 3 + 1] = c.y;
             rgb[i * 3 + 2] = c.z;
@@ -6345,7 +6362,66 @@ void GuiApp::attach_live_model() {
     _model_attached = true;
 }
 
+std::string GuiApp::image_file_for(const std::string& stem) {
+    std::error_code ec;
+    fs::path dir = _sfm.sfm_image_dir();
+    if (dir.empty() || !fs::is_directory(dir, ec)) dir = fs::path(_workspace) / "images";
+    if (dir.string() != _image_files_dir) {
+        _image_files_dir = dir.string();
+        _image_files.clear();
+        for (fs::recursive_directory_iterator it(dir, ec), e; !ec && it != e; it.increment(ec)) {
+            if (!it->is_regular_file(ec)) continue;
+            const fs::path rel = it->path().lexically_relative(dir);
+            _image_files[(rel.parent_path() / rel.stem()).generic_string()] = it->path().string();
+        }
+    }
+    const auto it = _image_files.find(stem);
+    return it == _image_files.end() ? std::string() : it->second;
+}
+
+void GuiApp::view_from_camera(uint32_t id) {
+    const LiveModel& m = _live_model;
+    size_t i = 0;
+    while (i < m.ids.size() && m.ids[i] != id) i++;
+    if (i == m.ids.size() || i >= (size_t)m.ds.num_cameras) return;
+    // Train frame -> the preview's normalized one (as PreviewRenderer maps
+    // it) -> the frame navigation works in.
+    double T[16];
+    dsparse::train_to_normalized_inverse(m.ds, T);
+    float S[12];
+    _model_view.model_to_shared(S);
+    float M[12];
+    for (int row = 0; row < 3; row++)
+        for (int c = 0; c < 4; c++) {
+            double v = c == 3 ? S[row * 4 + 3] : 0.0;
+            for (int k = 0; k < 3; k++) v += S[row * 4 + k] * T[k * 4 + c];
+            M[row * 4 + c] = (float)v;
+        }
+    const float s = std::sqrt(M[0] * M[0] + M[4] * M[4] + M[8] * M[8]);
+    const float* c2w = &m.ds.c2w[i * 12];
+    float pose[12], eye[3];
+    for (int row = 0; row < 3; row++) {
+        float p = M[row * 4 + 3];
+        for (int k = 0; k < 3; k++) {
+            p += M[row * 4 + k] * c2w[k * 4 + 3];
+            float v = 0;
+            for (int j = 0; j < 3; j++) v += M[row * 4 + j] / s * c2w[j * 4 + k];
+            pose[row * 4 + k] = v;
+        }
+        pose[row * 4 + 3] = eye[row] = p;
+    }
+    // Look a short way ahead of the camera, so orbiting starts from where it looks.
+    float target[3];
+    for (int k = 0; k < 3; k++) target[k] = eye[k] - pose[k * 4 + 2] * 0.25f * s;
+    const float fx = m.ds.intrins[i * 4], w = (float)m.ds.widths[i];
+    if (fx > 0 && w > 0)
+        _model_view.set_view_lens(0, 2.0f * std::atan(w / (2.0f * fx)) * 57.29578f);
+    _model_view.set_nav_pose(pose, target);
+    _preview_tab = 4;
+}
+
 void GuiApp::draw_image_list(float height) {
+    const float median = median_points(_image_stats);
     uint32_t placed = 0;
     for (const ImageStat& s : _image_stats) placed += s.placed ? 1 : 0;
     ui::Text(dmsg::images_summary, {(long long)placed, (long long)_image_stats.size()});
@@ -6354,67 +6430,104 @@ void GuiApp::draw_image_list(float height) {
                                   ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                                   ImGuiTableFlags_Resizable;
     const float h = std::max(px(60.0f), height - ImGui::GetTextLineHeightWithSpacing());
-    if (!ImGui::BeginTable("##images", 6, flags, ImVec2(0, h))) return;
-    ImGui::TableSetupScrollFreeze(0, 1);
-    ui::TableSetupColumn(dmsg::images_col_name,
-                         ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
-    ui::TableSetupColumn(dmsg::images_col_status);
-    ui::TableSetupColumn(dmsg::images_col_points);
-    ui::TableSetupColumn(dmsg::images_col_keypoints);
-    ui::TableSetupColumn(dmsg::images_col_mean);
-    ui::TableSetupColumn(dmsg::images_col_max);
-    ImGui::TableHeadersRow();
+    const ImageStat* picked = nullptr;
+    for (const ImageStat& s : _image_stats)
+        if (s.id == _image_picked) picked = &s;
+    const float table_w = picked ? ImGui::GetContentRegionAvail().x * 0.55f : 0.0f;
+    const ImageStat* clicked = nullptr;
+    if (ImGui::BeginTable("##images", 6, flags, ImVec2(table_w, h))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ui::TableSetupColumn(dmsg::images_col_name,
+                             ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthStretch);
+        ui::TableSetupColumn(dmsg::images_col_status);
+        ui::TableSetupColumn(dmsg::images_col_points);
+        ui::TableSetupColumn(dmsg::images_col_keypoints);
+        ui::TableSetupColumn(dmsg::images_col_mean);
+        ui::TableSetupColumn(dmsg::images_col_max);
+        ImGui::TableHeadersRow();
 
-    std::vector<const ImageStat*> rows;
-    rows.reserve(_image_stats.size());
-    for (const ImageStat& s : _image_stats) rows.push_back(&s);
-    if (const ImGuiTableSortSpecs* spec = ImGui::TableGetSortSpecs(); spec && spec->SpecsCount) {
-        const int col = spec->Specs[0].ColumnIndex;
-        const bool up = spec->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
-        auto key = [col](const ImageStat* s) -> double {
-            switch (col) {
-                case 1: return s->placed ? 1 : 0;
-                case 2: return s->points;
-                case 3: return s->keypoints;
-                case 4: return s->mean_error;
-                case 5: return s->max_error;
-                default: return 0;
-            }
-        };
-        std::stable_sort(rows.begin(), rows.end(), [&](const ImageStat* a, const ImageStat* b) {
-            if (col == 0) return up ? a->name < b->name : b->name < a->name;
-            return up ? key(a) < key(b) : key(b) < key(a);
-        });
-    }
-    ImGuiListClipper clip;
-    clip.Begin((int)rows.size());
-    while (clip.Step())
-        for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
-            const ImageStat& s = *rows[(size_t)r];
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ui::TextRaw(s.name);
-            ImGui::TableNextColumn();
-            if (s.placed) ui::TextColored(kOk, dmsg::images_placed);
-            else ui::TextColored(kDim, dmsg::images_not_placed);
-            ImGui::TableNextColumn();
-            if (s.placed)
-                ui::TextColoredRaw(badness_color(image_badness(s, 2)), std::to_string(s.points));
-            ImGui::TableNextColumn();
-            ui::TextRaw(std::to_string(s.keypoints));
-            ImGui::TableNextColumn();
-            char num[32];
-            if (s.placed && s.points) {
-                std::snprintf(num, sizeof num, "%.2f", s.mean_error);
-                ui::TextColoredRaw(badness_color(image_badness(s, 1)), num);
-            }
-            ImGui::TableNextColumn();
-            if (s.placed && s.points) {
-                std::snprintf(num, sizeof num, "%.2f", s.max_error);
-                ui::TextRaw(num);
-            }
+        std::vector<const ImageStat*> rows;
+        rows.reserve(_image_stats.size());
+        for (const ImageStat& s : _image_stats) rows.push_back(&s);
+        if (const ImGuiTableSortSpecs* spec = ImGui::TableGetSortSpecs(); spec && spec->SpecsCount) {
+            const int col = spec->Specs[0].ColumnIndex;
+            const bool up = spec->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
+            auto key = [col](const ImageStat* s) -> double {
+                switch (col) {
+                    case 1: return s->placed ? 1 : 0;
+                    case 2: return s->points;
+                    case 3: return s->keypoints;
+                    case 4: return s->mean_error;
+                    case 5: return s->max_error;
+                    default: return 0;
+                }
+            };
+            std::stable_sort(rows.begin(), rows.end(), [&](const ImageStat* a, const ImageStat* b) {
+                if (col == 0) return up ? a->name < b->name : b->name < a->name;
+                return up ? key(a) < key(b) : key(b) < key(a);
+            });
         }
-    ImGui::EndTable();
+        ImGuiListClipper clip;
+        clip.Begin((int)rows.size());
+        while (clip.Step())
+            for (int r = clip.DisplayStart; r < clip.DisplayEnd; r++) {
+                const ImageStat& s = *rows[(size_t)r];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                if (ui::SelectableRaw(s.name.c_str(), s.id == _image_picked,
+                                      ImGuiSelectableFlags_SpanAllColumns))
+                    clicked = &s;
+                ImGui::TableNextColumn();
+                if (s.placed) ui::TextColored(kOk, dmsg::images_placed);
+                else ui::TextColored(kDim, dmsg::images_not_placed);
+                ImGui::TableNextColumn();
+                if (s.placed)
+                    ui::TextColoredRaw(badness_color(image_badness(s, 2, median)),
+                                       std::to_string(s.points));
+                ImGui::TableNextColumn();
+                ui::TextRaw(std::to_string(s.keypoints));
+                ImGui::TableNextColumn();
+                char num[32];
+                if (s.placed && s.points) {
+                    std::snprintf(num, sizeof num, "%.2f", s.mean_error);
+                    ui::TextColoredRaw(badness_color(image_badness(s, 1, median)), num);
+                }
+                ImGui::TableNextColumn();
+                if (s.placed && s.points) {
+                    std::snprintf(num, sizeof num, "%.2f", s.max_error);
+                    ui::TextRaw(num);
+                }
+            }
+        ImGui::EndTable();
+    }
+    if (clicked && clicked->id != _image_picked) {
+        _image_picked = clicked->id;
+        picked = clicked;
+        _film_picked.clear();
+        FilmFrame f;
+        f.name = clicked->name;
+        f.image_path = image_file_for(clicked->name);
+        std::error_code ec;
+        const fs::path feats = fs::path(_sfm.features_dir().empty()
+                                            ? (fs::path(_workspace) / "features").string()
+                                            : _sfm.features_dir()) /
+                               (clicked->name + ".bin");
+        if (fs::exists(feats, ec)) f.points_path = feats.string();
+        if (!f.image_path.empty()) _film_picked.add_loaded(f);
+    }
+    if (!picked) return;
+
+    ImGui::SameLine();
+    ImGui::BeginChild("##picked", ImVec2(0, h));
+    bool in_model = false;
+    for (uint32_t id : _live_model.ids) in_model = in_model || id == picked->id;
+    ImGui::BeginDisabled(!picked->placed || !_model_attached || !in_model);
+    if (ui::Button(dmsg::images_view_from_camera)) view_from_camera(picked->id);
+    ImGui::EndDisabled();
+    ui::help_on_hover(dmsg::images_view_from_camera_help);
+    if (!_film_picked.has_frames()) ui::TextDisabledWrapped(dmsg::images_no_file);
+    else _film_picked.draw(ImGui::GetContentRegionAvail().y);
+    ImGui::EndChild();
 }
 
 // Everything the dataset screen holds about a run, given up: the previews, and
@@ -6434,10 +6547,13 @@ void GuiApp::reset_dataset_preview(bool sweep) {
     _pairs_view.clear();
     _pairs_view.destroy_gl();
     for (FilmReel* f : {&_film_frames, &_film_masks, &_film_features,
-                        &_film_geometry}) {
+                        &_film_geometry, &_film_picked}) {
         f->clear();
         f->destroy_gl();
     }
+    _image_picked = UINT32_MAX;
+    _image_files.clear();
+    _image_files_dir.clear();
     _model_mtime = _pairs_mtime = _matches_mtime = _dense_model_mtime = 0;
     _image_stats.clear();
     _image_stats_mtime = 0;
@@ -6496,6 +6612,8 @@ void GuiApp::draw_dataset_preview(float height) {
 
     const int implied = preview_for_stage();
     if (dataset_busy() && implied >= 0) _preview_last_stage = implied;
+    // Beside the switch, unless the paused-preview note took the line under it.
+    if (_dense_preview_error.empty()) ImGui::SameLine(0.0f, px(24.0f));
     const Msg* names[8] = {&dmsg::view_frames, &dmsg::view_masks,
                            &dmsg::view_features, &dmsg::view_matrix,
                            &dmsg::view_model, &dmsg::view_geometry,
@@ -6577,13 +6695,18 @@ void GuiApp::draw_dataset_preview(float height) {
         return;
     }
     if (!_image_stats.empty()) {
-        ImGui::SetNextItemWidth(px(220.0f));
-        if (ui::Combo(dmsg::camera_color, &_camera_color,
-                      {&dmsg::camera_color_plain, &dmsg::camera_color_error,
-                       &dmsg::camera_color_points}))
-            attach_live_model();
-        ui::help_on_hover(dmsg::camera_color_help);
-        h -= ImGui::GetFrameHeightWithSpacing();
+        const float combo = px(190.0f);
+        const ImGuiStyle& st = ImGui::GetStyle();
+        _model_view.lead_toolbar(
+            [this, combo] {
+                ImGui::SetNextItemWidth(combo);
+                if (ui::Combo(dmsg::camera_color, &_camera_color,
+                              {&dmsg::camera_color_plain, &dmsg::camera_color_error,
+                               &dmsg::camera_color_points}))
+                    attach_live_model();
+                ui::help_on_hover(dmsg::camera_color_help);
+            },
+            combo + st.ItemInnerSpacing.x + ImGui::CalcTextSize(dmsg::camera_color.get()).x);
     }
     // Width capped against the height: the band is as wide as the window, and
     // a 1600x150 letterbox of a 90-degree view shows a slice of the scene with
@@ -7581,49 +7704,21 @@ void GuiApp::draw_feature_download() {
         ui::TextColoredWrappedRaw(kErr, dl.status());
 }
 
-void GuiApp::draw_sfm_advanced() {
-    if (!ui::CollapsingHeader(dmsg::section_advanced)) return;
+// The quality level's progressive settings (sfm/ProgressivePresets.h), the
+// same ones `--quality` sets on the command line.
+void GuiApp::apply_progressive_preset() {
+    const sfm::ProgressivePreset& pp = sfm::kProgressivePresets[std::clamp(_sfm_job.quality, 0, 3)];
+    _sfm_job.progressive_error_start = pp.error_start;
+    _sfm_job.progressive_error_end = 0.0f;
+    _sfm_job.progressive_error_steps = pp.error_steps;
+    _sfm_job.progressive_features = pp.features;
+    _sfm_job.progressive_feature_steps = pp.feature_steps;
+    _sfm_job.progressive_patience = pp.patience;
+}
 
-    ImGui::SetNextItemWidth(px(260.0f));
-    ui::Combo(dmsg::capture_type, &_sfm_job.data_type,
-              {&dmsg::capture_photos, &dmsg::capture_video,
-               &dmsg::capture_internet});
-    ui::help_on_hover(dmsg::capture_type_help);
-    if (any_pano360(_sources)) draw_pano360_size();
-
-    ImGui::SetNextItemWidth(px(260.0f));
-    ui::Combo(dmsg::features, &_sfm_job.features,
-              {&dmsg::features_sift, &dmsg::features_aliked_n16,
-               &dmsg::features_aliked_n32, &dmsg::features_loma_b128,
-               &dmsg::features_loma_b});
-    ui::help_on_hover(dmsg::features_help);
-
-    {
-        // Brute force is the only option for SIFT, so say so by disabling the
-        // combo. The second entry is whichever learned matcher goes with the
-        // frontend above: each reads only the descriptors it was trained on.
-        const bool learned = _sfm_job.features != 0;
-        const bool is_loma = _sfm_job.features >= 3;
-        ImGui::BeginDisabled(!learned);
-        ImGui::SetNextItemWidth(px(260.0f));
-        int shown = learned ? _sfm_job.matcher : 0;
-        if (ui::Combo(dmsg::matcher, &shown,
-                      {&dmsg::matcher_brute_force,
-                       is_loma ? &dmsg::matcher_loma : &dmsg::matcher_lightglue}) &&
-            learned)
-            _sfm_job.matcher = shown;
-        ImGui::EndDisabled();
-        ui::help_on_hover(learned ? dmsg::matcher_help
-                                  : dmsg::matcher_needs_learned);
-        if (learned) draw_feature_download();
-    }
-
-    ImGui::SetNextItemWidth(px(260.0f));
-    ui::Combo(dmsg::mapper_schedule, &_sfm_job.mapper,
-              {&dmsg::mapper_flat, &dmsg::mapper_bottom_up});
-    ui::help_on_hover(dmsg::mapper_schedule_help);
-
-    ui::Checkbox(dmsg::progressive_alignment, &_sfm_job.progressive);
+void GuiApp::draw_progressive_options() {
+    if (ui::Checkbox(dmsg::progressive_alignment, &_sfm_job.progressive) && _sfm_job.progressive)
+        apply_progressive_preset();
     ui::help_on_hover(dmsg::progressive_alignment_help);
     if (_sfm_job.progressive) {
         ImGui::Indent();
@@ -7680,6 +7775,50 @@ void GuiApp::draw_sfm_advanced() {
         }
         ImGui::Unindent();
     }
+
+}
+
+void GuiApp::draw_sfm_advanced() {
+    if (!ui::CollapsingHeader(dmsg::section_advanced)) return;
+
+    ImGui::SetNextItemWidth(px(260.0f));
+    ui::Combo(dmsg::capture_type, &_sfm_job.data_type,
+              {&dmsg::capture_photos, &dmsg::capture_video,
+               &dmsg::capture_internet});
+    ui::help_on_hover(dmsg::capture_type_help);
+    if (any_pano360(_sources)) draw_pano360_size();
+
+    ImGui::SetNextItemWidth(px(260.0f));
+    ui::Combo(dmsg::features, &_sfm_job.features,
+              {&dmsg::features_sift, &dmsg::features_aliked_n16,
+               &dmsg::features_aliked_n32, &dmsg::features_loma_b128,
+               &dmsg::features_loma_b});
+    ui::help_on_hover(dmsg::features_help);
+
+    {
+        // Brute force is the only option for SIFT, so say so by disabling the
+        // combo. The second entry is whichever learned matcher goes with the
+        // frontend above: each reads only the descriptors it was trained on.
+        const bool learned = _sfm_job.features != 0;
+        const bool is_loma = _sfm_job.features >= 3;
+        ImGui::BeginDisabled(!learned);
+        ImGui::SetNextItemWidth(px(260.0f));
+        int shown = learned ? _sfm_job.matcher : 0;
+        if (ui::Combo(dmsg::matcher, &shown,
+                      {&dmsg::matcher_brute_force,
+                       is_loma ? &dmsg::matcher_loma : &dmsg::matcher_lightglue}) &&
+            learned)
+            _sfm_job.matcher = shown;
+        ImGui::EndDisabled();
+        ui::help_on_hover(learned ? dmsg::matcher_help
+                                  : dmsg::matcher_needs_learned);
+        if (learned) draw_feature_download();
+    }
+
+    ImGui::SetNextItemWidth(px(260.0f));
+    ui::Combo(dmsg::mapper_schedule, &_sfm_job.mapper,
+              {&dmsg::mapper_flat, &dmsg::mapper_bottom_up});
+    ui::help_on_hover(dmsg::mapper_schedule_help);
 
     // "Automatic" resolves to sequential for a short video and to pair
     // selection at 100 images, so each is offered whenever it can be what runs.

@@ -175,7 +175,16 @@ view follows the run. Beside `model.bin` the run writes `images.bin`
 (`sfm/core/Progress.h`): per image, placed or not, its features, the 3D points
 it sees and its mean and max reprojection error. The workspace keeps a copy,
 `image_stats.bin`, which outlives `.progress`. The dataset screen's Images
-view lists it, and colours the model's cameras by error or by 3D points.
+view lists it; picking an image shows the photo and can put the model view
+at its camera. The model's cameras are coloured red to green by mean error
+(2 px down to 0.8 px, log scale) or by 3D points against the placed images'
+median (an eighth of it up to the median).
+
+`--quality` sets the ladder and the passes (`sfm/ProgressivePresets.h`), and
+the GUI's quality control fills the same values in: start 12/16/20/24 px over
+3/4/5/7 attempts, no feature pass at low, then 1/2/3. Chosen from the
+260-image measurements above, where nothing was placed past five attempts
+and a feature pass costs about one attempt.
 
 Stopping: `--progressive-patience` (default 2) feature passes in a row with no
 gain, all steps tried for all targets, `--progressive-time`, or cancel.
