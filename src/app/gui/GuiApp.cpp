@@ -7445,6 +7445,36 @@ void GuiApp::draw_sfm_advanced() {
               {&dmsg::mapper_flat, &dmsg::mapper_bottom_up});
     ui::help_on_hover(dmsg::mapper_schedule_help);
 
+    ui::Checkbox(dmsg::progressive_alignment, &_sfm_job.progressive);
+    ui::help_on_hover(dmsg::progressive_alignment_help);
+    if (_sfm_job.progressive) {
+        ImGui::Indent();
+        // Settled when a field is left, not per keystroke: typing 15 passes through 1.
+        bool settle = false;
+        ImGui::SetNextItemWidth(px(240.0f));
+        ui::InputFloat(dmsg::progressive_error_start, &_sfm_job.progressive_error_start, 0, 0,
+                       "%.3g");
+        settle |= ImGui::IsItemDeactivatedAfterEdit();
+        ui::help_on_hover(dmsg::progressive_error_start_help);
+        ImGui::SetNextItemWidth(px(240.0f));
+        ui::InputFloat(dmsg::progressive_error_end, &_sfm_job.progressive_error_end, 0, 0,
+                       "%.3g");
+        settle |= ImGui::IsItemDeactivatedAfterEdit();
+        ui::help_on_hover(dmsg::progressive_error_end_help);
+        ImGui::SetNextItemWidth(px(240.0f));
+        ui::InputInt(dmsg::progressive_attempts, &_sfm_job.progressive_error_steps);
+        ui::help_on_hover(dmsg::progressive_attempts_help);
+        _sfm_job.progressive_error_steps = std::clamp(_sfm_job.progressive_error_steps, 2, 50);
+        if (settle) {
+            // The run refuses a start at or below the end; 0 is --max-error, 3 by default.
+            SfmJob& j = _sfm_job;
+            j.progressive_error_end = std::max(0.0f, j.progressive_error_end);
+            const float end = j.progressive_error_end > 0 ? j.progressive_error_end : 3.0f;
+            j.progressive_error_start = std::max(j.progressive_error_start, end * 1.5f);
+        }
+        ImGui::Unindent();
+    }
+
     // "Automatic" resolves to sequential for a short video and to pair
     // selection at 100 images, so each is offered whenever it can be what runs.
     if (_sfm_job.pairs == 2 || (_sfm_job.pairs == 0 && _sfm_job.data_type == 1)) {

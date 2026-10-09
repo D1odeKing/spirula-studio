@@ -678,6 +678,20 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
     // is a no-op under the other pair modes.
     if (!job.loop_closure) argv.push_back("--no-loop-closure");
     if (!job.prefilter_sequential) argv.push_back("--no-prefilter-sequential");
+    if (job.progressive) {
+        char buf[32];
+        argv.push_back("--progressive");
+        std::snprintf(buf, sizeof buf, "%g", job.progressive_error_start);
+        argv.push_back("--progressive-error-start");
+        argv.push_back(buf);
+        if (job.progressive_error_end > 0) {
+            std::snprintf(buf, sizeof buf, "%g", job.progressive_error_end);
+            argv.push_back("--progressive-error-end");
+            argv.push_back(buf);
+        }
+        argv.push_back("--progressive-error-steps");
+        argv.push_back(std::to_string(job.progressive_error_steps));
+    }
     if (job.init_focal_px > 0) {
         char buf[32];
         std::snprintf(buf, sizeof buf, "%g", job.init_focal_px);

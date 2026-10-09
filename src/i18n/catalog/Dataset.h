@@ -7997,6 +7997,236 @@ SS_MSG(mapper_bottom_up,
     RU("Снизу вверх (атомы, объединяемые вверх)"),
     TR("Aşağıdan yukarı (atomlar, yukarı doğru birleştirilir)"));
 
+SS_MSG(progressive_alignment,
+    EN("Progressive alignment"),
+    JA("段階的な位置合わせ"),
+    ZH_HANS("渐进对齐"),
+    ZH_HANT("漸進對齊"),
+    KO("단계적 정렬"),
+    DE("Schrittweise Ausrichtung"),
+    FR("Alignement progressif"),
+    ES("Alineación progresiva"),
+    PT("Alinhamento progressivo"),
+    IT("Allineamento progressivo"),
+    NL("Stapsgewijze uitlijning"),
+    RU("Постепенное выравнивание"),
+    TR("Kademeli hizalama"));
+
+SS_MSG(progressive_alignment_help,
+    EN("Align the images first with a loose pixel error, then again with "
+       "tighter ones, each attempt keeping the cameras the last one placed. "
+       "Images whose matches only fit once the lens is solved can get in this "
+       "way. The written model is held to the final error. Slower: one mapping "
+       "per attempt."),
+    JA("まず緩いピクセル誤差で画像を位置合わせし、その後より厳しい誤差で、"
+       "前の試行が置いたカメラを保ったまま繰り返します。レンズが求まって初めて"
+       "マッチが合う画像も、こうして入れるようになります。書き出すモデルは最終の"
+       "誤差に従います。試行ごとにマッピングするため時間がかかります。"),
+    ZH_HANS("先以宽松的像素误差对齐图像，再以更严格的误差重复，每次都保留上一次放置的"
+            "相机。只有在镜头求解后匹配才吻合的图像，可以借此加入。写出的模型以最终误差"
+            "为准。较慢：每次尝试都要建图一次。"),
+    ZH_HANT("先以寬鬆的像素誤差對齊影像，再以更嚴格的誤差重複，每次都保留上一次放置的"
+            "相機。只有在鏡頭求解後匹配才吻合的影像，可以藉此加入。寫出的模型以最終誤差"
+            "為準。較慢：每次嘗試都要建圖一次。"),
+    KO("먼저 느슨한 픽셀 오차로 이미지를 정렬한 뒤 더 엄격한 오차로 다시, 매번 "
+       "앞의 시도가 놓은 카메라를 유지하며 정렬합니다. 렌즈가 풀린 뒤에야 매치가 "
+       "맞는 이미지도 이렇게 들어올 수 있습니다. 기록되는 모델은 마지막 오차를 "
+       "따릅니다. 시도마다 매핑하므로 더 느립니다."),
+    DE("Richtet die Bilder zuerst mit großzügigem Pixelfehler aus, dann mit "
+       "strengeren, wobei jeder Versuch die Kameras des vorigen behält. So "
+       "kommen auch Bilder hinein, deren Zuordnungen erst passen, wenn das "
+       "Objektiv bestimmt ist. Das geschriebene Modell hält den letzten Fehler "
+       "ein. Langsamer: eine Kartierung pro Versuch."),
+    FR("Aligne d'abord les images avec une erreur en pixels large, puis avec "
+       "des erreurs plus strictes, chaque essai gardant les caméras placées par "
+       "le précédent. Des images dont les correspondances ne collent qu'une "
+       "fois l'objectif résolu peuvent ainsi entrer. Le modèle écrit respecte "
+       "l'erreur finale. Plus lent : un mapping par essai."),
+    ES("Alinea primero las imágenes con un error en píxeles amplio y luego con "
+       "otros más estrictos, y cada intento conserva las cámaras que colocó el "
+       "anterior. Así pueden entrar imágenes cuyas correspondencias solo "
+       "encajan una vez resuelta la lente. El modelo escrito cumple el error "
+       "final. Más lento: un mapeo por intento."),
+    PT("Alinha primeiro as imagens com um erro em pixels folgado e depois com "
+       "outros mais estritos, e cada tentativa mantém as câmeras que a anterior "
+       "posicionou. Assim podem entrar imagens cujas correspondências só se "
+       "encaixam depois que a lente é resolvida. O modelo gravado respeita o "
+       "erro final. Mais lento: um mapeamento por tentativa."),
+    IT("Allinea prima le immagini con un errore in pixel largo, poi con altri "
+       "più stretti, e ogni tentativo tiene le camere piazzate dal precedente. "
+       "Così possono entrare immagini le cui corrispondenze tornano solo una "
+       "volta risolto l'obiettivo. Il modello scritto rispetta l'errore finale. "
+       "Più lento: un mapping per tentativo."),
+    NL("Lijnt de beelden eerst uit met een ruime pixelfout en dan met strengere, "
+       "waarbij elke poging de camera's van de vorige houdt. Zo komen ook "
+       "beelden erin waarvan de overeenkomsten pas kloppen als de lens is "
+       "bepaald. Het weggeschreven model houdt zich aan de laatste fout. "
+       "Langzamer: één mapping per poging."),
+    RU("Сначала выравнивает снимки с мягкой ошибкой в пикселях, затем со всё "
+       "более строгой, и каждая попытка сохраняет камеры, поставленные "
+       "предыдущей. Так могут войти снимки, чьи соответствия сходятся лишь "
+       "после того, как найден объектив. Записанная модель держит конечную "
+       "ошибку. Медленнее: одно построение на попытку."),
+    TR("Görüntüleri önce gevşek bir piksel hatasıyla, sonra daha sıkılarıyla "
+       "hizalar; her deneme bir öncekinin yerleştirdiği kameraları korur. "
+       "Eşleşmeleri ancak lens çözüldükten sonra tutan görüntüler de böylece "
+       "girebilir. Yazılan model son hataya uyar. Daha yavaş: deneme başına "
+       "bir haritalama."));
+
+SS_MSG(progressive_error_start,
+    EN("Starting pixel error"),
+    JA("開始ピクセル誤差"),
+    ZH_HANS("起始像素误差"),
+    ZH_HANT("起始像素誤差"),
+    KO("시작 픽셀 오차"),
+    DE("Pixelfehler am Anfang"),
+    FR("Erreur en pixels de départ"),
+    ES("Error en píxeles inicial"),
+    PT("Erro em pixels inicial"),
+    IT("Errore in pixel iniziale"),
+    NL("Begin-pixelfout"),
+    RU("Начальная ошибка в пикселях"),
+    TR("Başlangıç piksel hatası"));
+
+SS_MSG(progressive_error_start_help,
+    EN("The first attempt's error, and the one the matches are checked "
+       "against. 20 is a good start; higher lets in more matches, wrong ones "
+       "included."),
+    JA("最初の試行の誤差で、マッチの検証にも使われます。20 が良い出発点です。"
+       "高くするとより多くのマッチが入りますが、誤ったものも入ります。"),
+    ZH_HANS("第一次尝试的误差，也是检验匹配所用的误差。20 是不错的起点；更高会放进更多"
+            "匹配，其中也有错误的。"),
+    ZH_HANT("第一次嘗試的誤差，也是檢驗匹配所用的誤差。20 是不錯的起點；更高會放進更多"
+            "匹配，其中也有錯誤的。"),
+    KO("첫 시도의 오차이며, 매치를 검증하는 기준이기도 합니다. 20 이 좋은 "
+       "출발점입니다. 높이면 매치가 더 들어오지만 틀린 것도 들어옵니다."),
+    DE("Der Fehler des ersten Versuchs, an dem auch die Zuordnungen geprüft "
+       "werden. 20 ist ein guter Anfang; höher lässt mehr Zuordnungen zu, "
+       "falsche eingeschlossen."),
+    FR("L'erreur du premier essai, celle aussi qui sert à vérifier les "
+       "correspondances. 20 est un bon départ ; plus haut en laisse entrer "
+       "davantage, fausses comprises."),
+    ES("El error del primer intento, y con el que se verifican las "
+       "correspondencias. 20 es un buen comienzo; más alto deja entrar más, "
+       "incluidas las erróneas."),
+    PT("O erro da primeira tentativa, e aquele com que as correspondências são "
+       "verificadas. 20 é um bom começo; mais alto deixa entrar mais, "
+       "incluindo as erradas."),
+    IT("L'errore del primo tentativo, e quello con cui si verificano le "
+       "corrispondenze. 20 è un buon inizio; più alto ne lascia entrare di "
+       "più, anche sbagliate."),
+    NL("De fout van de eerste poging, waarmee ook de overeenkomsten worden "
+       "gecontroleerd. 20 is een goed begin; hoger laat meer overeenkomsten "
+       "toe, ook foute."),
+    RU("Ошибка первой попытки; с ней же проверяются соответствия. 20 — хорошее "
+       "начало; больше пропускает больше соответствий, в том числе ошибочных."),
+    TR("İlk denemenin hatası; eşleşmeler de bununla doğrulanır. 20 iyi bir "
+       "başlangıçtır; daha yüksek değer yanlışlar dahil daha çok eşleşme alır."));
+
+SS_MSG(progressive_error_end,
+    EN("Final pixel error"),
+    JA("最終ピクセル誤差"),
+    ZH_HANS("最终像素误差"),
+    ZH_HANT("最終像素誤差"),
+    KO("최종 픽셀 오차"),
+    DE("Pixelfehler am Ende"),
+    FR("Erreur en pixels finale"),
+    ES("Error en píxeles final"),
+    PT("Erro em pixels final"),
+    IT("Errore in pixel finale"),
+    NL("Eind-pixelfout"),
+    RU("Конечная ошибка в пикселях"),
+    TR("Son piksel hatası"));
+
+SS_MSG(progressive_error_end_help,
+    EN("The last attempt's error, which the written model is held to. 0 uses "
+       "the reconstruction's own maximum error (3 unless changed under "
+       "advanced options)."),
+    JA("最後の試行の誤差で、書き出すモデルはこれに従います。0 は再構成自体の"
+       "最大誤差（詳細設定で変えなければ 3）を使います。"),
+    ZH_HANS("最后一次尝试的误差，写出的模型以此为准。0 表示使用重建本身的最大误差"
+            "（除非在高级选项中修改，否则为 3）。"),
+    ZH_HANT("最後一次嘗試的誤差，寫出的模型以此為準。0 表示使用重建本身的最大誤差"
+            "（除非在進階選項中修改，否則為 3）。"),
+    KO("마지막 시도의 오차로, 기록되는 모델이 이를 따릅니다. 0 은 재구성 자체의 "
+       "최대 오차(고급 옵션에서 바꾸지 않으면 3)를 씁니다."),
+    DE("Der Fehler des letzten Versuchs, den das geschriebene Modell einhält. 0 "
+       "nimmt den Höchstfehler der Rekonstruktion selbst (3, sofern unter den "
+       "erweiterten Optionen nicht geändert)."),
+    FR("L'erreur du dernier essai, que respecte le modèle écrit. 0 prend "
+       "l'erreur maximale de la reconstruction elle-même (3 sauf changement "
+       "dans les options avancées)."),
+    ES("El error del último intento, que cumple el modelo escrito. 0 usa el "
+       "error máximo de la propia reconstrucción (3 salvo que se cambie en las "
+       "opciones avanzadas)."),
+    PT("O erro da última tentativa, que o modelo gravado respeita. 0 usa o "
+       "erro máximo da própria reconstrução (3, a menos que seja alterado nas "
+       "opções avançadas)."),
+    IT("L'errore dell'ultimo tentativo, che il modello scritto rispetta. 0 usa "
+       "l'errore massimo della ricostruzione stessa (3 se non cambiato nelle "
+       "opzioni avanzate)."),
+    NL("De fout van de laatste poging, waaraan het weggeschreven model zich "
+       "houdt. 0 neemt de maximale fout van de reconstructie zelf (3, tenzij "
+       "gewijzigd bij de geavanceerde opties)."),
+    RU("Ошибка последней попытки; её держит записанная модель. 0 берёт "
+       "максимальную ошибку самой реконструкции (3, если не изменена в "
+       "расширенных настройках)."),
+    TR("Son denemenin hatası; yazılan model buna uyar. 0, yeniden yapılandırmanın "
+       "kendi en büyük hatasını kullanır (gelişmiş seçeneklerde "
+       "değiştirilmediyse 3)."));
+
+SS_MSG(progressive_attempts,
+    EN("Attempts"),
+    JA("試行回数"),
+    ZH_HANS("尝试次数"),
+    ZH_HANT("嘗試次數"),
+    KO("시도 횟수"),
+    DE("Versuche"),
+    FR("Essais"),
+    ES("Intentos"),
+    PT("Tentativas"),
+    IT("Tentativi"),
+    NL("Pogingen"),
+    RU("Попытки"),
+    TR("Denemeler"));
+
+SS_MSG(progressive_attempts_help,
+    EN("How many alignments run from the starting error to the final one, "
+       "both included. Each step cuts the error by the same ratio: 20 to 3 in "
+       "5 is 20, 12.4, 7.7, 4.8, 3."),
+    JA("開始誤差から最終誤差まで、両端を含めて何回位置合わせするかです。各段は"
+       "同じ比率で誤差を下げます。20 から 3 を 5 回なら 20、12.4、7.7、4.8、3。"),
+    ZH_HANS("从起始误差到最终误差（含两端）运行多少次对齐。每一步按相同比例降低误差："
+            "20 到 3 分 5 次为 20、12.4、7.7、4.8、3。"),
+    ZH_HANT("從起始誤差到最終誤差（含兩端）執行多少次對齊。每一步按相同比例降低誤差："
+            "20 到 3 分 5 次為 20、12.4、7.7、4.8、3。"),
+    KO("시작 오차부터 최종 오차까지 양 끝을 포함해 몇 번 정렬할지입니다. 단계마다 "
+       "같은 비율로 오차를 줄입니다: 20 에서 3 까지 5 번이면 20, 12.4, 7.7, 4.8, 3."),
+    DE("Wie viele Ausrichtungen vom Anfangs- bis zum Endfehler laufen, beide "
+       "eingeschlossen. Jeder Schritt senkt den Fehler im selben Verhältnis: "
+       "20 bis 3 in 5 ist 20, 12.4, 7.7, 4.8, 3."),
+    FR("Combien d'alignements vont de l'erreur de départ à l'erreur finale, "
+       "les deux comprises. Chaque pas réduit l'erreur dans le même rapport : "
+       "20 à 3 en 5 donne 20, 12.4, 7.7, 4.8, 3."),
+    ES("Cuántas alineaciones van del error inicial al final, ambos incluidos. "
+       "Cada paso reduce el error en la misma proporción: de 20 a 3 en 5 es "
+       "20, 12.4, 7.7, 4.8, 3."),
+    PT("Quantos alinhamentos vão do erro inicial ao final, ambos incluídos. "
+       "Cada passo reduz o erro na mesma proporção: de 20 a 3 em 5 é 20, 12.4, "
+       "7.7, 4.8, 3."),
+    IT("Quanti allineamenti vanno dall'errore iniziale a quello finale, "
+       "entrambi inclusi. Ogni passo riduce l'errore nello stesso rapporto: da "
+       "20 a 3 in 5 è 20, 12.4, 7.7, 4.8, 3."),
+    NL("Hoeveel uitlijningen van de begin- tot de eindfout lopen, beide "
+       "inbegrepen. Elke stap verlaagt de fout met dezelfde verhouding: 20 tot "
+       "3 in 5 is 20, 12.4, 7.7, 4.8, 3."),
+    RU("Сколько выравниваний идёт от начальной ошибки до конечной, включая "
+       "обе. Каждый шаг уменьшает ошибку в одно и то же число раз: от 20 до 3 "
+       "за 5 — это 20, 12.4, 7.7, 4.8, 3."),
+    TR("Başlangıç hatasından son hataya, ikisi de dahil, kaç hizalama "
+       "çalışacağı. Her adım hatayı aynı oranda düşürür: 5 adımda 20'den 3'e "
+       "20, 12.4, 7.7, 4.8, 3."));
+
 SS_MSG(mapper_schedule_help,
     EN("How the scene is built. Flat grows one reconstruction image by image, "
        "and is the default for any capture. Bottom-up cuts the view graph "

@@ -159,6 +159,12 @@ struct SfmJob {
     // 0 flat, 1 bottom-up. Flat for every capture, whatever its size: there is
     // no automatic switch, here or in `spirula sfm`.
     int mapper = 0;
+    // Progressive alignment: map at a loose pixel error, then at tighter ones
+    // down to the end (0 = the run's --max-error), in `progressive_error_steps`.
+    bool progressive = false;
+    float progressive_error_start = 20.0f;
+    float progressive_error_end = 0.0f;
+    int progressive_error_steps = 5;
     // An index into kSfmFeatures. A frontend choice, not a quality level: the
     // learned ones run on their own resolution ladder, so the quality preset
     // means something different for each.

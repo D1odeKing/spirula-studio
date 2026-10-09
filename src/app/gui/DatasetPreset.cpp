@@ -88,6 +88,10 @@ namespace {
     X("sfm_overlap",                sfm.overlap)                              \
     X("sfm_loop_closure",           sfm.loop_closure)                         \
     X("sfm_prefilter_sequential",   sfm.prefilter_sequential)                 \
+    X("sfm_progressive",            sfm.progressive)                          \
+    X("sfm_progressive_error_start", sfm.progressive_error_start)             \
+    X("sfm_progressive_error_end",  sfm.progressive_error_end)                \
+    X("sfm_progressive_error_steps", sfm.progressive_error_steps)             \
     X("sfm_use_sequence",           sfm.use_sequence)                         \
     X("sfm_init_focal_px",          sfm.init_focal_px)                        \
     X("sfm_init_distortion",        sfm.init_distortion)                      \

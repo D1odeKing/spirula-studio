@@ -48,7 +48,8 @@ bool sfm_option_panel_owned(const std::string& flag) {
         "final-per-image-intrinsics", "final-free-rig", "metric-gps", "exif-attitude",
         "sensor-gauge", "ba-real", "ba-real-coarse", "metric-positions", "telemetry", "rigs",
         "manifest", "resume", "aliked-model", "lightglue-model", "loma-detector-model",
-        "loma-descriptor-model", "loma-matcher-model",
+        "loma-descriptor-model", "loma-matcher-model", "progressive", "progressive-error-start",
+        "progressive-error-end", "progressive-error-steps",
     };
     for (const char* o : kOwned)
         if (flag == o) return true;
