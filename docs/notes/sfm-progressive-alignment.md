@@ -1,4 +1,4 @@
-# Recovering cameras a run left out — plan
+# Progressive alignment — plan
 
 Status: **plan, nothing implemented.** Target branch: `dev`.
 
@@ -103,7 +103,7 @@ then, while targets remain and patience is not used up:     (feature passes, §4
 
 - **Component**: the images of `sparse/k` (k ≥ 1) that `sparse/0` does not hold.
   Priority is size, then link evidence (verified matches to `sparse/0`).
-- **Near miss**: an unregistered image with at least `--recover-min-matches`
+- **Near miss**: an unregistered image with at least `--progressive-min-matches`
   (default 50) verified inliers to any registered image.
 - **Outlier**: everything else. Never re-extracted, never matched. This is the
   "don't spend time on outliers" rule.
@@ -153,8 +153,8 @@ A pass (one ladder step, or one feature step) is kept only if all of these hold:
 A refused feature pass restores the targets' old feature files and pairs, so
 the next step starts from the same place.
 
-Stopping: `--recover-patience` (default 2) feature passes in a row with no
-gain, all steps tried for all targets, `--recover-time`, or cancel.
+Stopping: `--progressive-patience` (default 2) feature passes in a row with no
+gain, all steps tried for all targets, `--progressive-time`, or cancel.
 
 ## 6. Better matchers for repeated and look-alike structure
 
@@ -282,7 +282,7 @@ and a multiply in `TopPartners`. The coarse shortlist pass (`coarse_neighbors`,
 over all N² pairs) should take the same weight, or a near pair can be cut
 before the reliable score ever sees it.
 
-### 7.4 In the recovery loop
+### 7.4 In progressive alignment
 
 A sub-model spanning positions 340–385 broke away at its ends, so its
 partners are ranked first by distance from **its first and last positions**
@@ -301,54 +301,102 @@ what actually refuse a fold.
 
 ## 8. Where it plugs in
 
+The feature is called **progressive alignment**: one run that starts loose
+and tightens, the way RealityScan's repeated realignment does.
+
 ```
-src/sfm/Recover.h / Recover.cpp      the ladder, the feature passes, acceptance, recover.txt
-src/sfm/feature/PairSelection.h      prefilterPairsFor(feats, opt, targets, partners), restored
-src/sfm/feature/Verification.h       reverify(db, feats, cams, tol): RANSAC over stored inliers
-src/sfm/tests/sfm_recover_test.cpp   §8
+src/sfm/Progressive.h / .cpp           the ladder, the feature passes, acceptance, progressive.txt
+src/sfm/feature/PairSelection.h        prefilterPairsFor(feats, opt, targets, partners), restored
+src/sfm/feature/Verification.h         reverify(db, feats, cams, tol): RANSAC over stored inliers
+src/sfm/tests/sfm_progressive_test.cpp §9
 ```
 
-- **`spirula sfm auto --recover`** runs the ladder inside `run_auto`. It
-  replaces the single `runMapper` call; matching verifies at `e_0` instead of
-  `--max-error`, and everything after `finishModels` is unchanged. The feature
-  passes come after the ladder.
-- **`spirula sfm recover WORKSPACE`** runs only the feature passes on an
-  existing workspace (its `features/`, `matches.bin`, `sparse/`). This is for a
-  run already made. Reading a written model back needs the row mapping that
+- **`spirula sfm auto --progressive`** runs the ladder inside `run_auto`. It
+  replaces the single `runMapper` call; matching verifies at the start error
+  instead of `--max-error`, and everything after `finishModels` is unchanged.
+  The feature passes come after the ladder.
+- **`spirula sfm progressive WORKSPACE`** runs only the feature passes on an
+  existing workspace (its `features/`, `matches.bin`, `sparse/`), for a run
+  already made. Reading a written model back needs the row mapping that
   compaction makes necessary; with #138 gone, that is written fresh and small
   (match model rows to feature rows by keypoint position).
-- **Config rows** (`SFM_CONFIG_FIELDS`, group `recover`), each with its
-  name/help pair in `i18n/catalog/SfmFields.h`:
 
-| flag | default |
-|---|---|
-| `recover` | off |
-| `recover-error-start` | 20 |
-| `recover-error-steps` | `20,12,8,5` (then `--max-error`) |
-| `recover-feature-steps` | `features,resolution,contrast,all` |
-| `recover-patience` | 2 |
-| `recover-min-matches` | 50 |
-| `recover-time` | 0 (no limit), minutes |
+### 8.1 Settings: a start and an end for each thing that moves
 
-- **Resume (D76)**: one signature per ladder step and per feature pass, so an
-  interrupted run picks up at the step it was on.
-- **Events and GUI**: `Stage::Recover` (appended so `status.bin` numbering
-  holds, as `Stage::Focal` was); `SfmJob::recover` plus its row in
-  `DatasetPreset.cpp` (guarded by `preset_roundtrip_test`) and in
-  `model_fields()` (`DatasetPlan.cpp`); a checkbox in `SfmOptionsUI`; progress
-  shows "pass k: 8 px, +n images".
-- **Output**: `recover.txt`, one line per pass (kind, setting, targets,
-  registered before/after, mean error, seconds, kept/undone), plus one summary
-  line in the run report.
+Every ladder is given by where it starts, where it ends and how many attempts
+lie between them. The steps are spaced geometrically, so 20 → 3 px in 5
+attempts is 20, 12.4, 7.7, 4.8, 3. A list of values is not part of the
+interface.
+
+| flag | default | meaning |
+|---|---|---|
+| `progressive` | off | the switch |
+| `progressive-error-start` | 20 | pixel error of the first attempt |
+| `progressive-error-end` | 0 = `--max-error` | pixel error of the last attempt, and of the written model |
+| `progressive-error-steps` | 5 | attempts from start to end, both included |
+| `progressive-features` | on | the feature passes on images still unaligned after the ladder |
+| `progressive-max-features-end` | 0 = 4 × the run's | feature count the passes end at; they start at the run's own |
+| `progressive-image-size-end` | 0 = the source size | working resolution the passes end at; they start at the run's own |
+| `progressive-feature-steps` | 3 | feature passes from start to end |
+| `progressive-patience` | 2 | stop after this many attempts in a row that add no camera |
+| `progressive-min-matches` | 50 | verified matches an unaligned image needs to be worked on (§4) |
+| `progressive-time` | 0 = no limit | minutes |
+
+Each row is in group `progressive` of `SFM_CONFIG_FIELDS`, with its help in
+`i18n/catalog/SfmFields.h`. The SIFT contrast step (F3) runs on the last
+feature pass rather than as a setting of its own.
+
+### 8.2 GUI
+
+One checkbox on the reconstruction panel, off by default. Ticking it shows the
+rest, indented beneath it; unticked, none of it is on screen:
+
+```
+[x] Progressive alignment                                      (?)
+      Pixel error        from [ 20.0 ]  to [  3.0 ]  in [ 5 ] attempts
+      [x] Re-detect features on images still unaligned
+            Features     from  8192 (quality)  to [ 32768 ]
+            Image size   from  2400 (quality)  to [ source ]
+            in [ 3 ] attempts
+      Stop after [ 2 ] attempts that add no camera
+      Time limit [ 0 ] minutes (0: none)
+```
+
+- The "from" values of the feature passes are the quality preset's own (or
+  the advanced editor's), shown read-only, so the range reads as a range.
+- "to" for the pixel error defaults to the run's `--max-error`, and is
+  refused below it: the written model is held to the run's tolerance.
+- `SfmJob` gets one field per row: `progressive`, `progressive_error_start`,
+  `progressive_error_end`, `progressive_error_steps`, `progressive_features`,
+  `progressive_max_features_end`, `progressive_image_size_end`,
+  `progressive_feature_steps`, `progressive_patience`, `progressive_time`.
+  Each gets its `X(...)` row in `DatasetPreset.cpp` (`preset_roundtrip_test`
+  guards this) and an entry in `model_fields()` (`DatasetPlan.cpp`), and is
+  passed by `SfmRunner` as flags only when the box is ticked.
+- Every label and hover help is a `Msg` in `i18n/catalog/Dataset.h`, in all
+  13 languages.
+- The advanced options editor lists the same rows under a "Progressive
+  alignment" group, from the table, as it does every other flag.
+
+### 8.3 Run-time plumbing
+
+- **Resume (D76)**: one signature per attempt, so an interrupted run picks up
+  at the attempt it was on.
+- **Events**: `Stage::Progressive`, appended so `status.bin` numbering holds
+  (as `Stage::Focal` was). The progress line reads "attempt k of n: 7.7 px,
+  +12 cameras".
+- **Output**: `progressive.txt`, one line per attempt (kind, setting, images
+  worked on, registered before and after, mean error, seconds, kept or
+  undone), plus one summary line in the run report.
 
 ## 9. Tests
 
-`src/sfm/tests/sfm_recover_test.cpp`, synthetic scenes from `SyntheticRegister.h`:
+`src/sfm/tests/sfm_progressive_test.cpp`, synthetic scenes from `SyntheticRegister.h`:
 
 1. **Unknown distortion.** A wide-lens scene with strong k1, started at zero
    distortion. At 3 px it fragments; with the ladder it comes out as one
    model, ending at 3 px with correct intrinsics.
-2. **Ladder stops cleanly.** A scene that already reconstructs: `--recover`
+2. **Ladder stops cleanly.** A scene that already reconstructs: `--progressive`
    gives the same images and poses within tolerance, and no feature pass runs
    (there are no targets).
 3. **Look-alike guard.** Two identical facades with the true link removed. Run
@@ -377,14 +425,14 @@ rate, AUC@10 (capped by registration², so report both), time.
 | 0b | **File-order check.** The same captures with `--prefilter-sequential` on, which needs no new code, and per sub-model the content score of the pairs across its boundary | whether the breaks are pairs the shortlist dropped; if so, the weighting goes first |
 | 0c | **Doc fixes** from §7.2 | README matches the defaults |
 | W | **Order weighting** in `TopPartners` (both passes), config rows, run log line | tests 6–7; no capture loses images against `--prefilter-sequential` off or on |
-| 1 | **Error ladder** in `auto --recover`: `reverify`, continuation, acceptance | tests 1–3; no capture loses AUC |
+| 1 | **Error ladder** in `auto --progressive`: `reverify`, continuation, acceptance | tests 1–3; no capture loses AUC |
 | 2 | **Feature passes**: targets, `prefilterPairsFor`, per-target re-extraction, undo | tests 4–5; gain on at least one phase-0 capture |
-| 3 | **`spirula sfm recover`** on an existing workspace | runs on a workspace from before the feature |
+| 3 | **`spirula sfm progressive`** on an existing workspace | runs on a workspace from before the feature |
 | 4 | **GUI, presets, resume, docs** (README section, `sfm-design.md` D80) | `preset_roundtrip_test`; guictl run |
 | later | Doppelgangers++ as a graph filter; RoMa v2 as a sparse SfM matcher | only if phase 0 says matching, not tolerance, is what loses the images |
 
 Phase W is independent of the ladder and helps every run, not only
-`--recover`, so it can land first if phase 0b says so.
+`--progressive`, so it can land first if phase 0b says so.
 
 ## 11. Open questions
 
@@ -392,7 +440,7 @@ Phase W is independent of the ladder and helps every run, not only
    or do you step down differently?
 2. Should the ladder be on by default for `--quality high`, once phase 1 has
    numbers?
-3. Name: `recover`, or something else?
+3. Name: "progressive alignment" (`--progressive`), or something else?
 4. Should a folder of numbered photos (`IMG_0001...`) get the order weight by
    default, or only when "Shot in order" is ticked?
 5. Is the disabled sequence matching window (`#if 0`) and the mapper's
