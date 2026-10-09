@@ -347,8 +347,10 @@ void GuiApp::shutdown() {
     _partition_panel.destroy_gl();
     _roi_editor.destroy_gl();
     if (_merge_thread.joinable()) _merge_thread.join();
-    _colmap.cancel();
-    _sfm.cancel();
+    // Joined here: the workers write into _film_*, which are destroyed before
+    // the runners are, and a run holds the inference device main() releases.
+    _colmap.shutdown();
+    _sfm.shutdown();
     reset_dataset_preview();
     _source_probe.stop();
     _download.cancel();

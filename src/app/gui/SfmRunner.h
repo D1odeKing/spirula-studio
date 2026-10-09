@@ -266,6 +266,9 @@ public:
     // never taken from here.
     void update(const SfmJob& job);
     void cancel();
+    // cancel() and join. The owner calls it while the films are still alive;
+    // the destructor is a backstop.
+    void shutdown();
 
     State state() const { return _state.load(); }
     // Which step the run is on, how far through, and its lines -- everything

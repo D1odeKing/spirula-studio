@@ -171,7 +171,9 @@ std::string SfmRunner::availability() {
 #endif
 }
 
-SfmRunner::~SfmRunner() {
+SfmRunner::~SfmRunner() { shutdown(); }
+
+void SfmRunner::shutdown() {
     cancel();
     if (_worker.joinable()) _worker.join();
 }
