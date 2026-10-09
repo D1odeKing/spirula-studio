@@ -51,6 +51,9 @@ void gauge(bool oriented, bool metric);
 
 // The capture's images by the ids models use, so images.bin lists the unplaced.
 void images(const std::vector<std::string>& names, const std::vector<uint32_t>& keypoints);
+// The same file anywhere, whether or not --progress-dir was given: the run
+// keeps one in its workspace, which outlives .progress.
+bool write_image_stats(const Reconstruction& rec, const std::string& path);
 
 // The model as it stands, subsampled to kMaxPoints. Call it as often as is
 // convenient; it returns immediately until the interval has passed, unless

@@ -173,7 +173,8 @@ LoMa's working set at 3869 px is 14.6 GB.
 Every attempt and every pass ends with a model snapshot, so the GUI's model
 view follows the run. Beside `model.bin` the run writes `images.bin`
 (`sfm/core/Progress.h`): per image, placed or not, its features, the 3D points
-it sees and its mean and max reprojection error. The dataset screen's Images
+it sees and its mean and max reprojection error. The workspace keeps a copy,
+`image_stats.bin`, which outlives `.progress`. The dataset screen's Images
 view lists it, and colours the model's cameras by error or by 3D points.
 
 Stopping: `--progressive-patience` (default 2) feature passes in a row with no

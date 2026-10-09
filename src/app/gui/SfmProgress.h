@@ -110,7 +110,8 @@ struct ImageStat {
     float mean_error = 0, max_error = 0;   // reprojection, pixels
     std::string name;
 };
-bool read_image_stats(const std::string& dir, int64_t& mtime, std::vector<ImageStat>& out);
+// `path` is a run's images.bin or the image_stats.bin its workspace keeps.
+bool read_image_stats(const std::string& path, int64_t& mtime, std::vector<ImageStat>& out);
 
 // The similarity (row-major 3x4 [sR | t]) taking `from`'s normalized frame onto
 // `to`'s, fitted to the cameras both hold. False when too few are shared or they

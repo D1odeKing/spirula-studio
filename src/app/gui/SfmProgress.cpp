@@ -279,10 +279,10 @@ bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out, uin
     return true;
 }
 
-bool read_image_stats(const std::string& dir, int64_t& mtime, std::vector<ImageStat>& out) {
-    if (dir.empty()) return false;
+bool read_image_stats(const std::string& path, int64_t& mtime, std::vector<ImageStat>& out) {
+    if (path.empty()) return false;
     int64_t stamp = mtime;
-    const std::string b = slurp_if_newer(fs::path(dir) / "images.bin", stamp);
+    const std::string b = slurp_if_newer(fs::path(path), stamp);
     if (b.size() < 12 || std::memcmp(b.data(), "VKPI", 4) != 0) return false;
     Reader r{b.data() + 4, b.data() + b.size()};
     if (r.u32() != 1) return false;

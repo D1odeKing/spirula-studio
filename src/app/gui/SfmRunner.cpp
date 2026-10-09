@@ -426,7 +426,7 @@ void SfmRunner::apply_status(const RunStatus& st) {
                 break;
         // Every attempt places the images again, so the bar counts attempts.
         // Each step begins the stage over, at 0, an instant before its count.
-        case 11: if (st.done <= 0 && !_progressive_label.empty()) break;
+        case 11: if (st.done <= 0) break;
                  _progressive_label =
                      format(lmsg::stage_progressive, {(long long)st.done, (long long)st.total});
                  set_stage_if_new(Stage::Mapping, _progressive_label.c_str());

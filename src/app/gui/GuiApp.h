@@ -853,6 +853,7 @@ private:
     int64_t _model_mtime = 0, _pairs_mtime = 0, _matches_mtime = 0;
     std::vector<ImageStat> _image_stats;
     int64_t _image_stats_mtime = 0;
+    std::string _image_stats_path;
     int _camera_color = 1;   // 0 plain, 1 by reprojection error, 2 by 3D points
     double _sfm_polled_at = -1.0;
     // The dense step's own model.bin (dense::progress_dir), shown in the same view.

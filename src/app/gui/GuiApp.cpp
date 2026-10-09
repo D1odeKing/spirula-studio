@@ -6236,6 +6236,19 @@ void GuiApp::poll_sfm_progress() {
                           _sfm.live_matches_path());
 
     const std::string dir = _sfm.progress_dir();
+    // The run's own file while it lasts; the workspace's copy outlives it.
+    std::error_code ec;
+    const fs::path live = dir.empty() ? fs::path() : fs::path(dir) / "images.bin";
+    const std::string stats_path =
+        !live.empty() && fs::exists(live, ec) ? live.string()
+        : _workspace.empty()                  ? std::string()
+                                              : (fs::path(_workspace) / "image_stats.bin").string();
+    if (stats_path != _image_stats_path) {
+        _image_stats_path = stats_path;
+        _image_stats_mtime = 0;
+        _image_stats.clear();
+    }
+    const bool stats_read = read_image_stats(_image_stats_path, _image_stats_mtime, _image_stats);
     if (dir.empty()) return;
 
     PairMatrix pm;
@@ -6246,7 +6259,6 @@ void GuiApp::poll_sfm_progress() {
         read_pair_matrix_from_matches(_sfm.matches_path(), _matches_mtime, pm))
         _matrix.set(pm);
 
-    const bool stats = read_image_stats(dir, _image_stats_mtime, _image_stats);
     LiveModel lm;
     if (read_live_model(dir, _model_mtime, lm)) {
     #if 0
@@ -6278,7 +6290,7 @@ void GuiApp::poll_sfm_progress() {
                    /*detail=*/false);
         }
         attach_live_model();
-    } else if (stats && _model_attached) {
+    } else if (stats_read && _model_attached) {
         attach_live_model();
     }
 }
@@ -6429,6 +6441,7 @@ void GuiApp::reset_dataset_preview(bool sweep) {
     _model_mtime = _pairs_mtime = _matches_mtime = _dense_model_mtime = 0;
     _image_stats.clear();
     _image_stats_mtime = 0;
+    _image_stats_path.clear();
     _dense_model_read = {};
     _dense_preview_error.clear();
     _dense_polled_at = -1.0;

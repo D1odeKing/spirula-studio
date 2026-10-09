@@ -246,8 +246,10 @@ std::string image_stats(const Reconstruction& rec) {
         put_u32(b, points);
         put_f32(b, points ? (float)(sum / points) : 0.0f);
         put_f32(b, (float)worst);
-        put_u32(b, (uint32_t)im.name.size());
-        put(b, im.name.data(), im.name.size());
+        // The run's own stem: a finished model's names carry the extension.
+        const std::string& name = im.id < s.names.size() ? s.names[im.id] : im.name;
+        put_u32(b, (uint32_t)name.size());
+        put(b, name.data(), name.size());
     }
     return b;
 }
@@ -375,6 +377,17 @@ void model(const Reconstruction& rec, bool force, const PointColor& color) {
     }
     write_atomic("model.bin", b);
     write_atomic("images.bin", image_stats(rec));
+}
+
+bool write_image_stats(const Reconstruction& rec, const std::string& path) {
+    std::string b;
+    {
+        std::lock_guard<std::mutex> lk(state().mu);
+        b = image_stats(rec);
+    }
+    std::ofstream f(path, std::ios::binary | std::ios::trunc);
+    f.write(b.data(), (std::streamsize)b.size());
+    return (bool)f;
 }
 
 void images(const std::vector<std::string>& names, const std::vector<uint32_t>& keypoints) {

@@ -2638,7 +2638,11 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // in the seed pair's frame, so a run watched to the end left a tilted model
     // on display until the user opened the written one.
     if (!gauge.empty()) progress::gauge(gauge[0].oriented, gauge[0].metric);
-    if (!models.empty()) progress::model(models.front(), /*force=*/true);
+    if (!models.empty()) {
+        progress::model(models.front(), /*force=*/true);
+        if (!progress::write_image_stats(models.front(), (ws / "image_stats.bin").string()))
+            L::err_raw(Tag::Map, "cannot write " + (ws / "image_stats.bin").string());
+    }
     // Before the split: the summary reports what was estimated, and the file's
     // one camera per frame size is not that.
     const size_t n_cameras = models.empty() ? 0 : models.front().cameras.size();
