@@ -1,11 +1,12 @@
 # Progressive alignment — plan
 
-Status on `dev`: the file-order weight (§7, `--order-weight`, off by default),
-the error ladder with a final retriangulation (§2–3, `--progressive`), the
-feature passes (§4–5), their GUI (§8.2), `progressive.txt`, the time limit and
-`Stage::Progressive` are in. Not yet: `spirula sfm progressive WORKSPACE` on a
-finished run, resume per attempt, and keeping the putative matches so the
-tighter attempts re-verify from them rather than from the loose inliers.
+Status on `sfm-progressive-alignment`: the file-order weight (§7,
+`--order-weight`, off by default), the error ladder with a final
+retriangulation (§2–3, `--progressive`), the feature passes (§4–5), their GUI
+(§8.2), `progressive.txt`, the time limit and `Stage::Progressive` are in. Not
+yet: `spirula sfm progressive WORKSPACE` on a finished run, resume per
+attempt, and keeping the putative matches so the tighter attempts re-verify
+from them rather than from the loose inliers.
 
 Measured, 260-image capture at defaults: 254/260 at 0.81 px mean against a
 plain run's 252/260 at 0.83 px, 65 s against 43 s; the feature passes found
@@ -21,7 +22,7 @@ Scope, as agreed:
 
 - **One frontend and one matcher per run.** A SIFT run stays SIFT + brute force;
   a LoMa run stays LoMa. The loop changes *settings*, never the algorithm.
-- **No camera-repair code.** PR #138 is reverted on `dev` (`d697d9ca`); nothing
+- **No camera-repair code.** PR #138 is reverted on this branch (`d697d9ca`); nothing
   here depends on it.
 - **The levers** are the ones that work in RealityScan in practice: a pixel
   error that starts very loose and is tightened pass by pass, and more image
