@@ -26,7 +26,8 @@ reproduced.
 ## Device baseline
 
 Vulkan 1.2 core with features: `bufferDeviceAddress`, `timelineSemaphore`
-(both core-1.2 features; MoltenVK exposes both on Apple silicon). Optional,
+(both core-1.2 features; MoltenVK exposes both on Apple silicon), and compute
+subgroups of at most 64 lanes, pinned per kernel where the device allows (below). Optional,
 probed per device and reflected as pipeline variants where needed
 (spirv_tool compiles every subset of an entry's applicable variants, so
 any capability combination finds an exact blob; SS_VK_NATIVE_ATOMICS=0 /
@@ -76,9 +77,15 @@ for A/B testing):
   Forward/render path does not need it (only float atomicMax on radii,
   which is integer-monotonic on non-negative floats → emulate with
   u32 atomicMax over the float bit pattern; exact, not a CAS loop).
-- Subgroup size: never assumed 32. Kernels use `WaveActive*` /
-  `WavePrefixSum` and size-agnostic reductions; AMD wave64 and Intel
-  variable-width are first-class.
+- Subgroup size: 8 to 64 lanes, never assumed. Kernels use `WaveActive*` /
+  `WavePrefixSum`, uint4 ballots and per-wave partials counted with
+  `WaveGetLaneCount()`; a 32-thread workgroup on a 64-wide wave
+  (rasterize_bwd, the single-thread finals) is one half-full wave. Where the
+  device offers both 32 and 64 (RDNA), the kernels in `kWave64Entries`
+  (VulkanPipelines.cpp) run at 64 and the rest at 32. `SS_VK_SUBGROUP=N`
+  forces one width on every kernel: A/B timing, and on RDNA a stand-in for
+  wave64-only GCN (docs/testing.md). A device whose narrowest compute
+  subgroup is over 64 is refused in `probe_device`.
 
 ## Memory model
 
@@ -343,14 +350,14 @@ Phase-0/1 hard-won portability rules (validated on NVIDIA proprietary,
 Mesa ANV, llvmpipe — all tests + validation layers clean on all three):
 
 - **Pin the subgroup size.** Compute pipelines are created with
-  VK_EXT_subgroup_size_control's required-size + full-subgroups whenever the
-  device supports it. Intel/ANV's default is a VARYING SIMD width, which
+  VK_EXT_subgroup_size_control's required size whenever the device supports
+  it. Intel/ANV's default is a VARYING SIMD width, which
   silently breaks `tid / WaveGetLaneCount()` subgroup indexing (the radix
-  sort produced garbage on Intel until pinned). Kernel workgroup sizes must
-  stay multiples of every plausible subgroup size (8..128). Specifically the
-  **X dimension** must be the multiple (VUID-02757 under
-  REQUIRE_FULL_SUBGROUPS) — a 16x16 workgroup fails even though its total is
-  256, so 2D kernels use flat 64/128/256-wide X layouts.
+  sort produced garbage on Intel until pinned). Full subgroups are required
+  too wherever the workgroup's **X dimension** is a multiple of the width
+  (VUID-02757) — a 16x16 workgroup fails even though its total is 256, so 2D
+  kernels use flat 64/128/256-wide X layouts. The 32-wide kernels skip it
+  only on a 64-wide device.
 - **No unguarded 8-bit types in shaders.** `uint8_t` loads / `uint8_t*`
   push-constant members require shaderInt8 / 8-bit-storage features outside
   the baseline. Byte access goes through `int8_compat.slang` (packed-u32
@@ -691,8 +698,8 @@ the engine level.
   - **backward_v1 grid-grad kernels** keep CUDA's logical 8x8 block
     geometry / mult_x-mult_y tile decomposition exactly (the per-thread
     pixel-range partition determines the writeback structure), but run as
-    flat 64-wide workgroups with an in-shader 8x8 decode — the pinned
-    subgroup size requires workgroup X to be a multiple of 32 (VUID-02757;
+    flat 64-wide workgroups with an in-shader 8x8 decode — full subgroups
+    need workgroup X to be a multiple of the pinned width (VUID-02757;
     same reason the TV/channel-mean 4x4x4 blocks and the single-thread
     reg-loss finals are 64-/32-wide with logical decode / a tid-0 guard).
     The warp-shuffle block reduce becomes a groupshared tree

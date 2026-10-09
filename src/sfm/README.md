@@ -181,6 +181,14 @@ Two devices deserve naming:
   (7e-5 relative, against 1e-11 on hardware). The mapper's own checks still
   pass; treat llvmpipe as a way to run the pipeline, not to trust its last bits.
 
+No shader here uses subgroup operations, so the module runs at whatever width
+the driver picks (RADV: 64). Where the device offers both 32 and 64 (AMD
+RDNA), `rdnaSubgroupWidth` in `vk/VkContext.h` pins the kernels whose widths
+measured apart: blur, orientation and descriptor at 32 and the rest of SIFT
+and the matcher at 64 took extraction 7.9% under RADV's all-64 (150
+1080x1440 frames on a Ryzen 7000 iGPU, features bit-identical). Bundle
+adjustment measured within 1% either way and is left to the driver.
+
 ## Layout
 
 ```

@@ -150,7 +150,7 @@ void appearance_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     float3 raw = active ? rgb_load3(p.rgb, pix, p.rgb_fmt) : float3(0.0f);
     // From the copy on, the chain sees what its backward will replay from.
     if (p.raw16_on != 0) {
-        raw = f16tof32(f32tof16(raw));
+        raw = round_to_half3(raw);
         rgb_store3(p.raw16, pix, raw, kRgbF16, active);
     }
     float3 c = active ? _app_forward(p, raw, pix, bid, gid) : float3(0.0f);

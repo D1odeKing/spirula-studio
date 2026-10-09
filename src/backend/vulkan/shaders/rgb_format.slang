@@ -11,12 +11,29 @@ static const uint kRgbF32 = 0u;
 static const uint kRgbU8 = 1u;
 static const uint kRgbF16 = 2u;
 
+// Slang's f16tof32 / f32tof16 go through 16-bit types and declare Float16 +
+// Int16, which the device is not created with; the GLSL.std.450 packs need neither.
+[ForceInline]
+float2 unpack_half2(uint w) {
+    return spirv_asm { result:$$float2 = OpExtInst glsl450 UnpackHalf2x16 $w };
+}
+
+[ForceInline]
+uint pack_half2(float2 v) {
+    return spirv_asm { result:$$uint = OpExtInst glsl450 PackHalf2x16 $v };
+}
+
+[ForceInline]
+float3 round_to_half3(float3 v) {
+    return float3(unpack_half2(pack_half2(v.xy)), unpack_half2(pack_half2(float2(v.z, 0.0f))).x);
+}
+
 [ForceInline]
 float rgb_load1(uint* buf, gindex_t i, uint fmt) {
     if (fmt == kRgbU8) return float(u8_load(buf, i)) / 255.0f;
     if (fmt == kRgbF16) {
-        uint w = buf[i >> 1];
-        return f16tof32((i & 1) != 0 ? (w >> 16) : (w & 0xffffu));
+        float2 h = unpack_half2(buf[i >> 1]);
+        return (i & 1) != 0 ? h.y : h.x;
     }
     return asfloat(buf[i]);
 }
@@ -32,7 +49,8 @@ float3 rgb_load3(uint* buf, gindex_t pix, uint fmt) {
 // reaches the call, and an even pixel count allocated (docs/notes/vram-high-res.md).
 [ForceInline]
 void rgb_store3_f16_pair(uint* buf, uint pix, float3 v, bool active) {
-    uint h0 = f32tof16(v.x), h1 = f32tof16(v.y), h2 = f32tof16(v.z);
+    uint h0 = pack_half2(float2(v.x, 0.0f)), h1 = pack_half2(float2(v.y, 0.0f)),
+         h2 = pack_half2(float2(v.z, 0.0f));
     uint lane = WaveGetLaneIndex();
     uint o0 = WaveReadLaneAt(h0, lane ^ 1u);
     uint o1 = WaveReadLaneAt(h1, lane ^ 1u);

@@ -281,9 +281,15 @@ inline Resolution resolveRequest(const Request& r,
                                 "device '" + d.name +
                                     "' reports no physical-device UUID, so it "
                                     "cannot be selected by identity");
+            std::string why;
+            for (const DeviceRecord& d : devices)
+                if (!d.usable && !d.unusable_reason.empty())
+                    why += (why.empty() ? ": " : "; ") + d.name + " (" +
+                           d.unusable_reason + ")";
             return fail(ResolveStatus::NoDevice,
-                        "no usable Vulkan device (need Vulkan 1.2 + "
-                        "bufferDeviceAddress + timelineSemaphore)");
+                        why.empty() ? "no usable Vulkan device (need Vulkan 1.2 + "
+                                      "bufferDeviceAddress + timelineSemaphore)"
+                                    : "no usable Vulkan device" + why);
         }
     } else if (r.kind == Request::Kind::Ordinal) {
         if (r.ordinal >= (int)devices.size())

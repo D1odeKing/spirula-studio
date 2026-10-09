@@ -145,6 +145,43 @@ was 140x) and brute-force matching at 22x (43 vs 1.9 ms per 8192x8192 pair, was
 64x); the matcher's remainder is DP4A, which Apple has no instruction for. The
 third is "slangc `[unroll]`" in `src/backend/vulkan/README.md`.
 
+### Under the Vulkan validation layer
+
+`SS_VK_VALIDATION=1` turns on `VK_LAYER_KHRONOS_validation` in all three
+Vulkan contexts (engine, SfM, inference), so one variable covers a whole
+`sam extract` → `sfm auto` → `geometry` → `train` → `mesh` loop. The layer
+comes with the LunarG SDK; Ubuntu's `vulkan-validationlayers` predates
+extensions the inference layer uses. The inference context logs through a
+debug messenger (`[vk-validation]`); the other two print the layer's own
+`Validation Error:` lines, errors only unless
+`VK_KHRONOS_VALIDATION_REPORT_FLAGS=error,warn,perf`.
+
+Three things that cost time:
+
+- The inference context turns the layer's handle wrapping off
+  (`unique_handles`): NVIDIA 595 reads `vkCmdDecodeVideoKHR`'s codec `pNext`
+  again at `vkQueueSubmit`, by when the layer's copy is freed, so a wrapped
+  decode segfaults at its first submit.
+- The deprecated `VK_KHRONOS_VALIDATION_ENABLES` / `VK_LAYER_ENABLES`
+  variables make the layer ignore every new-style setting, that one included.
+  Ask for Best Practices with `VK_KHRONOS_VALIDATION_VALIDATE_BEST_PRACTICES=true`.
+- Synchronization validation (`VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true`)
+  only sees descriptor-bound resources and copies. The engine and the
+  inference layer reach memory through buffer device addresses, so a clean
+  run there says nothing about their barriers; SfM binds descriptors and is
+  covered.
+
+### At wave64
+
+AMD GCN runs every kernel 64 lanes wide, and RDNA runs the `kWave64Entries`
+kernels that way. An RDNA device stands in for GCN: dump each test's
+reference at `SS_VK_SUBGROUP=32`, then compare at `SS_VK_SUBGROUP=64` on the
+same device, so only the width differs. On a Ryzen 7000 iGPU (RADV,
+2026-10-08) every dump-compare and self-checking test passed at 64, with
+errors at the level of a wave32 run compared against itself (float-atomic
+order): raster_bwd_parity max_abs 9.8e-4 against 7.3e-4, engine_train_parity
+loose rel_rms 1.3e-10 against 1.4e-10.
+
 ## 2. GUI / viewer checks
 
 The web viewer can be driven headlessly over the Chrome DevTools Protocol.
