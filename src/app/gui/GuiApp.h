@@ -227,8 +227,9 @@ private:
     // them -- and then the one question only the frames can settle.
     void apply_dataset_builtin(const std::string& name);
     // ... and again once the inputs change, so the order they were picked in
-    // does not decide which of the two wins.
-    void reapply_dataset_builtin();
+    // does not decide which of the two wins. `before`: the panel before the
+    // capture's defaults moved it; what the user changed there stays.
+    void reapply_dataset_builtin(const DatasetSettings& before);
     void load_dataset_preset_file(const std::string& path);
     // Meshing, the same way: the model, its photographs and the output path
     // are what the preset is applied TO.
@@ -753,6 +754,8 @@ private:
     // Saved presets, one picker per kind.
     PresetPicker<TrainPreset> _train_presets;
     PresetPicker<DatasetPreset> _ds_presets;
+    // The panel as the armed built-in last left it, to tell edits from it.
+    DatasetSettings _ds_builtin_base;
     PresetPicker<MeshPreset> _mesh_presets;
     PresetPicker<SfmPreset> _sfm_presets;
     SfmOptionsState _sfm_options_ui;

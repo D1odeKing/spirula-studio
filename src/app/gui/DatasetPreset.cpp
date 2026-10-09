@@ -305,6 +305,14 @@ std::string dataset_settings_json(const DatasetSettings& s) {
     return w.str();
 }
 
+void keep_dataset_edits(DatasetSettings& to, const DatasetSettings& edited,
+                        const DatasetSettings& base) {
+#define SS_DS_KEEP(key, member)                                                        if (json_field::emit(edited.member) != json_field::emit(base.member))                 to.member = edited.member;
+    SS_DATASET_PRESET_FIELDS(SS_DS_KEEP)
+#undef SS_DS_KEEP
+    sanitize_dataset_settings(to);
+}
+
 void read_dataset_settings_json(const JsonValue& fields, DatasetSettings& s) {
     if (!fields.is_object()) return;
 #define SS_DS_LOAD(key, member)                                               \

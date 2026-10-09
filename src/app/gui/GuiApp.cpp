@@ -1024,6 +1024,7 @@ void GuiApp::apply_dataset_builtin(const std::string& name) {
     if (!dataset_apply_preset(s, use)) return;
     dataset_adapt_preset(use, _sources, s.sfm, s.colmap, _ffmpeg_exe);
     apply_dataset_settings(s);
+    _ds_builtin_base = capture_dataset_settings();
     _ds_presets.file.clear();
     _ds_presets.builtin = use;
     _ds_presets.display.clear();
@@ -1034,12 +1035,17 @@ void GuiApp::apply_dataset_builtin(const std::string& name) {
 // The capture's own defaults have just moved settings a built-in preset
 // decided, so it goes back on top of them and asks the new frames its own
 // question. Only a built-in: re-applying a FILE would undo every edit since.
-void GuiApp::reapply_dataset_builtin() {
+void GuiApp::reapply_dataset_builtin(const DatasetSettings& before) {
     if (!_ds_presets.file.empty() || _ds_presets.builtin.empty()) return;
     DatasetSettings s = capture_dataset_settings();
     if (dataset_apply_preset(s, _ds_presets.builtin)) apply_dataset_settings(s);
     dataset_adapt_preset(_ds_presets.builtin, _sources, _sfm_job, _colmap_job,
                          _ffmpeg_exe);
+    const DatasetSettings fresh = capture_dataset_settings();
+    DatasetSettings kept = fresh;
+    keep_dataset_edits(kept, before, _ds_builtin_base);
+    _ds_builtin_base = fresh;
+    apply_dataset_settings(kept);
 }
 
 void GuiApp::load_dataset_preset_file(const std::string& path) {
@@ -2513,8 +2519,9 @@ void GuiApp::pump_source_probes() {
     if (native_work_busy()) return;
     _source_probes_ready = !pending;
     if (!pano_changed) return;
+    const DatasetSettings before = capture_dataset_settings();
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
-    reapply_dataset_builtin();
+    reapply_dataset_builtin(before);
 }
 
 // Attach a picked `masks/` folder to the input whose images it describes --
@@ -2570,8 +2577,9 @@ void GuiApp::replace_source(size_t input, const std::string& path) {
     _source_path_edits[input] = _sources[input].path;
     _restored_ws.clear();
     mark_source_metadata_dirty();
+    const DatasetSettings before = capture_dataset_settings();
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
-    reapply_dataset_builtin();
+    reapply_dataset_builtin(before);
     if (!_color_space_touched) {
         _sfm_job.image_gamut.clear();
         _sfm_job.image_is_linear.reset();
@@ -2626,8 +2634,9 @@ bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
     }
     if (!inputs.empty()) mark_source_metadata_dirty();
     if (_sources.empty()) return false;
+    const DatasetSettings before = capture_dataset_settings();
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
-    reapply_dataset_builtin();
+    reapply_dataset_builtin(before);
     if (_mask_preview_input >= (int)_sources.size()) _mask_preview_input = 0;
     adopt_file_color_space();
     refresh_sources();

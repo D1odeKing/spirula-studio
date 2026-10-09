@@ -2609,6 +2609,29 @@ SS_MSG(progressive_time_up,
     RU("постепенное выравнивание: предел {0} мин достигнут после проходов: {1}"),
     TR("kademeli hizalama: {1} geçişten sonra {0} dakikalık sınıra ulaşıldı"));
 
+SS_MSG(progressive_feature_failed,
+    EN("feature pass {0}/{1} failed and was undone; the model from before it is kept: {2}"),
+    JA("特徴点パス {0}/{1} が失敗したため取り消しました。その前のモデルを使います: {2}"),
+    ZH_HANS("特征检测第 {0}/{1} 遍失败，已撤销；保留此前的模型：{2}"),
+    ZH_HANT("特徵偵測第 {0}/{1} 遍失敗，已撤銷；保留此前的模型：{2}"),
+    KO("특징점 패스 {0}/{1} 실패로 취소했습니다. 그 전의 모델을 유지합니다: {2}"),
+    DE("Merkmalsdurchgang {0}/{1} ist fehlgeschlagen und wurde verworfen; das Modell "
+       "davor bleibt: {2}"),
+    FR("la passe de détection {0}/{1} a échoué et a été annulée ; le modèle d'avant est "
+       "conservé : {2}"),
+    ES("la pasada de detección {0}/{1} falló y se deshizo; se conserva el modelo "
+       "anterior: {2}"),
+    PT("a passagem de detecção {0}/{1} falhou e foi desfeita; o modelo anterior é "
+       "mantido: {2}"),
+    IT("il passaggio di rilevamento {0}/{1} non è riuscito ed è stato annullato; resta "
+       "il modello precedente: {2}"),
+    NL("detectieronde {0}/{1} is mislukt en ongedaan gemaakt; het model van ervoor "
+       "blijft: {2}"),
+    RU("проход поиска признаков {0}/{1} не удался и отменён; модель до него "
+       "сохранена: {2}"),
+    TR("öznitelik geçişi {0}/{1} başarısız oldu ve geri alındı; önceki model "
+       "korunuyor: {2}"));
+
 SS_MSG(match_order_weight,
     EN("pair selection -- file order weight: {0}, decay: {1}"),
     JA("ペア選択 -- ファイル順の重み: {0}、減衰: {1}"),
