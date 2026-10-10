@@ -20,6 +20,17 @@ hybrid runs, `hybrid.txt`.
 |---|---|---|---|---|---|---|---|
 | loma_prog (step 0) | 676/678 | 1 | 606,874 | 1,796,609 | 3.015 | 2.611 | 1:04:11 |
 | hybrid (A) | 676/678 | 1 | 382,112 | 1,014,341 | 1.616 | 1.304 | 0:59:43 |
+| hybrid_noguide (B) | 676/678 | 1 | 297,599 | 803,578 | 1.511 | 1.204 | 0:23:47* |
+
+\* B reused A's LoMa matches, so its total has no matching time.
+
+## Matches per stage
+
+| | pairs | putative | after gate | verified pairs | inliers | stage time |
+|---|---|---|---|---|---|---|
+| A (gate, ratio 0.9) | 11,432 | 7,454,931 | 1,478,798 | 8,584 | 1,432,989 | 59 s |
+| B (no gate, ratio 0.8) | 11,435 | 2,301,937 | — | 9,475 | 1,213,788 | 130 s |
+| LoMa itself (for scale) | 10,041 | 7,144,634 | — | 10,032 | 7,032,858 | 36 min |
 
 Errors are in each run's own extraction pixels: LoMa at 1600 px, SIFT at
 2400 px. At LoMa's scale the hybrid's 1.62 px is about 1.08 px.
@@ -37,6 +48,31 @@ images; all 3 were put back pose-only. The whole stage took 59 s.
   observations 44%, although SIFT keeps 8192 features per image against
   LoMa's 4096. The plan expected SIFT to add density.
 - Placement: same as LoMa (676/678), as expected for stage 3 of the plan.
+
+## What B says about the gate
+
+- The gate is not what costs the points. Without it there are 22% fewer
+  points (298k against 382k) and 21% fewer observations. With the ratio
+  relaxed to 0.9, the gate passes 1.48M matches, 97% of which verify. At 0.8
+  with no gate, 2.30M putatives verify at 53%.
+- B's error is a little lower (1.51 against 1.62 px). It keeps fewer and
+  stronger tracks: the same trade a stricter ratio test always makes.
+- Verification was faster under the gate: 59 s against 130 s. RANSAC has far
+  fewer outliers to sort through.
+
+## Why the points went down
+
+SIFT verifies about 1.4M inliers on this capture against LoMa's 7.0M:
+five times fewer per pair, on texture-poor interior walls. The SIFT model
+has fewer points than LoMa's for that reason, whatever the gate does. Levers
+not yet tried, in order of cost:
+
+1. Relax the ratio further under the gate (0.95, `SS_SFM_HYBRID_RATIO`). The
+   gate already does the rejecting.
+2. A lower SIFT contrast floor (`--peak-threshold` ÷2, as progressive F3
+   does) or more features. Flat walls are where SIFT finds nothing.
+3. Keep LoMa's points as well, so SIFT adds precision without taking density
+   away. That goes against the plan's "only poses cross over".
 
 ## Notes on the runs
 
