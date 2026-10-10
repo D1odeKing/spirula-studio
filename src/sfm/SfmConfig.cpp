@@ -462,6 +462,9 @@ std::string SfmConfig::finalize(uint32_t cmd) {
     if (matcher != "bruteforce" && !isLearnedMatcher(matcher))
         return "unknown --matcher '" + matcher +
                "' (bruteforce, lightglue or loma-b128)";
+    if (hybrid_sift && !isAlikedType(features) && !isLomaType(features))
+        return "--hybrid-sift places the cameras with a learned frontend; add "
+               "--features loma-b";
     // Matching SIFT with a learned matcher would run and return nonsense.
     // Only `auto` can check it here; `match` reads features off disk, so its
     // guard is on the descriptors themselves, in LearnedMatcher.cpp.

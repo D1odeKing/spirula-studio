@@ -9,6 +9,7 @@
 // still be replaced by COLMAP's equivalent to bisect a failure.
 
 #include "sfm/Pipeline.h"
+#include "sfm/Hybrid.h"
 #include "sfm/Progressive.h"
 
 #include <algorithm>
@@ -2631,6 +2632,17 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         events::stage_end(Stage::Refine);
     }
     events::stage_end(Stage::Map);
+
+    if (cfg.hybrid_sift) {
+        // The mapper refers to the database this replaces.
+        progressive.reset();
+        single.reset();
+        HybridStats hst;
+        hybridSift(models, feats, db, cfg, calib, rigs, seqs, _imagedir, ws, hst);
+        t_map += hst.seconds;
+        if (!writeHybridReport(ws / "hybrid.txt", hst))
+            L::err_raw(Tag::Map, "cannot write " + (ws / "hybrid.txt").string());
+    }
 
     resolveImageNames(models, _imagedir);
     std::vector<ModelGauge> gauge;
