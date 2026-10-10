@@ -6,3 +6,4 @@ paused by user Sat Oct 10 17:41:26 EDT 2026; sift_prog stopped at progressive at
 resumed Sat Oct 10 18:14:42 EDT 2026
 sift_prog finished Sat Oct 10 18:35:59 EDT 2026
 hybrid_r095 exit=0 seconds=1550
+hybrid_peak exit=0 seconds=1417
