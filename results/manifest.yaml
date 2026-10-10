@@ -1,0 +1,5 @@
+cameras:
+- prefix: 360_images_inside_Masked
+  model: equirectangular
+- prefix: A7iii_Inside
+  model: opencv
