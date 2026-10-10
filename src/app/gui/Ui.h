@@ -32,7 +32,6 @@
 #include "i18n/Message.h"
 
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include <algorithm>
@@ -75,16 +74,9 @@ inline const char* label(const std::string& text, const Msg& m) {
 // A running dataset job disables its form, which also stops a combo from
 // listing its choices and a header from opening. A click on one still gets
 // through to look: popups inherit the disabled state, so nothing can change.
-inline bool locked_click() {
-    return (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) &&
-           ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) &&
-           ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-}
+bool locked_click();  // in Ui.cpp: imgui_internal.h clashes with stb_truetype
 // After a combo: `id` is its own, since an open popup moves the last item.
-inline void view_locked_combo(ImGuiID id) {
-    if (ImGui::GetItemID() == id && locked_click())
-        ImGui::OpenPopupEx(ImHashStr("##ComboPopup", 0, id));
-}
+void view_locked_combo(ImGuiID id);
 
 // ImGui's combo reports no label to the item hooks (Automation.h), so a script
 // could not find it by its message id. The id is taken first: an open popup
@@ -99,10 +91,7 @@ inline bool named_combo(const char* label, Draw&& draw) {
 }
 
 // After a header or tree node that drew as `open`.
-inline bool view_locked_node(bool open) {
-    if (locked_click()) ImGui::TreeNodeSetOpen(ImGui::GetItemID(), !open);
-    return open;
-}
+bool view_locked_node(bool open);
 
 // Msg* list -> the const char*[] ImGui's Combo wants.
 inline const std::vector<const char*>& items(
