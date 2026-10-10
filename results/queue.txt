@@ -3,3 +3,5 @@ hybrid finished (pid 14669) Sat Oct 10 17:13:21 EDT 2026
 restart: B with --reuse-matches keep Sat Oct 10 17:14:01 EDT 2026
 hybrid_noguide exit=0 seconds=1430
 paused by user Sat Oct 10 17:41:26 EDT 2026; sift_prog stopped at progressive attempt 3/12 (642 placed), extraction+matching done
+resumed Sat Oct 10 18:14:42 EDT 2026
+sift_prog finished Sat Oct 10 18:35:59 EDT 2026

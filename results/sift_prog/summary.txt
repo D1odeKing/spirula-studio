@@ -1,0 +1,23 @@
+[run]     H:/Hershy Site GS/GS runs/a7iii_inside/images -> ws_sift_prog
+[run]     Quality: high   Image size limit: 2400 px   Feature limit: 8192
+[run]     Capture type: individual
+[run]     Lens: opencv   Camera grouping: folder
+[run]     The presets set --max-image-size to 2400 (was 0)
+[run]     The presets set --aliked-max-features to 4096 (was 2048)
+[run]     The presets set --loma-max-features to 4096 (was 2048)
+[run]     The presets set --progressive-error-steps to 12 (was 5)
+[run]     The presets set --progressive-patience to 3 (was 2)
+[run]     --metric-gps auto: `full` (EXIF GPS with altitude; images: 37)
+[run]     Summary
+[run]     Extraction: 00:00:04.451   Images: 678   Features: 5278031
+[run]     Matching: reused an earlier run's   Pairs kept: 13667   Inliers: 1265217
+[run]     Mapping: 00:20:51.508   Registered: 645/678 images   Points: 273451   Cameras: 4
+[run]     Assembly: 00:00:11.176   Models: 1 -> 1 over 0 level(s)   Merged: 0   Refused: 0   Grown: 0 image(s)   Coverage: 647 -> 647 images
+[run]     Finishing passes (00:00:11.176): split 0, folds cut 0, reseeded 0, dropped 0, repaired by the audit 0, dropped by the audit 0, seams welded 0
+[run]     Per folder:
+[run]     360_images_inside_Masked: 37/37 images registered
+[run]     A7iii_Inside: 608/641 images registered
+[run]     Total: 00:20:56.057
+[run]     Reprojection error: mean 1.454 px, median 1.151 px, over 734543 observations
+[run]     Written to ws_sift_prog\sparse\0
+[run]     RESULT: OK -- 95% of the images registered, 1.45 px mean reprojection

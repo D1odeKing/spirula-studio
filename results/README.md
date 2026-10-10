@@ -32,8 +32,8 @@ hybrid runs, `hybrid.txt`.
 | B (no gate, ratio 0.8) | 11,435 | 2,301,937 | — | 9,475 | 1,213,788 | 130 s |
 | LoMa itself (for scale) | 10,041 | 7,144,634 | — | 10,032 | 7,032,858 | 36 min |
 
-Errors are in each run's own extraction pixels: LoMa at 1600 px, SIFT at
-2400 px. At LoMa's scale the hybrid's 1.62 px is about 1.08 px.
+Errors are in source-image pixels (`reprojStats` works in original-image
+coordinates), so the runs compare directly.
 
 ## Hybrid A, the stage itself
 
@@ -42,8 +42,7 @@ The epipolar gate kept 1,478,798 of 7,454,931 putative matches (19.8%), and
 verification kept 1,432,989 of those (96.9%). SIFT dropped 3 of LoMa's 676
 images; all 3 were put back pose-only. The whole stage took 59 s.
 
-- Precision: the mean error fell from 3.01 to 1.62 px, about 2.8x tighter
-  once the pixel scales are matched.
+- Precision: the mean error fell from 3.01 to 1.62 px, 1.9x tighter.
 - Density went the wrong way. Points fell 37% (607k to 382k) and
   observations 44%, although SIFT keeps 8192 features per image against
   LoMa's 4096. The plan expected SIFT to add density.
