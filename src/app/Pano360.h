@@ -122,7 +122,7 @@ void pano360_canvas(const Pano360Layout& l, const uint8_t* track0,
 // Whether the canvas needs the second track decoded at all.
 inline bool pano360_needs_track1(const Pano360Layout& l) { return !l.sphere(); }
 
-// A 360 camera's one-image formats (an Insta360 .insp photo, its .lrv proxy
+// A 360 camera's one-image formats (an Insta360 .insp photo, its .lrv / .prx proxy
 // video) hold both fisheye circles side by side at 2:1, or one lens at 1:1.
 // Any other shape takes the nearer of the two, with `exact` false.
 int packed_lens_count(int width, int height, bool& exact);
