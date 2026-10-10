@@ -72,7 +72,7 @@ namespace gui {
 
 const char* const kVideoExtensions[kNumVideoExtensions] = {
     ".mp4", ".mov", ".mkv", ".webm", ".m4v", ".insv", ".osv", ".avi",
-    ".mts", ".m2ts", ".360", ".ts", ".wmv", ".lrv",
+    ".mts", ".m2ts", ".360", ".ts", ".wmv", ".lrv", ".prx",
 };
 
 bool is_image_file(const fs::path& p) {
@@ -615,7 +615,8 @@ bool is_pano360_path(const std::string& path) {
 }
 
 bool is_packed_lens_path(const std::string& path) {
-    return lower_ext(path) == ".insp" || lower_ext(path) == ".lrv";
+    const std::string e = lower_ext(path);
+    return e == ".insp" || e == ".lrv" || e == ".prx";
 }
 
 int probe_packed_lenses(const std::string& dir) {
