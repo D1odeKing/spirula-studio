@@ -660,19 +660,21 @@ SS_MSG(video_input,
 
 // {0} how many, {1} the folder.
 SS_MSG(pruned_stale_layout,
-    EN("Removed {0} file(s) or folder(s) from {1} left by an earlier layout of the inputs"),
-    JA("入力の以前の配置で残った {0} 個のファイルまたはフォルダーを {1} から削除しました"),
-    ZH_HANS("已从 {1} 中删除输入先前布局遗留的 {0} 个文件或文件夹"),
-    ZH_HANT("已從 {1} 中刪除輸入先前配置遺留的 {0} 個檔案或資料夾"),
-    KO("입력의 이전 배치에서 남은 파일 또는 폴더 {0}개를 {1}에서 삭제했습니다"),
-    DE("{0} Datei(en) oder Ordner aus einer früheren Anordnung der Eingaben aus {1} entfernt"),
-    FR("{0} fichier(s) ou dossier(s) laissés par une disposition antérieure des entrées supprimés de {1}"),
-    ES("Se eliminaron de {1} {0} archivo(s) o carpeta(s) que dejó una disposición anterior de las entradas"),
-    PT("Foram removidos de {1} {0} arquivo(s) ou pasta(s) deixados por uma disposição anterior das entradas"),
-    IT("Rimossi da {1} {0} file o cartelle lasciati da una disposizione precedente degli input"),
-    NL("{0} bestand(en) of map(pen) uit een eerdere indeling van de invoer verwijderd uit {1}"),
-    RU("Из {1} удалено файлов или папок, оставшихся от прежнего расположения входных данных: {0}"),
-    TR("Girdilerin önceki düzeninden kalan {0} dosya veya klasör {1} konumundan kaldırıldı"));
+    EN("Entries left in {1} by an earlier layout of the inputs, removed: {0}"),
+    JA("入力の以前の配置で {1} に残っていた項目を削除しました: {0}"),
+    ZH_HANS("已删除输入先前布局遗留在 {1} 中的条目：{0}"),
+    ZH_HANT("已刪除輸入先前配置遺留在 {1} 中的項目：{0}"),
+    KO("입력의 이전 배치로 {1}에 남아 있던 항목을 삭제했습니다: {0}"),
+    DE("Von einer früheren Anordnung der Eingaben in {1} zurückgelassene Einträge, "
+       "entfernt: {0}"),
+    FR("Entrées laissées dans {1} par une disposition antérieure des entrées, supprimées : "
+       "{0}"),
+    ES("Entradas que dejó en {1} una disposición anterior de las entradas, eliminadas: {0}"),
+    PT("Entradas deixadas em {1} por uma disposição anterior das entradas, removidas: {0}"),
+    IT("Voci lasciate in {1} da una disposizione precedente degli input, rimosse: {0}"),
+    NL("Items in {1} van een eerdere indeling van de invoer, verwijderd: {0}"),
+    RU("Удалено записей, оставшихся в {1} от прежнего расположения входных данных: {0}"),
+    TR("Girdilerin önceki düzeninden {1} içinde kalan ve kaldırılan öğe: {0}"));
 
 SS_MSG(resume_keep_frames,
     EN("Resume: keeping {0} extracted frames in {1} (delete the folder to "

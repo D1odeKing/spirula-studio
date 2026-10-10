@@ -96,9 +96,27 @@ float mapping_fraction(int64_t done, int64_t total) {
     return (float)(kMappingBarFull * x * std::sqrt(x));
 }
 
-bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out, uint64_t point_memory_budget) {
+std::vector<uint32_t> live_model_sizes(const std::string& dir) {
+    std::vector<uint32_t> out;
+    for (size_t k = 0;; k++) {
+        const fs::path p = fs::path(dir) / (k ? "model_" + std::to_string(k) + ".bin"
+                                              : std::string("model.bin"));
+        std::ifstream f(p, std::ios::binary);
+        char h[20];
+        if (!f.read(h, sizeof h) || std::memcmp(h, "VKPM", 4) != 0) break;
+        uint32_t version = 0, registered = 0;
+        std::memcpy(&version, h + 4, 4);
+        // Version 3 put the flags word before the counts.
+        std::memcpy(&registered, h + (version >= 3 ? 16 : 12), 4);
+        out.push_back(registered);
+    }
+    return out;
+}
+
+bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out, uint64_t point_memory_budget,
+                     const std::string& file) {
     int64_t stamp = mtime;
-    const std::string b = slurp_if_newer(fs::path(dir) / "model.bin", stamp);
+    const std::string b = slurp_if_newer(fs::path(dir) / file, stamp);
     if (b.size() < 24 || std::memcmp(b.data(), "VKPM", 4) != 0) return false;
 
     Reader r{b.data() + 4, b.data() + b.size()};

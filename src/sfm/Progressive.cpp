@@ -4,6 +4,7 @@
 #include <cmath>
 #include <fstream>
 #include <set>
+#include <stdexcept>
 
 #include "sfm/core/Cancel.h"
 #include "sfm/core/Events.h"
@@ -41,10 +42,10 @@ double meanError(const Reconstruction& m, const std::vector<FeatureSet>& feats) 
     return mean;
 }
 
-// The model on screen after an attempt or a pass, coloured the way the
+// The models on screen after an attempt or a pass, coloured the way the
 // mapper's own snapshots are: from the colours sampled at extraction.
-void snapshot(const Reconstruction& m, const std::vector<FeatureSet>& feats) {
-    sfm::progress::model(m, /*force=*/true, [&](const Point3D& p, uint8_t rgb[3]) {
+void snapshot(const std::vector<Reconstruction>& models, const std::vector<FeatureSet>& feats) {
+    sfm::progress::models(models, [&](const Point3D& p, uint8_t rgb[3]) {
         uint32_t acc[3] = {0, 0, 0}, n = 0;
         for (const TrackElement& e : p.track) {
             const FeatureSet& fs = feats[e.image_id];
@@ -56,6 +57,17 @@ void snapshot(const Reconstruction& m, const std::vector<FeatureSet>& feats) {
         if (n)
             for (int k = 0; k < 3; k++) rgb[k] = (uint8_t)((acc[k] + n / 2) / n);
     });
+}
+
+// The match map with every pair the run now holds, a pass's included.
+void showPairs(const MatchesDatabase& db) {
+    std::vector<std::pair<uint32_t, uint32_t>> all;
+    all.reserve(db.pairs.size());
+    for (const TwoViewMatches& t : db.pairs) all.emplace_back(t.image1, t.image2);
+    sfm::progress::begin_matching((uint32_t)db.images.size(), all);
+    for (const TwoViewMatches& t : db.pairs)
+        sfm::progress::pair(t.image1, t.image2, (uint32_t)t.matches.size());
+    sfm::progress::flush();
 }
 
 int lerpGeometric(int a, int b, double t) {
@@ -126,8 +138,21 @@ void ProgressiveAligner::startAttempt(double error, const MatchesDatabase& db) {
 void ProgressiveAligner::ladder(std::vector<Reconstruction>& models, size_t from,
                                 AssembleStats& ast) {
     const bool verbose = !cfg_.quiet;
+    uint32_t best = 0;
+    int dry = 0;
     for (size_t k = from; k < errors_.size(); k++) {
         cancel::check();
+        // Attempts that place no new image are skipped to the final error,
+        // which the written model needs; a pass's short tail always runs whole.
+        if (!in_pass_ && cfg_.progressive_patience > 0 && dry >= cfg_.progressive_patience &&
+            k + 1 < errors_.size()) {
+            if (verbose)
+                L::out(Tag::Map, M::progressive_ladder_skip,
+                       {(long long)dry, (long long)(errors_.size() - 1 - k),
+                        L::num(errors_.back(), 2)});
+            steps_ += (int)(errors_.size() - 1 - k);
+            k = errors_.size() - 1;
+        }
         const double t0 = now();
         const double e = errors_[k];
         ProgressiveAttempt a;
@@ -175,8 +200,10 @@ void ProgressiveAligner::ladder(std::vector<Reconstruction>& models, size_t from
         a.registered = (uint32_t)any.size();
         a.models = models.size();
         a.seconds = now() - t0;
+        dry = a.registered > best ? 0 : dry + 1;
+        best = std::max(best, a.registered);
         attempts_.push_back(a);
-        if (!models.empty()) snapshot(models.front(), feats_);
+        snapshot(models, feats_);
         if (verbose)
             L::out(Tag::Map, M::progressive_attempt_done,
                    {(long long)(k + 1), (long long)errors_.size(), (long long)a.largest,
@@ -268,8 +295,10 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
             return c;
         }();
         std::vector<Reconstruction> old_models = models;
+        // The mapper's bundle-adjustment contexts are a Vulkan device: let it go
+        // before detection brings up the inference layer's, and rebuild it on undo.
+        mapper_.reset();
         std::unique_ptr<MatchesDatabase> old_db = std::move(db_);
-        std::unique_ptr<Mapper> old_mapper = std::move(mapper_);
         const size_t old_attempts = attempts_.size();
         auto restore = [&] {
             for (auto& kv : old_feats) feats_[kv.first] = std::move(kv.second);
@@ -278,9 +307,10 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
                 loose_.images[i].num_features = old_counts[i];
             mapper_.reset();  // before the database it refers to
             db_ = std::move(old_db);
-            mapper_ = std::move(old_mapper);
+            startAttempt(errors_.back(), db_ ? *db_ : loose_);
             models = std::move(old_models);
             attempts_.resize(old_attempts);
+            showPairs(loose_);
         };
 
         std::vector<std::pair<uint32_t, uint32_t>> pairs;
@@ -293,11 +323,8 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
             std::set<std::string> only;
             for (uint32_t t : tg) only.insert(names[t]);
             ExtractStats est;
-            if (extractDirectory(image_dir_, passdir, pc, est, /*reuse=*/false, nullptr,
-                                 &only)) {
-                restore();
-                break;
-            }
+            if (extractDirectory(image_dir_, passdir, pc, est, /*reuse=*/false, nullptr, &only))
+                throw std::runtime_error(spirula::i18n::format(M::progressive_detect_stopped, {}));
             std::vector<char> is_target(feats_.size(), 0);
             for (uint32_t t : tg) {
                 is_target[t] = 1;
@@ -326,6 +353,15 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
             for (const auto& q : sequentialPairs((uint32_t)names.size(), 2 * cfg_.overlap, false,
                                                  folderRuns(names)))
                 if (is_target[q.first] || is_target[q.second]) pairs.push_back(q);
+            // Only targets and the model's images have their descriptors read; a
+            // pair with another unaligned image cannot grow the model anyway.
+            std::vector<char> loaded = is_target;
+            for (uint32_t i : partners) loaded[i] = 1;
+            pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                                       [&](const std::pair<uint32_t, uint32_t>& q) {
+                                           return !loaded[q.first] || !loaded[q.second];
+                                       }),
+                        pairs.end());
             std::sort(pairs.begin(), pairs.end());
             pairs.erase(std::unique(pairs.begin(), pairs.end()), pairs.end());
 
@@ -336,13 +372,21 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
             };
             BearingCache bc;
             std::vector<Camera> percam;
-            const VerificationOptions vo = verifyOptions(errors_.front(), bc, percam);
+            VerificationOptions vo = verifyOptions(errors_.front(), bc, percam);
+            // The match map shows the pass's pairs as they verify. The live
+            // matches stay shut: they index features/, not the targets' new rows.
+            vo.report = true;
+            progress::live_matches_end();
+            progress::begin_matching((uint32_t)feats_.size(), pairs);
+            events::stage_begin(Stage::Match, (int64_t)pairs.size());
             std::vector<TwoViewMatches> fresh = verifyPairs(feats_, pairs, matchFn, vo);
+            events::stage_end(Stage::Match);
             matcher.reset();
             for (uint32_t i : partners) feats_[i].dropDescriptors();
             for (uint32_t t : tg) feats_[t].dropDescriptors();
             verified = fresh.size();
             for (TwoViewMatches& t : fresh) loose_.pairs.push_back(std::move(t));
+            showPairs(loose_);
 
             // ---- the ladder's tail, from the largest model alone ----
             // The other models' observations of the targets index their old rows.
@@ -355,7 +399,7 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
         } catch (const std::exception& e) {
             in_pass_ = false;
             restore();
-            if (!models.empty()) snapshot(models.front(), feats_);
+            snapshot(models, feats_);
             L::warn(Tag::Map, M::progressive_feature_failed,
                     {(long long)p, (long long)passes, std::string(e.what())});
             break;
@@ -388,7 +432,7 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
         } else {
             restore();
             dry++;
-            snapshot(models.front(), feats_);
+            snapshot(models, feats_);
         }
         passes_.push_back(rec);
     }
@@ -429,7 +473,7 @@ std::vector<Reconstruction> ProgressiveAligner::run(AssembleStats& ast) {
     std::vector<Reconstruction> models;
     ladder(models, 0, ast);
     if (cfg_.progressive_features) featurePasses(models, ast);
-    if (!models.empty()) snapshot(models.front(), feats_);
+    snapshot(models, feats_);
     return models;
 }
 

@@ -6227,6 +6227,29 @@ int GuiApp::preview_for_stage() {
     return -1;
 }
 
+namespace {
+
+// A progressive feature pass detects into features.progressive/<n>: the
+// highest n is the pass running now.
+std::string newest_pass_dir(const fs::path& root) {
+    std::error_code ec;
+    long best = -1;
+    fs::path out;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::string n = it->path().filename().string();
+        if (!it->is_directory(ec) || n.empty() ||
+            n.find_first_not_of("0123456789") != std::string::npos)
+            continue;
+        if (std::stol(n) > best) {
+            best = std::stol(n);
+            out = it->path();
+        }
+    }
+    return out.string();
+}
+
+}  // namespace
+
 // What the child has written about itself since the last look. Two stats and,
 // when something changed, a file of about a megabyte -- so it runs at 2 Hz
 // rather than every frame.
@@ -6236,20 +6259,37 @@ void GuiApp::poll_sfm_progress() {
     if (_sfm_polled_at > 0.0 && now - _sfm_polled_at < 0.5) return;
     _sfm_polled_at = now;
 
-    // The frames of the extraction step are shown by whoever writes them; the
-    // features are read off disk, which is what this watcher is for.
-    if (dataset_busy() && dataset_steps()->current() == Stage::Features)
-        _features.start(_sfm.sfm_image_dir(), _sfm.sfm_mask_dir(),
-                        _sfm.features_dir(), &_film_features,
+    // Features are read off disk. A progressive pass enters the step again with
+    // mapping still running and writes its own folder: only the images it redoes.
+    if (dataset_busy() && dataset_steps()->current() == Stage::Features) {
+        std::string fdir = _sfm.features_dir();
+        if (dataset_steps()->stage(Stage::Mapping).status == StageStatus::Running) {
+            const std::string pass =
+                newest_pass_dir(fs::path(fdir).parent_path() / "features.progressive");
+            if (!pass.empty()) fdir = pass;
+        }
+        if (fdir != _features_shown) {
+            _features.stop();
+            _film_features.clear();
+            _features_shown = fdir;
+        }
+        _features.start(_sfm.sfm_image_dir(), _sfm.sfm_mask_dir(), fdir, &_film_features,
                         _sfm.thumbs_dir());
+    }
     _pairs_view.configure(_sfm.sfm_image_dir(), _sfm.sfm_mask_dir(),
                           _sfm.features_dir(), _sfm.matches_path(),
                           _sfm.live_matches_path());
 
     const std::string dir = _sfm.progress_dir();
+    _model_sizes = dir.empty() ? std::vector<uint32_t>() : live_model_sizes(dir);
+    if (_model_pick >= (int)_model_sizes.size()) {
+        _model_pick = 0;
+        _model_mtime = 0;
+    }
+    const std::string pick = _model_pick ? "_" + std::to_string(_model_pick) : std::string();
     // The run's own file while it lasts; the workspace's copy outlives it.
     std::error_code ec;
-    const fs::path live = dir.empty() ? fs::path() : fs::path(dir) / "images.bin";
+    const fs::path live = dir.empty() ? fs::path() : fs::path(dir) / ("images" + pick + ".bin");
     const std::string stats_path =
         !live.empty() && fs::exists(live, ec) ? live.string()
         : _workspace.empty()                  ? std::string()
@@ -6271,7 +6311,7 @@ void GuiApp::poll_sfm_progress() {
         _matrix.set(pm);
 
     LiveModel lm;
-    if (read_live_model(dir, _model_mtime, lm)) {
+    if (read_live_model(dir, _model_mtime, lm, 0, "model" + pick + ".bin")) {
     #if 0
         // Each snapshot is framed on its own cameras, and the last is re-gauged
         // as well; carrying the camera along keeps the picture still through
@@ -6309,11 +6349,18 @@ void GuiApp::poll_sfm_progress() {
 namespace {
 
 // What the colours are measured against: the run's own error gates, and the
-// placed images' median 3D points.
+// placed images' median 3D points per folder -- one camera, by the run's grouping.
 struct FitScale {
     float green_px = 0, red_px = 3;
-    float median_points = 1;
+    std::map<std::string, float> median_points;
 };
+
+// A 360 image covers about fourteen times a 64-degree lens's view, so 3D
+// points are only comparable within one camera.
+std::string camera_group(const std::string& name) {
+    const size_t slash = name.rfind('/');
+    return slash == std::string::npos ? std::string() : name.substr(0, slash);
+}
 
 // 0 for an image that fits the model well, 1 for one that barely does: by its
 // mean reprojection error against the gates, or by its 3D points against the
@@ -6322,17 +6369,22 @@ float image_badness(const ImageStat& s, int by, const FitScale& f) {
     if (by == 1)
         return std::clamp((s.mean_error - f.green_px) / std::max(f.red_px - f.green_px, 1e-3f),
                           0.0f, 1.0f);
+    const auto it = f.median_points.find(camera_group(s.name));
+    const float median = it == f.median_points.end() ? 1.0f : it->second;
     const float n = (float)std::max<uint32_t>(s.points, 1);
-    return std::clamp(std::log2(std::max(f.median_points, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
+    return std::clamp(std::log2(std::max(median, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
 }
 
-float median_points(const std::vector<ImageStat>& stats) {
-    std::vector<uint32_t> v;
+std::map<std::string, float> median_points(const std::vector<ImageStat>& stats) {
+    std::map<std::string, std::vector<uint32_t>> groups;
     for (const ImageStat& s : stats)
-        if (s.placed) v.push_back(s.points);
-    if (v.empty()) return 1.0f;
-    std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
-    return (float)v[v.size() / 2];
+        if (s.placed) groups[camera_group(s.name)].push_back(s.points);
+    std::map<std::string, float> out;
+    for (auto& [g, v] : groups) {
+        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        out[g] = (float)v[v.size() / 2];
+    }
+    return out;
 }
 
 // Green through yellow to red in twelve steps: the renderer draws the cameras
@@ -6445,9 +6497,15 @@ void GuiApp::view_from_camera(uint32_t id) {
     // Look a short way ahead of the camera, so orbiting starts from where it looks.
     float target[3];
     for (int k = 0; k < 3; k++) target[k] = eye[k] - pose[k * 4 + 2] * 0.25f * s;
+    // CameraModelType and the viewer's lens list share their order. The field of
+    // view inverts each lens's projection, as the viewer's fov_to_intrinsics maps it.
+    const int lens = i < m.ds.camera_models.size() ? std::clamp(m.ds.camera_models[i], 0, 3) : 0;
     const float fx = m.ds.intrins[i * 4], w = (float)m.ds.widths[i];
-    if (fx > 0 && w > 0)
-        _model_view.set_view_lens(0, 2.0f * std::atan(w / (2.0f * fx)) * 57.29578f);
+    const float half = fx > 0 && w > 0 ? w / (2.0f * fx) : 0.0f;
+    const float fov = lens == 1   ? 2.0f * half
+                      : lens == 2 ? 4.0f * std::asin(std::min(half * 0.5f, 1.0f))
+                                  : 2.0f * std::atan(half);
+    if (half > 0 || lens == 3) _model_view.set_view_lens(lens, fov * 57.29578f);
     _model_view.set_nav_pose(pose, target);
     _preview_tab = 4;
 }
@@ -6584,6 +6642,9 @@ void GuiApp::reset_dataset_preview(bool sweep) {
         f->destroy_gl();
     }
     _image_picked = UINT32_MAX;
+    _features_shown.clear();
+    _model_pick = 0;
+    _model_sizes.clear();
     _image_files.clear();
     _image_files_dir.clear();
     _model_mtime = _pairs_mtime = _matches_mtime = _dense_model_mtime = 0;
@@ -6726,11 +6787,38 @@ void GuiApp::draw_dataset_preview(float height) {
         ui::TextDisabledWrapped(dmsg::model_waiting);
         return;
     }
-    if (!_image_stats.empty()) {
-        const float combo = px(190.0f);
+    const bool colours = !_image_stats.empty(), several = _model_sizes.size() > 1;
+    if (colours || several) {
+        const float combo = px(190.0f), pick_w = px(150.0f);
         const ImGuiStyle& st = ImGui::GetStyle();
+        float w = 0.0f;
+        if (several)
+            w += ImGui::CalcTextSize(dmsg::model_pick.get()).x + st.ItemInnerSpacing.x + pick_w;
+        if (colours)
+            w += (several ? st.ItemSpacing.x : 0.0f) + combo + st.ItemInnerSpacing.x +
+                 ImGui::CalcTextSize(dmsg::camera_color.get()).x;
         _model_view.trail_toolbar(
-            [this, combo] {
+            [this, combo, pick_w, colours, several] {
+                if (several) {
+                    std::vector<std::string> labels;
+                    for (size_t k = 0; k < _model_sizes.size(); k++)
+                        labels.push_back(i18n::format(
+                            dmsg::model_pick_item,
+                            {(long long)(k + 1), (long long)_model_sizes[k]}));
+                    std::vector<const char*> items;
+                    for (const std::string& l : labels) items.push_back(l.c_str());
+                    ImGui::AlignTextToFramePadding();
+                    ui::Text(dmsg::model_pick);
+                    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+                    ImGui::SetNextItemWidth(pick_w);
+                    if (ui::ComboRaw("##modelpick", &_model_pick, items.data(), (int)items.size())) {
+                        _model_mtime = 0;
+                        _sfm_polled_at = -1.0;
+                    }
+                    ui::help_on_hover(dmsg::model_pick_help);
+                    if (colours) ImGui::SameLine();
+                }
+                if (!colours) return;
                 ImGui::SetNextItemWidth(combo);
                 if (ui::Combo(dmsg::camera_color, &_camera_color,
                               {&dmsg::camera_color_plain, &dmsg::camera_color_error,
@@ -6738,7 +6826,7 @@ void GuiApp::draw_dataset_preview(float height) {
                     attach_live_model();
                 ui::help_on_hover(dmsg::camera_color_help);
             },
-            combo + st.ItemInnerSpacing.x + ImGui::CalcTextSize(dmsg::camera_color.get()).x);
+            w);
     }
     // Width capped against the height: the band is as wide as the window, and
     // a 1600x150 letterbox of a 90-degree view shows a slice of the scene with
@@ -7756,6 +7844,9 @@ void GuiApp::draw_progressive_options() {
         ImGui::Indent();
         // Settled when a field is left, not per keystroke: typing 15 passes through 1.
         bool settle = false;
+        ui::Text(dmsg::progressive_stage1);
+        ui::help_on_hover(dmsg::progressive_stage1_help);
+        ImGui::Indent();
         ImGui::SetNextItemWidth(px(240.0f));
         ui::InputFloat(dmsg::progressive_error_start, &_sfm_job.progressive_error_start, 0, 0,
                        "%.3g");
@@ -7770,6 +7861,7 @@ void GuiApp::draw_progressive_options() {
         ui::InputInt(dmsg::progressive_attempts, &_sfm_job.progressive_error_steps);
         ui::help_on_hover(dmsg::progressive_attempts_help);
         _sfm_job.progressive_error_steps = std::clamp(_sfm_job.progressive_error_steps, 2, 50);
+        ImGui::Unindent();
         ui::Checkbox(dmsg::progressive_redetect, &_sfm_job.progressive_features);
         ui::help_on_hover(dmsg::progressive_redetect_help);
         if (_sfm_job.progressive_features) {
@@ -7784,9 +7876,6 @@ void GuiApp::draw_progressive_options() {
             ui::InputInt(dmsg::progressive_passes, &_sfm_job.progressive_feature_steps);
             ui::help_on_hover(dmsg::progressive_passes_help);
             ImGui::SetNextItemWidth(px(240.0f));
-            ui::InputInt(dmsg::progressive_patience, &_sfm_job.progressive_patience);
-            ui::help_on_hover(dmsg::progressive_patience_help);
-            ImGui::SetNextItemWidth(px(240.0f));
             ui::InputFloat(dmsg::progressive_time_limit, &_sfm_job.progressive_time, 0, 0,
                            "%.3g");
             ui::help_on_hover(dmsg::progressive_time_limit_help);
@@ -7795,9 +7884,13 @@ void GuiApp::draw_progressive_options() {
             j.progressive_max_features_end = std::max(0, j.progressive_max_features_end);
             j.progressive_image_size_end = std::max(0, j.progressive_image_size_end);
             j.progressive_feature_steps = std::clamp(j.progressive_feature_steps, 1, 20);
-            j.progressive_patience = std::clamp(j.progressive_patience, 1, 20);
             ImGui::Unindent();
         }
+        // Both stages: stage 1 skips to its final error, stage 2 stops its passes.
+        ImGui::SetNextItemWidth(px(240.0f));
+        ui::InputInt(dmsg::progressive_patience, &_sfm_job.progressive_patience);
+        ui::help_on_hover(dmsg::progressive_patience_help);
+        _sfm_job.progressive_patience = std::clamp(_sfm_job.progressive_patience, 1, 20);
         if (settle) {
             // The run refuses a start at or below the end; 0 is --max-error, 3 by default.
             SfmJob& j = _sfm_job;

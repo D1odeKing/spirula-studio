@@ -305,12 +305,9 @@ bool enabled() {
     return !s.dir.empty();
 }
 
-void model(const Reconstruction& rec, bool force, const PointColor& color) {
-    State& s = state();
-    std::lock_guard<std::mutex> lk(s.mu);
-    if (s.dir.empty()) return;
-    if (!due(s.model_at, s.model_started) && !force) return;
+namespace {
 
+std::string encode_model(const State& s, const Reconstruction& rec, const PointColor& color) {
     // Registered images only: an unregistered one has no pose to draw.
     std::vector<const Image*> imgs;
     for (const auto& kv : rec.images)
@@ -375,8 +372,38 @@ void model(const Reconstruction& rec, bool force, const PointColor& color) {
         if (color) color(kv.second, rgb);
         put(b, rgb, 3);
     }
-    write_atomic("model.bin", b);
+    return b;
+}
+
+}  // namespace
+
+void model(const Reconstruction& rec, bool force, const PointColor& color) {
+    State& s = state();
+    std::lock_guard<std::mutex> lk(s.mu);
+    if (s.dir.empty()) return;
+    if (!due(s.model_at, s.model_started) && !force) return;
+    write_atomic("model.bin", encode_model(s, rec, color));
     write_atomic("images.bin", image_stats(rec));
+}
+
+void models(const std::vector<Reconstruction>& recs, const PointColor& color) {
+    if (recs.empty()) return;
+    model(recs.front(), /*force=*/true, color);
+    State& s = state();
+    std::lock_guard<std::mutex> lk(s.mu);
+    if (s.dir.empty()) return;
+    for (size_t k = 1; k < recs.size(); k++) {
+        write_atomic("model_" + std::to_string(k) + ".bin", encode_model(s, recs[k], color));
+        write_atomic("images_" + std::to_string(k) + ".bin", image_stats(recs[k]));
+    }
+    // A merge leaves fewer models than the last snapshot named.
+    std::error_code ec;
+    for (size_t k = recs.size();; k++) {
+        const fs::path m = fs::path(s.dir) / ("model_" + std::to_string(k) + ".bin");
+        if (!fs::exists(m, ec)) break;
+        fs::remove(m, ec);
+        fs::remove(fs::path(s.dir) / ("images_" + std::to_string(k) + ".bin"), ec);
+    }
 }
 
 bool write_image_stats(const Reconstruction& rec, const std::string& path) {
@@ -549,6 +576,13 @@ void live_pair(uint32_t a, uint32_t b, int32_t config,
     s.live.write(rec.data(), (std::streamsize)rec.size());
     s.live_bytes += rec.size();
     if (due(s.live_at, s.live_started)) s.live.flush();
+}
+
+void live_matches_end() {
+    State& s = state();
+    std::lock_guard<std::mutex> lk(s.live_mu);
+    s.live.close();
+    s.live.clear();
 }
 
 // Box-filtered, which is enough for a preview and avoids pulling a resampler

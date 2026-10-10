@@ -181,7 +181,11 @@ at its camera. The model's cameras are coloured red to green by an image's
 mean error -- the measure the run reports and passes are judged by -- linear
 from a third of the ladder's start (red) to a third of its end (green): an
 image's mean sat near a third of its gate (1.5 px at 20, 0.9 px at 3). Or by
-3D points against the placed images' median (an eighth of it up to it).
+3D points against the median of the placed images in the same folder (an
+eighth of it up to it): a 360 image covers about fourteen times a 64-degree
+lens's view, so one median over both cameras judged each by the other's.
+"View from this camera" also takes the image's lens type (perspective, either
+fisheye, or equirectangular) with its field of view.
 
 `--quality` sets the ladder and the passes (`sfm/ProgressivePresets.h`), and
 the GUI's quality control fills the same values in: start 12/16/20/24 px over
@@ -190,8 +194,34 @@ the GUI's quality control fills the same values in: start 12/16/20/24 px over
 five attempts and a feature pass cost about one attempt, so these leave
 headroom for harder captures, which has not been measured yet.
 
-Stopping: `--progressive-patience` (default 2) feature passes in a row with no
-gain, all steps tried for all targets, `--progressive-time`, or cancel.
+Stopping: `--progressive-patience` (default 2) applies to both stages. That
+many ladder attempts in a row that align no new image skip the rest of the
+ladder to its final error, which the written model needs (a pass's three-step
+tail always runs whole); on the 678-image capture the ladder placed 656 on
+its first attempt and nothing in the next 24, 38 minutes. That many feature
+passes with no gain end the passes, as do all steps tried for all targets,
+`--progressive-time`, or cancel.
+
+The dataset screen follows a pass as it redoes each step. Detection announces
+`Stage::Extract`, so the step row goes back to features and the reel watches
+the pass's own `features.progressive/<n>`; matching announces `Stage::Match`
+and starts a fresh pair matrix with the pass's pairs, then writes the whole
+matrix back once they are verified (or undone). The live matches stay shut for
+a pass, since they index `features/`. Every snapshot writes all the models:
+`model.bin`/`images.bin` for the largest and `model_k.bin`/`images_k.bin` for
+each other, and the model view lists them in a Model control.
+
+A feature pass detects only its targets, so the extractor's refusal when no
+mask matches any image applies to a whole capture, not to `only`: images
+without masks are the usual targets when only one folder was masked.
+
+A pass reads descriptors back only for its targets and the largest model's
+images, so only pairs between those are matched: an old pair or a file-order
+neighbour outside both handed the matcher a null descriptor block and crashed
+the run. Before detection the pass also releases the mapper, whose
+bundle-adjustment contexts are a Vulkan device of their own, so the inference
+layer's device is not brought up beside it (sfm-in-process-plan.md, §7); an
+undone pass builds a fresh mapper at the final error, as each attempt does.
 
 ## 6. Better matchers for repeated and look-alike structure
 

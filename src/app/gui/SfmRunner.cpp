@@ -83,7 +83,8 @@ bool child_line_is_notable(const std::string& l) {
         for (const spirula::i18n::Msg* m :
              {&M::progressive_attempt, &M::progressive_attempt_done, &M::progressive_feature_pass,
               &M::progressive_feature_kept, &M::progressive_feature_undone,
-              &M::progressive_feature_failed, &M::progressive_time_up})
+              &M::progressive_feature_failed, &M::progressive_time_up,
+              &M::progressive_ladder_skip})
             if (spirula::i18n::scan(*m, rest, got)) return true;
     }
     for (const char* word : {spirula::i18n::msg::sfm::word_warning.get(),
@@ -725,6 +726,8 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
         }
         argv.push_back("--progressive-error-steps");
         argv.push_back(std::to_string(job.progressive_error_steps));
+        argv.push_back("--progressive-patience");
+        argv.push_back(std::to_string(job.progressive_patience));
         if (!job.progressive_features) {
             argv.push_back("--no-progressive-features");
         } else {
@@ -734,8 +737,6 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
             argv.push_back(std::to_string(job.progressive_image_size_end));
             argv.push_back("--progressive-feature-steps");
             argv.push_back(std::to_string(job.progressive_feature_steps));
-            argv.push_back("--progressive-patience");
-            argv.push_back(std::to_string(job.progressive_patience));
             if (job.progressive_time > 0) {
                 std::snprintf(buf, sizeof buf, "%g", job.progressive_time);
                 argv.push_back("--progressive-time");

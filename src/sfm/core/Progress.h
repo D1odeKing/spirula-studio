@@ -65,6 +65,9 @@ bool write_image_stats(const Reconstruction& rec, const std::string& path);
 using PointColor = std::function<void(const Point3D&, uint8_t rgb[3])>;
 void model(const Reconstruction& rec, bool force = false,
            const PointColor& color = {});
+// Every model, now: the first as model.bin and images.bin, each other k as
+// model_k.bin and images_k.bin, so a front end can show any of them.
+void models(const std::vector<Reconstruction>& recs, const PointColor& color = {});
 
 // pairs.bin: "VKPP", u32 version=2, u32 images, u32 bins, then three
 // bins*bins u32 planes -- summed inliers, candidate pairs, verified pairs.
@@ -104,6 +107,8 @@ void live_matches_begin(const std::vector<std::string>& names,
 void live_pair(uint32_t a, uint32_t b, int32_t config,
                const uint32_t* idx1, const uint32_t* idx2, size_t stride,
                uint32_t count);
+// Stop appending: what is written stays, later live_pair calls are dropped.
+void live_matches_end();
 
 // Write whatever is buffered, whatever the clock says. Call at the end of a
 // stage so the last state on screen is the final one.

@@ -861,6 +861,7 @@ private:
     // and a run that does all three would otherwise overwrite its own evidence.
     FilmReel _film_frames, _film_masks, _film_features, _film_geometry;
     FeatureWatcher _features;
+    std::string _features_shown;   // the folder the reel was filled from
     MatchMatrix _matrix;
     // The two images behind whichever cell of the match map the cursor is on.
     PairPreview _pairs_view;
@@ -868,6 +869,9 @@ private:
     // trainer screen uses before training starts.
     ViewportPanel _model_view;
     LiveModel _live_model;
+    // Which of the run's models is on screen: 0 the largest, k its model_k.bin.
+    int _model_pick = 0;
+    std::vector<uint32_t> _model_sizes;
     bool _model_attached = false;
     // Snapshot files already read, by their write time; 0 means "not yet".
     int64_t _model_mtime = 0, _pairs_mtime = 0, _matches_mtime = 0;

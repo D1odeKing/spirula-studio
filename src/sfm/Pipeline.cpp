@@ -1290,8 +1290,8 @@ std::vector<Reconstruction> runMapper(Mapper& mapper, const MatchesDatabase& db,
         ast = bs.assemble;
     }
     // The assembly passes move images between models, so the last snapshot the
-    // mapper took is not what came out. Leave the largest result on screen.
-    if (!models.empty()) sfm::progress::model(models.front(), /*force=*/true);
+    // mapper took is not what came out. Leave every result there to be shown.
+    sfm::progress::models(models);
     return models;
 }
 
@@ -1580,7 +1580,9 @@ int extractDirectory(const std::string& imagedir, const fs::path& outdir,
         }
         L::out(Tag::Extract, M::extract_masks_matched,
                {(long long)stats.masked_images, (long long)paths.size(), maskdir});
-        if (stats.masked_images == 0) {
+        // `only` is a subset of a run whose masks already matched (progressive
+        // passes), and those images may simply have none.
+        if (stats.masked_images == 0 && !only) {
             L::fail(Tag::Extract, M::extract_no_mask_matches,
                     {maskdir, stats.first_unmasked});
             return 1;
@@ -2639,7 +2641,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     // on display until the user opened the written one.
     if (!gauge.empty()) progress::gauge(gauge[0].oriented, gauge[0].metric);
     if (!models.empty()) {
-        progress::model(models.front(), /*force=*/true);
+        progress::models(models);
         if (!progress::write_image_stats(models.front(), (ws / "image_stats.bin").string()))
             L::err_raw(Tag::Map, "cannot write " + (ws / "image_stats.bin").string());
     }

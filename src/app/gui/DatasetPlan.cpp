@@ -713,12 +713,12 @@ StepFields model_fields(const SfmJob& job) {
         add(f, "progressive_error_start", "", num(job.progressive_error_start));
         add(f, "progressive_error_end", "", num(job.progressive_error_end));
         add(f, "progressive_error_steps", "", num(job.progressive_error_steps));
+        add(f, "progressive_patience", "", num(job.progressive_patience));
         add(f, "progressive_features", "", onoff(job.progressive_features));
         if (job.progressive_features) {
             add(f, "progressive_max_features_end", "", num(job.progressive_max_features_end));
             add(f, "progressive_image_size_end", "", num(job.progressive_image_size_end));
             add(f, "progressive_feature_steps", "", num(job.progressive_feature_steps));
-            add(f, "progressive_patience", "", num(job.progressive_patience));
             if (job.progressive_time > 0)
                 add(f, "progressive_time", "", num(job.progressive_time));
         }
