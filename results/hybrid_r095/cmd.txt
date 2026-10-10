@@ -1,0 +1,1 @@
+SS_SFM_HYBRID_RATIO=0.95 bin_work2/spirula.exe sfm auto "H:/Hershy Site GS/GS runs/a7iii_inside/images" -o ws_hybrid_r095 --manifest manifest.yaml --quality high --features loma-b128 --matcher loma-b128 --progressive --hybrid-sift --reuse-matches keep
