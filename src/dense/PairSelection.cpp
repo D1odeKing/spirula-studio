@@ -1,6 +1,7 @@
 #include "dense/PairSelection.h"
 
 #include "data/Knn.h"
+#include "dense/Filters.h"
 #include "sfm/feature/Pairing.h"
 
 #include <algorithm>
@@ -177,9 +178,13 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
             if (best.size() > k) best.pop_back();
         };
         auto pair_with = [&](uint32_t b) { return options.directed ? ImagePair{a, b} : ImagePair(std::minmax(a, b)); };
+        auto allowed = [&](ImagePair pair) {
+            return eligible_pair(images, pair) && (options.max_baseline <= 0 ||
+                (images[pair.first].center - images[pair.second].center).norm() <= options.max_baseline);
+        };
         for (uint32_t b : touched) {
             const ImagePair pair = pair_with(b);
-            if (eligible_pair(images, pair)) offer({pair, common[b], pose_affinity(images[a], images[b]), score[b]});
+            if (allowed(pair)) offer({pair, common[b], pose_affinity(images[a], images[b]), score[b]});
         }
         if (best.size() < k && !images[a].shared_points_only) {
             const int found = tree.query(&centers[(size_t)a * 3], (int32_t)a, nearest_count, nearest_distance.data(), nearest.data());
@@ -187,7 +192,7 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
                 const uint32_t b = (uint32_t)nearest[(size_t)i];
                 if (common[b] || images[b].shared_points_only) continue;
                 const ImagePair pair = pair_with(b);
-                if (eligible_pair(images, pair) && sees_same_region(images[a], images[b]))
+                if (allowed(pair) && sees_same_region(images[a], images[b]))
                     offer({pair, 0, pose_affinity(images[a], images[b]), 0});
             }
         }
@@ -237,6 +242,8 @@ void PairOptions::validate() const {
         throw std::runtime_error("unknown dense pair mode");
     if (neighbors <= 0 || sequence_window <= 0)
         throw std::runtime_error("dense neighbor count and sequence window must be positive");
+    if (!std::isfinite(max_baseline) || max_baseline < 0)
+        throw std::runtime_error("dense maximum pair baseline must be finite and non-negative");
     if (reference_coverage < 0 || reference_coverage > 255)
         throw std::runtime_error("dense reference coverage must be between 0 and 255");
 }
@@ -346,6 +353,24 @@ PairStatistics select_pairs(const std::vector<PairImage>& images, const PairOpti
     });
     for (const auto& pair : pairs) if (!publish(pair)) break;
     return statistics;
+}
+
+double resolve_max_baseline(const std::vector<PairImage>& images, const PairOptions& options, double setting,
+                            bool metric, uint64_t* refused, const std::function<void()>& check_cancel,
+                            const std::vector<sfm::Vec3>& points) {
+    if (refused) *refused = 0;
+    if (options.mode != PairMode::Automatic || setting < 0 || (setting == 0 && !metric)) return 0;
+    auto unlimited = options; unlimited.max_baseline = 0;
+    // One baseline per pair of source images, however many of their faces were paired.
+    std::set<std::pair<int64_t,int64_t>> seen;
+    std::vector<double> baselines;
+    select_pairs(images, unlimited, [&](ImagePair pair) {
+        if (seen.insert(std::minmax(images[pair.first].source_image, images[pair.second].source_image)).second)
+            baselines.push_back((images[pair.first].center - images[pair.second].center).norm());
+    }, check_cancel, points);
+    const double limit = setting > 0 ? setting : automatic_max_baseline(baselines);
+    if (refused) for (double b : baselines) *refused += limit > 0 && b > limit;
+    return limit;
 }
 
 }  // namespace spirula::dense

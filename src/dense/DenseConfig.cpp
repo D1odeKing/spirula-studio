@@ -76,6 +76,9 @@ void DenseConfig::validate() const {
     if (!probability(min_overlap) || !probability(mask_threshold) || !positive(max_cycle_error) ||
         !std::isfinite(voxel_size) || voxel_size < 0 || !positive(outlier_stddev))
         throw std::runtime_error("invalid dense filtering, mask, or fusion threshold");
+    if ((two_image_points != "auto" && two_image_points != "off") || !std::isfinite(max_depth_error_per_cell) ||
+        !std::isfinite(max_baseline))
+        throw std::runtime_error("invalid dense two-image, depth precision, or baseline filter");
     if (stride < 1 || outlier_neighbors < 2 || cpu_workers < 0 || max_face_size < 16 || metashape_component < -1)
         throw std::runtime_error("invalid dense sampling, view, worker, or mask limits");
     if (exif_orientation != "none" && exif_orientation != "orient" && exif_orientation != "apply")

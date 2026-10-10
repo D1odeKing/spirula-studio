@@ -49,17 +49,15 @@ inline bool debug_sync_enabled() {
     return v;
 }
 
-// backend::vk::dispatch that throws (with the backend's sticky error detail)
-// instead of returning false. `params` goes straight into push constants —
-// use dispatch_ring for structs above the device push floor.
-inline void dispatch(const char* entry, const backend::vk::SpecList& spec,
-                     uint32_t gx, uint32_t gy, uint32_t gz,
-                     const void* params, uint32_t size) {
+// Runs `record` (a backend::vk dispatch call) and throws, with the backend's
+// sticky error detail, when it returns false.
+template <typename Record>
+inline void checked_dispatch(const char* entry, uint32_t gx, uint32_t gy,
+                             uint32_t gz, Record&& record) {
     if (debug_sync_enabled())
         std::fprintf(stderr, "[vk-sync] %s (%u,%u,%u)...\n", entry, gx, gy,
                      gz);
-    if (!backend::vk::dispatch(backend::kDefaultStream, entry, spec, gx, gy,
-                               gz, params, size)) {
+    if (!record()) {
         const char* detail = backend::last_error();
         throw std::runtime_error(std::string("Vulkan backend: dispatch of ") +
                                  entry + " failed" +
@@ -70,6 +68,33 @@ inline void dispatch(const char* entry, const backend::vk::SpecList& spec,
         const char* err = backend::last_error();
         std::fprintf(stderr, "[vk-sync] %s: %s\n", entry, err ? err : "ok");
     }
+}
+
+// backend::vk::dispatch that throws instead of returning false. `params` goes
+// straight into push constants -- use dispatch_ring for structs above the
+// device push floor.
+inline void dispatch(const char* entry, const backend::vk::SpecList& spec,
+                     uint32_t gx, uint32_t gy, uint32_t gz,
+                     const void* params, uint32_t size) {
+    checked_dispatch(entry, gx, gy, gz, [&] {
+        return backend::vk::dispatch(backend::kDefaultStream, entry, spec, gx,
+                                     gy, gz, params, size);
+    });
+}
+
+// dispatch() through backend::vk::dispatch_budgeted, for a launch that scales
+// with the input and can outlive a GPU watchdog on a slow device. Its
+// workgroups must not depend on each other.
+inline void dispatch_budgeted(const char* entry,
+                              const backend::vk::SpecList& spec, uint32_t gx,
+                              uint32_t gy, uint32_t gz, const void* params,
+                              uint32_t size, double work = 0,
+                              const char* key = nullptr) {
+    checked_dispatch(entry, gx, gy, gz, [&] {
+        return backend::vk::dispatch_budgeted(backend::kDefaultStream, entry,
+                                              spec, gx, gy, gz, params, size,
+                                              work, key);
+    });
 }
 
 // Flat-1D dispatch: folds `total` threads into `block`-wide groups. If
@@ -99,6 +124,45 @@ inline void dispatch_ring(const char* entry,
         throw std::runtime_error("Vulkan backend: params ring failed");
     std::memcpy(mapped, params, size);
     dispatch(entry, spec, gx, gy, gz, &addr, sizeof(addr));
+}
+
+// A tile rasterization's size in dispatch_budgeted units. Every micro tile
+// walks its macro tile's whole list (docs/notes/binning-tile-size.md), so a
+// pair counts 4^macro_log2 times; a pixel counts once.
+inline double raster_work(uint32_t n_isects, int macro_log2, int64_t images,
+                          uint32_t width, uint32_t height) {
+    return (double)n_isects * (double)(1ull << (2 * macro_log2)) +
+           (double)images * width * height;
+}
+
+// dispatch_ring for a budgeted launch: every range of a split one reads the
+// same copy of the params.
+inline void dispatch_ring_budgeted(const char* entry,
+                                   const backend::vk::SpecList& spec,
+                                   uint32_t gx, uint32_t gy, uint32_t gz,
+                                   const void* params, uint32_t size,
+                                   double work = 0,
+                                   const char* key = nullptr) {
+    uint64_t addr = 0;
+    void* mapped = nullptr;
+    if (!backend::vk::params_alloc(size, &addr, &mapped))
+        throw std::runtime_error("Vulkan backend: params ring failed");
+    std::memcpy(mapped, params, size);
+    dispatch_budgeted(entry, spec, gx, gy, gz, &addr, sizeof(addr), work,
+                      key);
+}
+
+// dispatch_flat for a budgeted launch; `work` defaults to the thread count.
+inline void dispatch_flat_budgeted(const char* entry,
+                                   const backend::vk::SpecList& spec,
+                                   int64_t total, uint32_t block, void* params,
+                                   uint32_t size, uint32_t* wgs_per_row_field,
+                                   double work = 0) {
+    if (total <= 0) return;
+    Fold f = fold_1d(total, block);
+    *wgs_per_row_field = f.per_row;
+    dispatch_budgeted(entry, spec, f.per_row, f.rows, 1, params, size,
+                      work > 0 ? work : (double)total);
 }
 
 // dispatch_flat for a params struct that goes through the ring.

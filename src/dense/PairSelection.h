@@ -36,6 +36,8 @@ struct PairOptions {
     std::vector<ImagePair> explicit_pairs;
     bool directed = false;
     std::vector<uint32_t> references;
+    // Automatic mode only: a pair farther apart is refused and the next-ranked image takes its place.
+    double max_baseline = 0;
     void validate() const;
 };
 
@@ -53,5 +55,11 @@ PairStatistics select_pairs(const std::vector<PairImage>& images, const PairOpti
                                const std::function<void(ImagePair)>& emit,
                                const std::function<void()>& check_cancel = {},
                                const std::vector<sfm::Vec3>& points = {});
+
+// The automatic-mode baseline limit: `setting` when positive, 3x the median planned
+// baseline when 0 on a metric model, else none (0). `refused` counts planned pairs over it.
+double resolve_max_baseline(const std::vector<PairImage>& images, const PairOptions& options, double setting,
+                            bool metric, uint64_t* refused = nullptr, const std::function<void()>& check_cancel = {},
+                            const std::vector<sfm::Vec3>& points = {});
 
 }  // namespace spirula::dense

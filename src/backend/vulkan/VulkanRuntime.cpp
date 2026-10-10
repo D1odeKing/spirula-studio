@@ -14,6 +14,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -279,21 +281,63 @@ VkCommandBuffer stream_begin(StreamImpl* s) {
     return cb;
 }
 
+double submit_log_ms() {
+    static const double ms = [] {
+        const char* v = spirula::env("VK_SUBMIT_LOG");
+        return v ? std::max(0.0, std::atof(v)) : 0.0;
+    }();
+    return ms;
+}
+
+namespace {
+
+// The kernels of a logged submission, each named once, in recording order.
+std::string recorded_summary(const std::vector<std::string>& names) {
+    if (names.empty()) return "copies and fills only";
+    std::vector<std::string> seen;
+    for (const std::string& n : names)
+        if (std::find(seen.begin(), seen.end(), n) == seen.end())
+            seen.push_back(n);
+    std::string out;
+    for (size_t i = 0; i < seen.size() && i < 6; i++)
+        out += (i ? ", " : "") + seen[i];
+    if (seen.size() > 6)
+        out += " (+" + std::to_string(seen.size() - 6) + " more)";
+    return out;
+}
+
+}  // namespace
+
 uint64_t stream_flush(StreamImpl* s) {
     if (!s) return 0;
     if (!s->recording) return s->last_value;
     Context& ctx = Context::get();
     VkCommandBuffer cb = s->cbs[s->cur];
     s->recording = false;
+    s->open_seconds = 0.0;
     VkResult r = vkEndCommandBuffer(cb);
     if (r != VK_SUCCESS) {
         set_error("vkEndCommandBuffer failed", r);
         return s->last_value;
     }
+    const double log_ms = submit_log_ms();
+    const auto t0 = log_ms > 0 ? std::chrono::steady_clock::now()
+                               : std::chrono::steady_clock::time_point{};
     uint64_t value = ctx.submit(cb);
     if (value == 0) return s->last_value;  // submit failed (error set)
     s->cb_submitted[s->cur] = value;
     s->last_value = value;
+    if (log_ms > 0) {
+        ctx.wait(value);
+        const double ms = 1e3 * std::chrono::duration<double>(
+                                    std::chrono::steady_clock::now() - t0)
+                                    .count();
+        if (ms >= log_ms)
+            std::fprintf(stderr, "[vk-submit] %.1f ms, %zu dispatches: %s\n",
+                         ms, s->recorded.size(),
+                         recorded_summary(s->recorded).c_str());
+        s->recorded.clear();
+    }
     return value;
 }
 
@@ -909,8 +953,8 @@ std::mutex g_ts_mutex;
 std::vector<TsPair> g_ts_pending;
 uint64_t g_ts_untimed = 0;  // dispatches skipped when the pool was exhausted
 bool g_ts_warned = false;
-// Per-entry-point GPU time accumulation: name -> {dispatch count, ns}.
-struct TsEntry { uint64_t count = 0, ns = 0; };
+// Per-entry-point GPU time accumulation: name -> {dispatch count, ns, longest}.
+struct TsEntry { uint64_t count = 0, ns = 0, max_ns = 0; };
 std::map<std::string, TsEntry> g_ts_by_entry;
 
 }  // namespace
@@ -1041,6 +1085,7 @@ void gpu_ts_resolve() {
             TsEntry& e = g_ts_by_entry[p.entry];
             e.count++;
             e.ns += dt;
+            e.max_ns = std::max(e.max_ns, dt);
         }
         query_slot_release(p.qs);
         query_slot_release(p.qe);
@@ -1067,13 +1112,14 @@ void gpu_ts_report_by_entry() {
     });
     std::fprintf(stderr,
                  "\n[spirula-profile] ---- GPU time by kernel (entry) ----\n");
-    std::fprintf(stderr, "%-44s %7s %10s %9s\n", "entry", "count", "gpu_ms",
-                 "us/call");
+    std::fprintf(stderr, "%-44s %7s %10s %9s %9s\n", "entry", "count", "gpu_ms",
+                 "us/call", "max_ms");
     for (const auto& r : rows) {
         double ms = r.second.ns * 1e-6;
         double us = r.second.count ? (r.second.ns * 1e-3) / r.second.count : 0;
-        std::fprintf(stderr, "%-44s %7llu %10.3f %9.2f\n", r.first.c_str(),
-                     (unsigned long long)r.second.count, ms, us);
+        std::fprintf(stderr, "%-44s %7llu %10.3f %9.2f %9.3f\n", r.first.c_str(),
+                     (unsigned long long)r.second.count, ms, us,
+                     r.second.max_ns * 1e-6);
     }
     std::fprintf(stderr, "[spirula-profile] -----------------------------------\n");
 }

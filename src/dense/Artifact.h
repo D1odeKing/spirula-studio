@@ -13,7 +13,7 @@
 
 namespace spirula::dense {
 
-inline constexpr int reconstruction_revision = 4;
+inline constexpr int reconstruction_revision = 5;
 
 // Where `spirula dense --progress-dir` writes the live model.bin the GUI polls.
 inline std::filesystem::path progress_dir(const std::string& dataset) {

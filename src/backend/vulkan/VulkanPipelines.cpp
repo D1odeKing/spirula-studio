@@ -187,8 +187,11 @@ VkPipelineLayout get_layout(uint32_t push_size) {
     return layout;
 }
 
+// `dispatch_base` builds the variant vkCmdDispatchBase may run; plain launches
+// keep the pipeline without it, so a launch that never splits is unchanged.
 VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
-                        uint32_t push_size, VkPipelineLayout* out_layout) {
+                        uint32_t push_size, bool dispatch_base,
+                        VkPipelineLayout* out_layout) {
     std::string key = blob_name;
     key += '|';
     key += std::to_string(push_size);
@@ -196,6 +199,7 @@ VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
         key += '|';
         key += std::to_string(spec.values[i]);
     }
+    if (dispatch_base) key += "|base";
 
     std::lock_guard<std::mutex> lock(g_pipeline_mutex);
     VkPipelineLayout layout = get_layout(push_size);
@@ -246,6 +250,7 @@ VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
     }
     if (n) pci.stage.pSpecializationInfo = &spec_info;
     pci.layout = layout;
+    if (dispatch_base) pci.flags |= VK_PIPELINE_CREATE_DISPATCH_BASE_BIT;
 
     if (spirula::env("VK_VERBOSE")) {
         std::fprintf(stderr, "[spirula-vk] pipeline %s\n", key.c_str());
@@ -265,9 +270,13 @@ VkPipeline get_pipeline(const std::string& blob_name, const SpecList& spec,
 
 }  // namespace
 
-bool dispatch(Stream stream, const char* entry_name, const SpecList& spec,
-              uint32_t groups_x, uint32_t groups_y, uint32_t groups_z,
-              const void* params, uint32_t params_size) {
+namespace {
+
+// Shared by dispatch() and dispatch_range(): `base` null is a plain launch.
+bool record_dispatch(Stream stream, const char* entry_name,
+                     const SpecList& spec, const uint32_t* base,
+                     uint32_t groups_x, uint32_t groups_y, uint32_t groups_z,
+                     const void* params, uint32_t params_size) {
     Context& ctx = Context::get();
     if (!ctx.ok()) return false;
     if (groups_x == 0 || groups_y == 0 || groups_z == 0) return true;
@@ -286,12 +295,14 @@ bool dispatch(Stream stream, const char* entry_name, const SpecList& spec,
 
     uint32_t push_size = (params_size + 3u) / 4u * 4u;
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    VkPipeline pipeline = get_pipeline(entry_name, spec, push_size, &layout);
+    VkPipeline pipeline =
+        get_pipeline(entry_name, spec, push_size, base != nullptr, &layout);
     if (pipeline == VK_NULL_HANDLE) return false;
 
     StreamImpl* s = stream_impl(stream);
     VkCommandBuffer cb = stream_begin(s);
     if (cb == VK_NULL_HANDLE) return false;
+    if (submit_log_ms() > 0) s->recorded.push_back(entry_name);
 
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
     if (params_size > 0) {
@@ -306,10 +317,31 @@ bool dispatch(Stream stream, const char* entry_name, const SpecList& spec,
         }
     }
     int ts = gpu_ts_begin(cb, entry_name);  // GPU-timestamp timing (profile)
-    vkCmdDispatch(cb, groups_x, groups_y, groups_z);
+    if (base)
+        vkCmdDispatchBase(cb, base[0], base[1], base[2], groups_x, groups_y,
+                          groups_z);
+    else
+        vkCmdDispatch(cb, groups_x, groups_y, groups_z);
     gpu_ts_end(cb, ts);
     stream_barrier(cb);
     return true;
+}
+
+}  // namespace
+
+bool dispatch(Stream stream, const char* entry_name, const SpecList& spec,
+              uint32_t groups_x, uint32_t groups_y, uint32_t groups_z,
+              const void* params, uint32_t params_size) {
+    return record_dispatch(stream, entry_name, spec, nullptr, groups_x,
+                           groups_y, groups_z, params, params_size);
+}
+
+bool dispatch_range(Stream stream, const char* entry_name,
+                    const SpecList& spec, const uint32_t base[3],
+                    const uint32_t count[3], const void* params,
+                    uint32_t params_size) {
+    return record_dispatch(stream, entry_name, spec, base, count[0], count[1],
+                           count[2], params, params_size);
 }
 
 void pipelines_shutdown() {

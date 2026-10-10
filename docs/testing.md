@@ -233,6 +233,7 @@ expectation, one executable. Neither exists yet.
 | what a typed-in command line becomes, or what a message may carry into it | `command_argv_test` — the message stays one argument and stays JSON-safe |
 | the home screen's recent list, or how `gui.conf` stores it | `recent_list_test` |
 | a per-cell optimizer launcher (Vulkan) | `SS_OPTIM_SLICE_CELLS=2048` on `optim_parity` / `optimgeo_parity`, which forces the multi-slice path only an SH buffer past ~24M splats would otherwise take ([SH layouts](notes/sh-quant-layout.md)) |
+| a launch through `dispatch_budgeted` (Vulkan), or a new one | its parity tool under `SS_SUBMIT_BUDGET_MS=0.01`, which splits every budgeted launch after its entry's first into ranges of one slice (`SS_VK_VERBOSE=1` prints the dispatch-base pipelines that ran them); compare against a dump made without it ([submit budget](notes/gpu-submit-budget.md)) |
 | H.265 reference handling | `hevc_reference_retention_test` on a non-NVIDIA Vulkan video-decode device with `SS_ENABLE_PATENTED=ON` |
 | H.265 encode dimensions or HEIF image correctness | `hevc_sps_crop_test` (CPU) and `heif_test` (non-NVIDIA Vulkan encode/decode); fixtures are generated at runtime |
 | anything | one short training run per backend on a public scene |

@@ -25,6 +25,7 @@
 #include "app/gui/DatasetPrep.h"
 #include "app/gui/MaskPrompt.h"
 #include "app/gui/Subprocess.h"
+#include "app/gui/ViewBookmarks.h"
 #include "mesh/MeshImport.h"
 #include "app/gui/Ui.h"
 #include "app/gui/VramForecastView.h"
@@ -188,11 +189,11 @@ bool parse_settings_equal(const TrainConfig& a, const TrainConfig& b) {
 const std::vector<std::string> kViewableExtensions = {".ply", ".obj", ".gltf",
                                                       ".glb", ".stl"};
 
-// What "Open a Model or Reconstruction" shows. The extra four are how a
+// What "Open a Model or Reconstruction" shows. The rest are how a
 // reconstruction is named when the desktop's own picker cannot return a
-// folder: transforms.json, cameras.bin, points3D.txt, a Metashape .xml.
+// folder: transforms.json, cameras.bin, points3D.txt, a Metashape .xml / .psx.
 const std::vector<std::string> kOpenableExtensions = {
-    ".ply", ".obj", ".gltf", ".glb", ".stl", ".json", ".bin", ".txt", ".xml"};
+    ".ply", ".obj", ".gltf", ".glb", ".stl", ".json", ".bin", ".txt", ".xml", ".psx"};
 
 // Can this format carry this color? The child's own answer, asked through the
 // same function it refuses the run with.
@@ -437,6 +438,7 @@ void GuiApp::load_settings() {
         else if (k == "save_full_checkpoint") _keep_full_ckpt = v != "0";
         else if (k.rfind(kDirPrefix, 0) == 0 && !v.empty())
             _dialog_dirs[k.substr(sizeof kDirPrefix - 1)] = v;
+        else if (read_screenshot_setting(_shot, k, v)) {}
     }
     std::fclose(f);
 
@@ -485,6 +487,7 @@ void GuiApp::save_settings() {
     std::fprintf(f, "save_full_checkpoint=%d\n", _keep_full_ckpt ? 1 : 0);
     for (const auto& [key, dir] : _dialog_dirs)
         std::fprintf(f, "%s%s=%s\n", kDirPrefix, key.c_str(), dir.c_str());
+    write_screenshot_settings(f, _shot);
     for (const auto& l : accepted)
         std::fprintf(f, "accepted_license=%s\n", l.c_str());
     const bool ok = std::ferror(f) == 0;
@@ -2367,8 +2370,8 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
     if (paths.size() == 1 && fs::is_regular_file(paths[0], ec) &&
         !is_video_path(paths[0])) {
         // A file from inside a dataset (transforms.json, database.db, a
-        // COLMAP .bin/.txt, a Metashape camera .xml) opens the dataset it
-        // belongs to.
+        // COLMAP .bin/.txt, a Metashape camera .xml or .psx) opens the dataset
+        // it belongs to.
         const fs::path p(paths[0]);
         std::string ext = p.extension().string();
         for (auto& c : ext) c = (char)std::tolower((unsigned char)c);
@@ -2381,7 +2384,7 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
             return;
         }
         if (p.filename() == "transforms.json" || ext == ".db" ||
-            ext == ".bin" || ext == ".txt" || ext == ".xml") {
+            ext == ".bin" || ext == ".txt" || ext == ".xml" || ext == ".psx") {
             const std::string dir = p.parent_path().string();
             // A file from a COLMAP model folder names a reconstruction, not a
             // dataset: `sparse/0` has no images beside it to train from.
@@ -3240,15 +3243,19 @@ void GuiApp::frame() {
         _compare.poll();
         _images.detach();   // the files own the engine while they are open
     } else if (_runner.engine_ready()) {
-        if (!_viewport.attached() && _runner.session())
+        if (!_viewport.attached() && _runner.session()) {
             _viewport.attach(*_runner.session());
+            bind_session_views(_viewport, *_runner.session());
+        }
         // The photograph-vs-render mode needs the DataManager as well as the
         // splats, so it waits for engine setup exactly as the viewport does.
         if (!_images.attached() && _runner.session())
             _images.attach(*_runner.session());
     } else if (_runner.phase() == TrainRunner::Phase::Ready) {
-        if (!_viewport.preview_active() && _runner.session())
+        if (!_viewport.preview_active() && _runner.session()) {
             _viewport.attach_preview(*_runner.session());
+            bind_session_views(_viewport, *_runner.session());
+        }
     }
     update_roi_overlay();
 
@@ -5735,7 +5742,7 @@ void GuiApp::draw_masking_options(const MaskingPanel& p) {
         ImGui::SetNextItemWidth(px(320.0f));
         ui::InputTextEnglish(
             keep_subject ? dmsg::mask_what_to_keep : dmsg::mask_what_to_remove,
-            keep_subject ? "the statue; its pedestal" : "person; car; shadow of a person",
+            keep_subject ? "the statue; its pedestal" : "tourist; pedestrian; child; person; car; shadow of a person",
             &_mask.prompt);
         ui::help_on_hover(keep_subject ? dmsg::mask_prompt_help_keep
                                        : dmsg::mask_prompt_help_remove);
@@ -8580,6 +8587,7 @@ void GuiApp::draw_train() {
     // it costs the preview below no height.
     {
         const float w = px(160.0f);
+        draw_screenshot_controls(w);
         ImGui::SameLine(std::max(0.0f, ImGui::GetContentRegionMax().x - w));
         ImGui::SetNextItemWidth(w);
         int mode = _preview_images ? 1 : 0;
@@ -8659,6 +8667,8 @@ void GuiApp::draw_viewer() {
         if (ui::Button(rmsg::train_render)) _compare.begin_render(std::max(0, _compare.editing()));
         ui::help_on_hover(rmsg::enter_render_help);
     }
+    ImGui::SameLine();
+    draw_viewer_screenshot_controls();
     ImGui::SameLine();
     _compare.set_recents(recent_models(_recent));
     _compare.draw_toolbar();

@@ -57,6 +57,12 @@ constexpr int    kBinTileRetry  = 40;   // windows before re-probing after a
                                         // rejection -- splat size drifts, so
                                         // a rejected direction is retried
 constexpr int    kBinTileNext   = 1;    // ... but an accepted one right away
+// No coarser bin is tried below (1 + 1/2)^2 pairs per visible splat: under a
+// footprint of half a tile, doubling it cuts pairs by under a third while each
+// micro tile's scan grows 4x (5M splats at 432 px probed 128 px: device lost).
+constexpr double kCoarsenMinPairs = 2.25;
+// A coarser trial this much slower than its baseline has already lost.
+constexpr double kBinTileAbort  = 2.0;
 
 bool bin_tile_log() {
     static const bool on = [] {
@@ -70,6 +76,20 @@ bool bin_tile_log() {
 void engine_bin_tile_observe(double step_seconds) {
     if (engine().bin_tile_request != 0) return;
     BinTileChoice& c = bin_choice();
+    if (c.probing == 1 && c.dir > 0 && step_seconds > kBinTileAbort * c.base) {
+        if (bin_tile_log())
+            std::fprintf(stderr, "[bin-tile] %d px %.1f ms vs %d px %.1f ms -- abort\n",
+                         bin_tile_x(c.macro_log2), 1e3 * step_seconds,
+                         bin_tile_x(c.from), 1e3 * c.base);
+        c.macro_log2 = c.from;
+        c.probing = 0;
+        c.dir = -c.dir;
+        c.wait = kBinTileRetry;
+        c.warmup = kBinTileWarmup;
+        c.have = 0;
+        c.sum = 0.0;
+        return;
+    }
     if (c.warmup > 0) { --c.warmup; return; }
     c.sum += step_seconds;
     if (++c.have < kBinTileWindow) return;
@@ -86,7 +106,8 @@ void engine_bin_tile_observe(double step_seconds) {
         c.from = c.macro_log2;
         if (--c.wait > 0) return;
         const int next = c.macro_log2 + c.dir;
-        if (next < std::max(c.floor, kMacroLog2Min) || next > kMacroLog2Max) {
+        if (next < std::max(c.floor, kMacroLog2Min) || next > kMacroLog2Max ||
+            (c.dir > 0 && c.pairs_per_splat < kCoarsenMinPairs)) {
             c.dir = -c.dir;
             c.wait = kBinTileRetry;
             return;
@@ -363,6 +384,9 @@ void forward_3dgs(
         engine().fwd.macro_log2
     );
 
+    if (bin.probing != 1 && engine().fwd.macro_log2 == bin.macro_log2)
+        bin.pairs_per_splat = (double)flatten_ids.size() /
+                              (double)std::max<int64_t>(depths_nd.numel(), 1);
     if (engine().fwd.macro_log2 > macro_before) {
         // The intersect had to coarsen. That size is now a floor, and any
         // search state below it measured a setting this run cannot use.

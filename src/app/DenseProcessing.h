@@ -7,7 +7,7 @@ namespace app {
 struct DenseResult {
     std::string cloud, manifest;
     spirula::dense::ReconstructionStatistics statistics;
-    uint64_t pairs = 0, cached_pairs = 0;
+    uint64_t pairs = 0, cached_pairs = 0, refused_pairs = 0;
     double seconds = 0;
 };
 

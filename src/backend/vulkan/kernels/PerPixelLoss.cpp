@@ -222,8 +222,8 @@ void dispatch_ppl(const char* entry, int64_t pixels, int64_t B, PplParams& p) {
     p.wgs_per_row = f.per_row;
     if (B > 65535 || f.rows > 65535)
         throw std::runtime_error("ppl: image grid dimension exceeds 65535");
-    vkk::dispatch_ring(entry, {}, f.per_row, (uint32_t)B, f.rows, &p,
-                       sizeof(p));
+    vkk::dispatch_ring_budgeted(entry, {}, f.per_row, (uint32_t)B, f.rows,
+                                &p, sizeof(p));
 }
 
 // Grid over 16x16 logical tiles of a (W, H, B) image.
@@ -233,7 +233,7 @@ void dispatch_tiles(const char* entry, int64_t W, int64_t H, int64_t B,
     uint32_t gx = (uint32_t)((W + 15) / 16), gy = (uint32_t)((H + 15) / 16);
     if (gx > 65535 || gy > 65535 || B > 65535)
         throw std::runtime_error("ppl: tile grid dimension exceeds 65535");
-    vkk::dispatch(entry, {}, gx, gy, (uint32_t)B, params, size);
+    vkk::dispatch_budgeted(entry, {}, gx, gy, (uint32_t)B, params, size);
 }
 
 // kSsimTile (fused_ssim.slang): 24 where the groupshared it needs fits, else
@@ -251,7 +251,8 @@ void dispatch_ssim(const char* entry, int64_t W, int64_t H, int64_t B,
     uint32_t gx = (uint32_t)((W + t - 1) / t), gy = (uint32_t)((H + t - 1) / t);
     if (gx > 65535 || gy > 65535 || B > 65535)
         throw std::runtime_error("ssim: tile grid dimension exceeds 65535");
-    vkk::dispatch(entry, {t, fmts}, gx, gy, (uint32_t)B, params, size);
+    vkk::dispatch_budgeted(entry, {t, fmts}, gx, gy, (uint32_t)B, params,
+                           size);
 }
 
 // ---------------------------------------------------------------------------

@@ -35,8 +35,12 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
+#include <algorithm>
+#include <climits>
 #include <cstddef>
 #include <cfloat>
+#include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -107,6 +111,94 @@ inline const std::vector<const char*>& items(
     v.clear();
     for (const Msg* m : ms) v.push_back(m->get());
     return v;
+}
+
+// "10000000" and "1000000" look alike, so an integer of five digits or more
+// is shown as "10,000,000", while it is typed too. Parsing skips the commas.
+inline int group_digits(const char* s, int cursor, std::string& out) {
+    std::string digits;
+    int before = 0;
+    for (int i = 0; s[i]; i++) {
+        if (s[i] < '0' || s[i] > '9') continue;
+        digits += s[i];
+        if (i < cursor) before++;
+    }
+    out = s[0] == '-' ? "-" : "";
+    int pos = (int)out.size();
+    const size_t n = digits.size();
+    for (size_t i = 0; i < n; i++) {
+        if (i && n >= 5 && (n - i) % 3 == 0) out += ',';
+        out += digits[i];
+        if ((int)i < before) pos = (int)out.size();
+    }
+    return pos;
+}
+
+inline int int_field_callback(ImGuiInputTextCallbackData* d) {
+    if (d->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) {
+        const ImWchar c = d->EventChar;
+        return !((c >= '0' && c <= '9') || c == '-' || c == ',');
+    }
+    std::string out;
+    const int pos = group_digits(d->Buf, d->CursorPos, out);
+    if (out != d->Buf) {
+        d->DeleteChars(0, d->BufTextLen);
+        d->InsertChars(0, out.c_str());
+    }
+    d->CursorPos = d->SelectionStart = d->SelectionEnd = pos;
+    return 0;
+}
+
+// ImGui::InputInt's layout and IDs, so automation finds the same widgets.
+inline bool input_int(const char* label, int* v, int step, int step_fast) {
+    std::string text;
+    group_digits(std::to_string(*v).c_str(), 0, text);
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%s", text.c_str());
+    const ImGuiInputTextFlags flags = ImGuiInputTextFlags_AutoSelectAll |
+                                      ImGuiInputTextFlags_CallbackCharFilter |
+                                      ImGuiInputTextFlags_CallbackEdit;
+    const float button = ImGui::GetFrameHeight();
+    const float gap = ImGui::GetStyle().ItemInnerSpacing.x;
+    if (step) {
+        ImGui::BeginGroup();
+        ImGui::PushID(label);
+        ImGui::SetNextItemWidth(std::max(1.0f, ImGui::CalcItemWidth() - (button + gap) * 2));
+    }
+    bool changed = false;
+    if (ImGui::InputText(step ? "" : label, buf, sizeof buf, flags, int_field_callback)) {
+        long long parsed = 0;
+        bool any = false;
+        for (const char* p = buf; *p; p++) {
+            if (*p < '0' || *p > '9') continue;
+            parsed = std::min(parsed * 10 + (*p - '0'), (long long)INT_MAX + 1);
+            any = true;
+        }
+        if (buf[0] == '-') parsed = -parsed;
+        const int nv = (int)std::clamp(parsed, (long long)INT_MIN, (long long)INT_MAX);
+        if (any && nv != *v) { *v = nv; changed = true; }
+    }
+    if (step) {
+        const ImGuiStyle& st = ImGui::GetStyle();
+        const int d = ImGui::GetIO().KeyCtrl && step_fast ? step_fast : step;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(st.FramePadding.y, st.FramePadding.y));
+        ImGui::PushItemFlag(ImGuiItemFlags_ButtonRepeat, true);
+        ImGui::SameLine(0, gap);
+        if (ImGui::Button("-", ImVec2(button, button))) { *v -= d; changed = true; }
+        ImGui::SameLine(0, gap);
+        if (ImGui::Button("+", ImVec2(button, button))) { *v += d; changed = true; }
+        ImGui::PopItemFlag();
+        ImGui::PopStyleVar();
+        const char* end = std::strstr(label, "##");
+        if (!end) end = label + std::strlen(label);
+        if (end != label) {
+            ImGui::SameLine(0, gap);
+            ImGui::TextUnformatted(label, end);
+        }
+        ImGui::PopID();
+        ImGui::EndGroup();
+    }
+    return changed;
 }
 
 }  // namespace detail
@@ -467,10 +559,10 @@ inline bool ColorEdit3Raw(const char* id, float v[3],
     return ImGui::ColorEdit3(id, v, flags);
 }
 inline bool InputInt(const Msg& m, int* v, int step = 0, int step_fast = 0) {
-    return ImGui::InputInt(detail::label(m), v, step, step_fast);
+    return detail::input_int(detail::label(m), v, step, step_fast);
 }
 inline bool InputIntRaw(const char* id, int* v) {
-    return ImGui::InputInt(id, v, 0, 0);
+    return detail::input_int(id, v, 0, 0);
 }
 inline bool InputFloat(const Msg& m, float* v, float step = 0.0f,
                        float step_fast = 0.0f, const char* fmt = "%.3f") {

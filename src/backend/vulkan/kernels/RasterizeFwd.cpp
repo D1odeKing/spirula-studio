@@ -86,10 +86,11 @@ RasterOutputs alloc_raster_outputs(int64_t batch, uint32_t image_height,
 // 1 << macro_log2 micro tiles a macro tile spans on each axis.
 void dispatch_raster(const char* entry, const backend::vk::SpecList& spec,
                      uint32_t I, uint32_t tile_width, uint32_t tile_height,
-                     int macro_log2, const void* params,
+                     int macro_log2, double work, const void* params,
                      uint32_t params_size) {
-    vkk::dispatch_ring(entry, spec, I, tile_height << macro_log2,
-                       tile_width << macro_log2, params, params_size);
+    vkk::dispatch_ring_budgeted(entry, spec, I, tile_height << macro_log2,
+                                tile_width << macro_log2, params, params_size,
+                                work);
 }
 
 // The ring costs ~17 registers: its params loads are `strong`, so they cannot
@@ -98,10 +99,11 @@ void dispatch_raster(const char* entry, const backend::vk::SpecList& spec,
 void dispatch_raster_push(const char* entry,
                           const backend::vk::SpecList& spec, uint32_t I,
                           uint32_t tile_width, uint32_t tile_height,
-                          int macro_log2, const void* params,
+                          int macro_log2, double work, const void* params,
                           uint32_t params_size) {
-    vkk::dispatch(entry, spec, I, tile_height << macro_log2,
-                  tile_width << macro_log2, params, params_size);
+    vkk::dispatch_budgeted(entry, spec, I, tile_height << macro_log2,
+                           tile_width << macro_log2, params, params_size,
+                           work);
 }
 
 // Shared implementation of the 2D forward (Vanilla3DGS + MipSplatting: the
@@ -152,6 +154,8 @@ launch_raster_2d_fwd(
                   "must stay under the push-constant floor");
     dispatch_raster_push("rasterize_fwd.rasterize_fwd_2d", spec,
                          (uint32_t)batch, tile_width, tile_height, macro_log2,
+                         vkk::raster_work(p.n_isects, macro_log2, batch,
+                                          image_width, image_height),
                          &p, sizeof(p));
 
     return std::make_tuple(o.renders, o.render_Ts, o.last_ids, o.distortions,
@@ -294,8 +298,10 @@ std::tuple<
                                output_median ? 1u : 0u,
                                gaussian_ids.data_ptr() ? 1u : 0u, cd.dist};
     dispatch_raster("rasterize_fwd.rasterize_fwd_3dgut", spec,
-                    (uint32_t)batch, tile_width, tile_height, macro_log2, &p,
-                    sizeof(p));
+                    (uint32_t)batch, tile_width, tile_height, macro_log2,
+                    vkk::raster_work(p.n_isects, macro_log2, batch,
+                                     image_width, image_height),
+                    &p, sizeof(p));
 
     return std::make_tuple(o.renders, o.render_Ts, o.last_ids, o.distortions,
                            o.render_median);

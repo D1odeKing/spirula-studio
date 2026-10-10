@@ -7,6 +7,7 @@
 #include "backend/vulkan/VulkanContext.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace backend {
@@ -43,7 +44,15 @@ struct StreamImpl {
     int cur = 0;
     bool recording = false;
     uint64_t last_value = 0;  // last timeline value signaled by this stream
+    // Predicted GPU seconds of the budgeted launches in the open command
+    // buffer (dispatch_budgeted); unbudgeted work is not counted.
+    double open_seconds = 0.0;
+    std::vector<std::string> recorded;  // entries, under SS_VK_SUBMIT_LOG only
 };
+
+// SS_VK_SUBMIT_LOG=<ms>: every submission waits for itself, and one that ran
+// longer prints its time and kernels -- what a GPU watchdog measures. 0 = off.
+double submit_log_ms();
 
 // Maps the public handle (nullptr = default stream) to its impl, creating
 // lazily. Returns nullptr only if the context failed to initialize.

@@ -196,9 +196,12 @@ std::tuple<
         backend::vk::SpecList spec{0u,           spec_dist,
                                    md ? 1u : 0u, (uint32_t)accum_mode,
                                    0u,           packed ? 1u : 0u};
-        vkk::dispatch_ring("rasterize_bwd.rasterize_bwd_2d", spec, I,
-                           tile_height << macro_log2,
-                           tile_width << macro_log2, &p, sizeof(p));
+        vkk::dispatch_ring_budgeted(
+            "rasterize_bwd.rasterize_bwd_2d", spec, I,
+            tile_height << macro_log2, tile_width << macro_log2, &p,
+            sizeof(p),
+            vkk::raster_work(n_isects, macro_log2, I, image_width,
+                             image_height));
     }
 
     return std::make_tuple(v_splats_w.value(), v_splats_s.value(),
@@ -356,9 +359,12 @@ std::tuple<
             md ? 1u : 0u,   (uint32_t)accum_mode,
             need_viewmat_grad ? 1u : 0u, packed ? 1u : 0u,
             cd.dist};
-        vkk::dispatch_ring("rasterize_bwd.rasterize_bwd_3dgut", spec, I,
-                           tile_height << macro_log2,
-                           tile_width << macro_log2, &p, sizeof(p));
+        vkk::dispatch_ring_budgeted(
+            "rasterize_bwd.rasterize_bwd_3dgut", spec, I,
+            tile_height << macro_log2, tile_width << macro_log2, &p,
+            sizeof(p),
+            vkk::raster_work(n_isects, macro_log2, I, image_width,
+                             image_height));
     }
 
     return std::make_tuple(v_splats_w.value(), v_splats_s.value(),

@@ -156,7 +156,7 @@ int main() {
         const auto serial_reference = reference_run("serial-reference",serial_settings);
         auto parallel_settings = serial_settings; parallel_settings.cpu_workers = 2;
         const auto parallel_reference = reference_run("parallel-reference",parallel_settings);
-        if (serial_reference.first.min_reference_support < 3 ||
+        if (serial_reference.first.min_reference_support < (serial_settings.two_image_points == "auto" ? 2u : 3u) ||
             serial_reference.first.max_reference_reprojection_error > serial_settings.source_reprojection_error ||
             serial_reference.first.min_reference_support != parallel_reference.first.min_reference_support ||
             serial_reference.first.max_reference_reprojection_error != parallel_reference.first.max_reference_reprojection_error ||

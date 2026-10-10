@@ -44,6 +44,11 @@ struct DenseConfig {
     double min_overlap = 0.5, max_cycle_error = 1;
     bool cycle_check = true;
     double voxel_size = 0;
+    // Point filters (dense/Filters.h). 0 resolves automatically; a negative value turns one off.
+    // Two-image points are opt-in: they send the samples three-image grouping drops into full refinement.
+    std::string two_image_points = "off";
+    bool free_space_test = true, far_isolated = true, reprojection_check = false;
+    double max_depth_error_per_cell = -1, max_baseline = -1;
     bool remove_outliers = false;
     int outlier_neighbors = 16;
     double outlier_stddev = 2;
@@ -63,6 +68,8 @@ struct DenseConfig {
     void validate_run() const;
     uint64_t resolved_image_cache_bytes() const;
     bool effective_cycle_check() const { return cycle_check && match.bidirectional; }
+    // Two-image points are admitted only on top of the three-image default.
+    bool two_image_active() const { return two_image_points == "auto" && geometry.min_source_images == 3; }
 };
 
 }  // namespace spirula::dense

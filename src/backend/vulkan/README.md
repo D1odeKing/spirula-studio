@@ -140,6 +140,13 @@ dropped for now and noted as a limitation).
   slower on desktop drivers, the same way `vkGetFenceStatus` polling beats
   `vkWaitForFences`. CPU devices (llvmpipe) always block
   (`SS_VK_POLL_WAIT=0/1` overrides).
+- Watchdog: a launch that grows with the input (rasterizer, bilateral grid,
+  SSIM, per-pixel losses) goes through `dispatch_budgeted`, which flushes
+  and, past `core/SubmitBudget.h`'s target, splits it into
+  `vkCmdDispatchBase` ranges, each its own submit
+  (docs/notes/gpu-submit-budget.md). Only an entry whose workgroups are
+  independent may use it. `SS_VK_SUBMIT_LOG=<ms>` prints every submit
+  longer than that, with its kernels.
 - Barriers: a conservative global `COMPUTE|TRANSFER → COMPUTE|TRANSFER`
   memory barrier after every dispatch/copy inside a batch reproduces CUDA
   stream ordering exactly. Per-resource narrowing is a later optimization,
