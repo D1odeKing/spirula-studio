@@ -19,8 +19,13 @@ hybrid runs, `hybrid.txt`.
 | run | registered | models | points | observations | mean px | median px | total |
 |---|---|---|---|---|---|---|---|
 | loma_prog (step 0) | 676/678 | 1 | 606,874 | 1,796,609 | 3.015 | 2.611 | 1:04:11 |
+| sift_prog (step 0, base) | 645/678 | 1 | 273,451 | 734,543 | 1.454 | 1.151 | ~0:24† |
 | hybrid (A) | 676/678 | 1 | 382,112 | 1,014,341 | 1.616 | 1.304 | 0:59:43 |
 | hybrid_noguide (B) | 676/678 | 1 | 297,599 | 803,578 | 1.511 | 1.204 | 0:23:47* |
+
+† SIFT extraction, matching and two ladder attempts took about 3 min before the pause
+(`sift_prog/run_paused.log`). The rest, 21 min, is `sift_prog/run.log`, resumed over
+its own matches.
 
 \* B reused A's LoMa matches, so its total has no matching time.
 
@@ -34,6 +39,22 @@ hybrid runs, `hybrid.txt`.
 
 Errors are in source-image pixels (`reprojStats` works in original-image
 coordinates), so the runs compare directly.
+
+## Against SIFT alone
+
+The SIFT `--progressive` baseline placed 645 of 678. Its feature pass 1 brought
+in one image; passes 2 and 3 were undone. The 33 images it left out are all
+A7iii; all 37 equirectangular images went in. Hybrid A against it:
+
+- +31 images (676 against 645): LoMa places them and SIFT keeps 673 of them
+  with points.
+- +40% points (382k against 273k) and +38% observations.
+- Error 1.62 against 1.45 px. Slightly worse, on 31 harder images that SIFT
+  alone could not place at all.
+
+So the hybrid sits between the two frontends as the plan intended: LoMa's
+coverage, close to SIFT's precision. It has more points than SIFT alone, but
+not LoMa's 607k.
 
 ## Hybrid A, the stage itself
 
