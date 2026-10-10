@@ -82,3 +82,13 @@ not yet tried, in order of cost:
 - The LoMa ladder placed 676 on its first attempt (20 px). Nothing came after,
   so it skipped from 11.9 px to 3 px. Feature passes 1 and 2 on the 2
   unplaced images were undone.
+
+## Where the queue stands (paused by request, 2026-10-10 17:41 EDT)
+
+- Done: loma_prog, hybrid (A), hybrid_noguide (B), all above.
+- Stopped part-way: sift_prog (the SIFT `--progressive` baseline, base build).
+  Extraction and matching were finished; the ladder had placed 642 of 678 by
+  attempt 3 of 12 (14.2 px, 13,321 verified pairs). It resumes in place.
+- Not started: hybrid_extreme (A at `--quality extreme`), then A with
+  `SS_SFM_HYBRID_RATIO=0.95` and `1.0` over A's matches.
+- `resume_queue.sh` runs the rest in that order; `queue.txt` is the run log.
