@@ -13,8 +13,10 @@
 #include <fstream>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <functional>
+#include <iterator>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -592,6 +594,28 @@ void reconstruction_written_reprojection() {
     check(wall_run(config, nullptr, "reproject-off", dataset).reprojection.observations == 0, "the check ran while off");
 }
 
+// SHA-256 of a double xyz + uchar rgb PLY with each coordinate rounded to 1 um. Bytes are
+// not portable: FMA contraction (clang on arm64) moves coordinates by ~3e-14, while the
+// nearest rounding edge in the cloud below is 1.7e-8 away.
+std::string rounded_cloud_hash(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const size_t body = bytes.find("end_header\n") + 11, record = 3 * sizeof(double) + 3;
+    if (body < 11 || (bytes.size() - body) % record) return "unreadable " + path;
+    spirula::Sha256 h;
+    h.update((const uint8_t*)bytes.data(), body);
+    for (size_t at = body; at < bytes.size(); at += record) {
+        for (int c = 0; c < 3; ++c) {
+            double v;
+            std::memcpy(&v, bytes.data() + at + c * sizeof(double), sizeof v);
+            const int64_t q = std::llround(v * 1e6);
+            h.update((const uint8_t*)&q, sizeof q);
+        }
+        h.update((const uint8_t*)bytes.data() + at + 3 * sizeof(double), 3);
+    }
+    return h.hex();
+}
+
 // The plane scenario with every filter off. GOLDEN is that scenario's cloud from 95b27a4b,
 // before these filters existed. Mutant: any filter, id or side file changing the off path.
 void all_filters_off_matches_the_base_pipeline() {
@@ -600,8 +624,8 @@ void all_filters_off_matches_the_base_pipeline() {
     config.max_depth_error_per_cell = -1; config.max_baseline = -1;
     std::string ply;
     wall_run(config, nullptr, "all-off", metric_wall_dataset(), [](int x, int y) { return x % 8 == 4 && y % 8 == 4 ? 12.0 : 4.0; }, &ply);
-    const auto hash = spirula::sha256_file(ply);
-    check(hash == "e86ee06443c04f5e44ca5d23c2701a49e60279d6b4dd437110a5c693d36bd34f", "all filters off gave " + hash);
+    const auto hash = rounded_cloud_hash(ply);
+    check(hash == "1fb8ab18d05bb938521706cde5d616ce19a4ecce6e677aea5a58df2b530cf01e", "all filters off gave " + hash);
     fs::remove(ply);
 }
 
