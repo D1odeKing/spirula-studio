@@ -131,6 +131,10 @@ int spirula_dense_main(int argc, char** argv) {
         };
         const auto result = app::run_dense(dataset, config, progress, &interrupted, progress_dir, perf_dir);
         nn::shutdown();
+        const auto& st = result.statistics;
+        std::printf("%s\n", format(D::filter_summary, {(long long)st.two_image_admitted, (long long)st.seen_through,
+            (long long)st.two_image_over_bar, (long long)st.imprecise, (long long)st.far_isolated, (long long)result.refused_pairs,
+            st.reprojection.p95_pixels}).c_str());
         std::printf("%s\n", format(D::completed, {result.cloud, (long long)result.statistics.exported, result.seconds}).c_str());
         return 0;
 #else

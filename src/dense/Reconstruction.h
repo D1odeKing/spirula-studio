@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dense/DenseConfig.h"
+#include "dense/Filters.h"
 #include "data/DatasetParser.h"
 
 #include <atomic>
@@ -25,7 +26,13 @@ struct ReconstructionStatistics {
     double max_reference_reprojection_error = 0, sum_reference_max_reprojection_error = 0;
     uint64_t min_reference_support = 0, max_reference_support = 0, sum_reference_support = 0;
     std::array<uint64_t,16> reference_reprojection_histogram{};
+    uint64_t two_image_candidates = 0, two_image_admitted = 0, two_image_over_bar = 0, seen_through = 0;
+    uint64_t imprecise = 0, far_beyond = 0, far_isolated = 0, free_space_bytes = 0;
+    double two_image_bar = -1, depth_precision = -1;
+    FarFilter far_filter;
+    ReprojectionSummary reprojection;
 };
+
 
 using DenseProgress = std::function<void(const char*, uint64_t, uint64_t)>;
 
@@ -45,6 +52,10 @@ public:
     void add_pair(uint32_t a, uint32_t b, const ViewPixels& pixels_a, const ViewPixels& pixels_b,
                   const roma::PairPrediction& prediction);
     void complete_reference(uint32_t reference, bool background = false);
+    // Before the first add_pair.
+    void set_filter_plan(const FilterPlan& plan);
+    // Host bytes the filters hold for the whole run, independent of image_cache_bytes.
+    uint64_t filter_bytes() const;
     // The published prefix is immutable; final points use a separate file.
     PreviewCheckpoint checkpoint();
     // Writes only a temporary output; the application publishes after a nonempty success.

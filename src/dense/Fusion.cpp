@@ -20,9 +20,9 @@ Cell cell(const Surface& p) { return {p.cell[0],p.cell[1],p.cell[2]}; }
 bool less(const Surface& a, const Surface& b) {
     if (cell(a) != cell(b)) return cell(a) < cell(b);
     return std::tie(a.point[0],a.point[1],a.point[2],a.normal[0],a.normal[1],a.normal[2],a.radius,
-                    a.color[0],a.color[1],a.color[2],a.support) <
+                    a.color[0],a.color[1],a.color[2],a.support,a.id) <
            std::tie(b.point[0],b.point[1],b.point[2],b.normal[0],b.normal[1],b.normal[2],b.radius,
-                    b.color[0],b.color[1],b.color[2],b.support);
+                    b.color[0],b.color[1],b.color[2],b.support,b.id);
 }
 
 bool compatible(const Surface& a, const Surface& b, double voxel) {
@@ -62,6 +62,7 @@ bool compatible(const Cluster& a, const Cluster& b, double voxel) {
 
 void merge(Cluster& a, const Cluster& b) {
     const double wa = a.surface.support, wb = b.surface.support, sum = wa + wb;
+    if (wb > wa || (wb == wa && b.surface.id < a.surface.id)) a.surface.id = b.surface.id;
     for (int c = 0; c < 3; ++c) {
         a.surface.point[c] = (a.surface.point[c] * wa + b.surface.point[c] * wb) / sum;
         a.surface.color[c] = (float)((a.surface.color[c] * wa + b.surface.color[c] * wb) / sum);

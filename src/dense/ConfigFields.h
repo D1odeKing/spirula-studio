@@ -27,6 +27,9 @@
     X(source_reprojection_error, source_reprojection_error) \
     X(stride, stride) X(point_limit, point_limit) X(min_overlap, min_overlap) \
     X(max_cycle_error, max_cycle_error) X(cycle_check, cycle_check) X(voxel_size, voxel_size) \
+    X(two_image_points, two_image_points) X(free_space_test, free_space_test) \
+    X(far_isolated, far_isolated) X(reprojection_check, reprojection_check) \
+    X(max_depth_error_per_cell, max_depth_error_per_cell) X(max_baseline, max_baseline) \
     X(remove_outliers, remove_outliers) X(outlier_neighbors, outlier_neighbors) \
     X(outlier_stddev, outlier_stddev) X(image_cache_bytes, image_cache_bytes) \
     X(cpu_workers, cpu_workers) X(resume, resume) X(rebuild, rebuild) X(keep_cache, keep_cache) \

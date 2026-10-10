@@ -110,6 +110,12 @@ static void test_dataset_preset() {
     s.sfm.dense.config.samples_per_reference = 12345;
     s.sfm.dense.config.sampling_seed = 72;
     s.sfm.dense.config.source_reprojection_error = 0.075;
+    s.sfm.dense.config.two_image_points = "auto";
+    s.sfm.dense.config.free_space_test = false;
+    s.sfm.dense.config.far_isolated = false;
+    s.sfm.dense.config.reprojection_check = true;
+    s.sfm.dense.config.max_depth_error_per_cell = 0.05;
+    s.sfm.dense.config.max_baseline = 0;
     s.sfm.geometry.model = "moge2-vitl";
     s.sfm.geometry.max_size = 800;
     s.sfm.geometry.num_tokens = 2400;

@@ -616,6 +616,12 @@ public:
         report_.phase = name;
     }
 
+    // A working set sized by the views rather than by the budget, such as the free-space grid.
+    void add_planned(uint64_t bytes) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (report_.host_planned) report_.host_planned += bytes;
+    }
+
     // `ours` counts the driver's view of this process; `others` is the device less its budget for us.
     void device(uint64_t ours, uint64_t others, uint64_t capacity, uint64_t planned) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -1024,6 +1030,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         ~WorkCleanup() { try { remove_owned_directory(work, parent, work.filename().string()); } catch (const std::exception&) {} }
     } cleanup{work, cache};
     Reconstruction reconstruction(work.string(), views, config, cancel, progress_dir);
+    memory.add_planned(reconstruction.filter_bytes());
     DenseResult result;
     struct PairIndex { uint32_t a = 0, b = 0; };
     struct PairJob { uint32_t a = 0, b = 0; fs::path file, legacy, reverse; };
@@ -1046,6 +1053,8 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         tracks_ready[image] = true;
     };
     PairStatistics pair_stats;
+    uint64_t refused_by_baseline = 0;
+    std::vector<ImagePair> planned_pairs;
     if (pair_options.mode == PairMode::Automatic && config.matching_space != "source") {
         // Faces are paired as views of their own, so a wide lens adds only the face pairs that share points.
         std::vector<PairImage> view_images;
@@ -1063,13 +1072,19 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
                 view_images.push_back(std::move(v));
             }
         }
+        pair_options.max_baseline = resolve_max_baseline(view_images, pair_options, config.max_baseline, ds.gauge_metric,
+            &refused_by_baseline, [&] { check_cancel(cancel); }, point_positions);
         pair_stats = select_pairs(view_images, pair_options, [&](ImagePair pair) {
             check_cancel(cancel);
+            planned_pairs.push_back(std::minmax((uint32_t)view_images[pair.first].source_image, (uint32_t)view_images[pair.second].source_image));
             write_disk_record(job_output,PairIndex{pair.first,pair.second});
         }, [&] { check_cancel(cancel); }, point_positions);
     } else {
+        pair_options.max_baseline = resolve_max_baseline(images, pair_options, config.max_baseline, ds.gauge_metric,
+            &refused_by_baseline, [&] { check_cancel(cancel); }, point_positions);
         pair_stats = select_pairs(images, pair_options, [&](ImagePair pair) {
             check_cancel(cancel);
+            planned_pairs.push_back(std::minmax(pair.first, pair.second));
             const bool guided = face_tracks && (faces[pair.first].size() > 1 || faces[pair.second].size() > 1) &&
                 shares_points(images[pair.first].visible_points, images[pair.second].visible_points);
             if (guided) { prepare_face_tracks(pair.first); prepare_face_tracks(pair.second); }
@@ -1092,6 +1107,14 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         }, [&] { check_cancel(cancel); }, point_positions);
     }
     flush_disk_output(job_output); job_output.close();
+    std::sort(planned_pairs.begin(), planned_pairs.end());
+    planned_pairs.erase(std::unique(planned_pairs.begin(), planned_pairs.end()), planned_pairs.end());
+    const FilterPlan filter_plan = plan_depth_precision(images, planned_pairs, ds.points.xyz, views,
+        config.match.high_width ? config.match.high_width : config.match.low_width,
+        config.match.high_height ? config.match.high_height : config.match.low_height, config.max_depth_error_per_cell,
+        config.two_image_active());
+    reconstruction.set_filter_plan(filter_plan);
+    result.refused_pairs = refused_by_baseline;
     auto order_jobs = [](const PairIndex& a,const PairIndex& b) { return std::tie(a.a,a.b) < std::tie(b.a,b.b); };
     external_sort<PairIndex>(unordered_jobs,ordered_jobs,resources.image_cache_bytes / 8,order_jobs,[&] { check_cancel(cancel); });
     fs::remove(unordered_jobs);
@@ -1331,6 +1354,33 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     SS_DENSE_STAT(triangulated) SS_DENSE_STAT(insufficient_support) SS_DENSE_STAT(refined) SS_DENSE_STAT(fused) SS_DENSE_STAT(exported)
 #undef SS_DENSE_STAT
     manifest.end();
+    {
+        const auto& st = result.statistics;
+        manifest.key("filters").object();
+        manifest.key("two_image_points").object().field("setting", config.two_image_points)
+            .field("active", config.two_image_active())
+            .field("free_space_test", config.free_space_test).field("error_bar", st.two_image_bar)
+            .field("depth_bar", filter_plan.two_image_depth_precision)
+            .field("candidates", (long long)st.two_image_candidates).field("admitted", (long long)st.two_image_admitted)
+            .field("over_error_bar", (long long)st.two_image_over_bar).field("seen_through", (long long)st.seen_through)
+            .field("grid_bytes", (long long)st.free_space_bytes).end();
+        manifest.key("depth_precision").object().field("setting", config.max_depth_error_per_cell)
+            .field("per_cell", st.depth_precision).field("median_pair_angle_degrees", filter_plan.median_pair_angle_degrees)
+            .field("median_cell_focal", filter_plan.median_cell_focal).field("removed", (long long)st.imprecise).end();
+        manifest.key("far_isolated").object().field("setting", config.far_isolated).field("active", st.far_filter.active())
+            .field("metric", ds.gauge_metric).field("margin", st.far_filter.margin).field("radius", st.far_filter.radius)
+            .field("max_neighbours", st.far_filter.max_neighbours).field("beyond", (long long)st.far_beyond)
+            .field("removed", (long long)st.far_isolated);
+        manifest.key("box_low").array().value(st.far_filter.low.x).value(st.far_filter.low.y).value(st.far_filter.low.z).end();
+        manifest.key("box_high").array().value(st.far_filter.high.x).value(st.far_filter.high.y).value(st.far_filter.high.z).end().end();
+        manifest.key("max_baseline").object().field("setting", config.max_baseline).field("resolved", pair_options.max_baseline)
+            .field("metric", ds.gauge_metric).field("refused", (long long)refused_by_baseline).end();
+        manifest.key("written_reprojection").object().field("setting", config.reprojection_check)
+            .field("observations", (long long)st.reprojection.observations).field("invalid", (long long)st.reprojection.invalid)
+            .field("mean_pixels", st.reprojection.mean_pixels).field("p50_pixels", st.reprojection.p50_pixels)
+            .field("p95_pixels", st.reprojection.p95_pixels).field("p95_cells", st.reprojection.p95_cells).end();
+        manifest.end();
+    }
     manifest.key("filtered_reference_quality").object();
     manifest.field("pixel_frame", config.matching_space == "source" ? "original image" : "working view");
     manifest.field("reprojection_limit",config.resolved_geometry().max_reprojection_error);

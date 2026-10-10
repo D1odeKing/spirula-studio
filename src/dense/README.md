@@ -31,6 +31,7 @@ fails with `LNK1104`. The portable tests need no GPU or model:
 dense_geometry_test  dense_reconstruction_test  dense_panorama_test
 dense_config_test    dense_pair_selection_test  dense_fusion_test
 dense_artifact_test  dense_spill_test           dense_memory_report_test
+dense_filter_test
 ```
 
 `dense_camera_test`, `dense_field_compare_test` and `dense_live_preview_test`
@@ -76,6 +77,7 @@ message in `i18n/catalog/Dense.h`, a round trip in
 | `src/dense/ReferenceSampling.h` | Deterministic coverage plus confidence-weighted sampling, in-memory and external. |
 | `src/dense/PairSelection.h/.cpp` | Automatic, sequential, exhaustive and explicit pairing; pose-coverage reference selection for source mode. |
 | `src/dense/Fusion.h/.cpp` | Disk-partitioned neighbouring-cell fusion with deterministic boundary ownership. |
+| `src/dense/Filters.h/.cpp` | Two-image admission and its free-space grid, the depth-precision bar, far isolated points, the baseline limit, the written-cloud reprojection summary. |
 | `src/dense/DiskArray.h`, `DiskTable.h`, `ExternalSort.h` | Spill-to-disk arrays, a paged read-only table, stable external merge sort. |
 | `src/dense/DenseConfig.h/.cpp`, `ConfigFields.h` | The one settings struct, presets, the source-workflow setup, and the field table. |
 | `src/dense/Artifact.h`, `Generation.h` | Freshness probes, content verification, immutable generations and the current-generation record. |
@@ -107,9 +109,12 @@ parse dataset ──► prepare views ──► plan pairs ──► decode (wor
                         ▼
           filtered checkpoint (append-only, live preview)
                         │
-          fuse_surfaces (disk partitions + halos) ──► optional exact outlier filter
+          two-image points: error bar + free-space grid (after every reference)
+                        │
+          fuse_surfaces (disk partitions + halos) ──► far isolated ──► optional exact outlier filter
                         │
           PLY + manifest as an immutable generation ──► current-generation record
+                        (the PLY is read back for the reprojection check first)
 ```
 
 **Views.** In rectified mode, `GeometryWarp` resamples each image (wide lenses
@@ -340,6 +345,7 @@ file holds the final cloud.
 | `dense_artifact_test` | Locking, cleanup, generations, interrupted publication, legacy adoption, checksums. |
 | `dense_spill_test` | Spill arrays, external merge, sampler equivalence. |
 | `dense_memory_report_test` | Host plan, risk thresholds, device gating, report round trip, torn files. |
+| `dense_filter_test` | Each point filter on inputs whose answer is known, then end to end through `Reconstruction`; each test names the wrong implementation it catches. |
 
 ---
 

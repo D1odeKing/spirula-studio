@@ -398,7 +398,9 @@ require overlap of at least 0.5, a triangulation angle of at least 1 degree,
 reprojection error at most 2 working-view pixels, and relative depth
 agreement within 1%. The initial support requirement is three original
 images. Set `--min-source-images 2` deliberately for two-view data; the
-pipeline never lowers support automatically.
+pipeline never lowers support by default. With three, the opt-in
+`--two-image-points auto` admits a two-image point only under the conditions
+in [Point filters](#point-filters).
 
 Source-mode sampling is performed once per reference, after masks, valid rays,
 confidence rejection, and configured cycle checks. Fifteen percent of the
@@ -485,6 +487,88 @@ cannot fit, inference computes it normally; resolution, precision, pairing,
 and filtering stay as configured. Pair-dependent matching and VGG refinement
 still run for every uncached pair. Features are released at the end of the
 run and are separate from the persistent pair-prediction cache.
+
+### Point filters
+
+Five filters act on refined points. Each is a setting, each is counted in the
+manifest's `filters` block, and the command prints one summary line.
+
+- `--two-image-points auto|off` (default `off`; `auto` acts only with three-image support).
+  A point seen by exactly two original images is kept when its reprojection
+  error is no worse than the median error of the run's three-or-more-image
+  points. With `--free-space-test true` (default) it must also not be seen
+  through: per view, a grid holds the nearest distance at which a three-image
+  point was seen there, 512 cells per turn on a panorama or a split image and
+  512 across an ordinary photo. A two-image point more than 5 %
+  in front of the nearest of the 3 x 3 cells around it, in a view of an image
+  outside its own pair, is dropped. A cell with no observation is no evidence.
+  Two-image points also carry the depth-precision bar below: the setting's
+  when it is on, else the automatic one.
+  The bar is an exact median and the grid is sized by the views, so the host
+  budget cannot change the cloud. It is opt-in because it is slow: samples that
+  three-image grouping would drop at once go through full refinement instead.
+- `--max-depth-error-per-cell` (default -1, off for points with three or more
+  images; 0 is automatic). A point
+  is dropped when its best pair moves its depth by more than this share per
+  matcher cell: `1 / (f sin(parallax))`, `f` the coarser view's focal length in
+  matcher cells. Automatic is `max(2 %, 1 / (f sin(theta / 2)))`, with `theta`
+  the median angle the planned image pairs subtend at the sparse points both
+  see, and `f` the median view focal. Without shared sparse points automatic
+  is off.
+- `--far-isolated true|false` (default true). After fusion and before the point
+  limit, a point more than a margin outside the sparse points' p0.5 to p99.5
+  box (max-norm) with at most two other points within a radius is dropped. The
+  margin is 2 on a model whose `gauge.txt` says metric, else 0.2 x the box
+  diagonal. The radius is 8 x the sparse points' median nearest-neighbour
+  spacing. Under 100 sparse points it does not run, nor when the radius reaches
+  the margin (a metric model whose sparse points are 0.25 or more apart): the
+  neighbour search would then count points inside the box and hold the whole
+  cloud in memory.
+- `--max-baseline` (default -1, off; 0 is automatic). In automatic
+  pairing on a metric model, a neighbour farther than 3 x the median planned
+  baseline is refused and the next-ranked image takes its place. A positive
+  value applies as given, on any model. It is unmeasured: the arms below use
+  explicit pairs, which it does not touch.
+- `--reprojection-check true|false` (default false) removes nothing. The written
+  PLY is read back, the output transform undone, and each point projected into
+  the views whose observations produced it. A fused point carries the id of its
+  best-supported member, so the figure includes fusion's displacement. The
+  manifest records p50 and p95 in view pixels and p95 in matcher cells, from a
+  fixed histogram of 0.01 bins up to 100, so the check's memory does not grow
+  with the cloud. With the check off, and the two-image rule off, no
+  observation files are written.
+
+Measured on a basement capture: the 24 equirectangular panoramas that see a
+staircase most, 69 explicit image pairs, the `balanced` preset, masks
+inverted. Every arm uses one binary and one set of cached predictions, so only
+the filters differ. Violations are the share of stairs points within 1 cm of
+5,000 sampled camera-to-sparse-point segments; sd is over 3 segment draws.
+Adding 1 % synthetic floaters to arm A reads 1.285 %, so the measure sees
+floaters.
+
+| Arm | Filters | Points | Stairs points | Violations | Seconds |
+|---|---|---|---|---|---|
+| A | none | 1,943,024 | 144,795 | 0.441 % (sd 0.025) | 197, 184 |
+| B | all | 4,009,116 | 332,670 | 0.402 % (sd 0.022) | 1,027, 1,025 |
+| C | two-image and free space | 4,416,243 | 373,304 | 0.483 % (sd 0.020) | 1,236 |
+| D | two-image, no free space | 4,578,979 | 396,753 | 0.511 % (sd 0.023) | 1,252 |
+| E | depth precision | 1,915,587 | 143,408 | 0.449 % (sd 0.029) | 183 |
+| F | far isolated | 1,943,023 | 144,795 | 0.441 % | 187 |
+
+These arms ran with the reprojection check on, which adds about 31 s (181.5 s
+against 150.5 s on one binary). E removes 27,437 points and a random removal
+of as many reads 0.444 %, so on points with three images the bar shows no
+benefit and is off by default. On two-image points it does: B against C, it
+lowers violations from 0.483 % to 0.402 %, which is why two-image points carry
+it. F removes one point, outside the stairs. Two-image points cost about
+6.5 times the run, because samples that three-image grouping drops at once go
+through full refinement; they are opt-in. B is
+`--two-image-points auto --max-depth-error-per-cell 0`; `--two-image-points
+auto` alone differs from it by keeping the three-image points the bar removes
+(E's 27,437), and is unmeasured.
+
+With every filter off the cloud is byte-identical to the pipeline without
+them, and with the defaults it differs only by the far isolated points.
 
 ## Outputs, caching, and cancellation
 

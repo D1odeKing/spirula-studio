@@ -6,6 +6,7 @@
 #include "dense/DiskArray.h"
 #include "dense/ExternalSort.h"
 #include "dense/Fusion.h"
+#include "dense/DiskTable.h"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <thread>
 #include <map>
 #include <set>
 #include <tuple>
@@ -32,8 +34,10 @@ struct Record {
 struct RefinedSurface {
     Surface surface;
     double spacing = 0;
-    uint32_t pixel = 0;
+    uint32_t pixel = 0, track_count = 0;
+    double error = 0;
 };
+
 
 struct SourceRecord {
     int64_t source;
@@ -96,7 +100,13 @@ struct Reconstruction::Impl {
     std::vector<bool> completed;
     std::vector<double> spacings;
     uint64_t run_records = 1, pending_limit = 1;
-    struct ReferenceResult { fs::path file; ReconstructionStatistics statistics; double seconds = 0; };
+    struct ReferenceResult { fs::path file, tracks; ReconstructionStatistics statistics; double seconds = 0; };
+    FilterPlan plan;
+    GeometryOptions support_geometry;
+    bool two_image_rule = false, keep_tracks = false;
+    std::unique_ptr<FreeSpaceGrid> free_space;
+    uint64_t long_tracks = 0, kept_points = 0, observation_count = 0;
+    std::ofstream two_image_output, observation_output, range_output, error_output;
     unsigned reference_workers = 1;
     uint64_t reference_budget = 1, published_references = 0;
     std::deque<std::future<ReferenceResult>> references;
@@ -109,7 +119,8 @@ struct Reconstruction::Impl {
         config.validate();
         config.image_cache_bytes = c.resolved_image_cache_bytes();
         config.geometry = c.resolved_geometry();
-        run_records = std::max<uint64_t>(1, config.image_cache_bytes / (8 * sizeof(Surface)));
+        // Without the id, so the spacing sample, and with it the automatic voxel, match a run before ids.
+        run_records = std::max<uint64_t>(1, config.image_cache_bytes / (8 * (sizeof(Surface) - sizeof(Surface::id))));
         pending_limit = std::max<uint64_t>(sizeof(Record), config.image_cache_bytes / 8);
         const unsigned hardware = std::max(1u, std::thread::hardware_concurrency());
         const uint64_t requested = c.matching_space == "source" && c.samples_per_reference ?
@@ -123,6 +134,26 @@ struct Reconstruction::Impl {
         completed.resize(views.size());
         for (const auto& view : views) view.validate();
         fs::create_directories(work);
+        two_image_rule = config.two_image_active();
+        keep_tracks = two_image_rule || config.reprojection_check;
+        support_geometry = config.geometry;
+        if (two_image_rule) support_geometry.min_source_images = 2;
+        // Sized by the views, never by the budget: a budget must not change the cloud.
+        if (two_image_rule && config.free_space_test) {
+            free_space = std::make_unique<FreeSpaceGrid>(views);
+            stats.free_space_bytes = free_space->bytes();
+        }
+        if (two_image_rule) {
+            two_image_output.open(work / "two-image.bin", std::ios::binary | std::ios::trunc);
+            error_output.open(work / "long-track-errors.bin", std::ios::binary | std::ios::trunc);
+        }
+        if (config.reprojection_check) {
+            observation_output.open(work / "observations.bin", std::ios::binary | std::ios::trunc);
+            range_output.open(work / "observation-ranges.bin", std::ios::binary | std::ios::trunc);
+        }
+        if ((two_image_rule && (!two_image_output || !error_output)) ||
+            (config.reprojection_check && (!observation_output || !range_output)))
+            throw std::runtime_error("cannot write dense point observations");
         surface_output.open(work / "surfaces.bin", std::ios::binary | std::ios::trunc);
         if (!surface_output) throw std::runtime_error("cannot write dense surfaces");
         open_preview("filtered");
@@ -246,7 +277,7 @@ struct Reconstruction::Impl {
     }
 
     bool refine(uint32_t reference, const DiskArray<Record>& input_records, Surface& surface, double& spacing,
-                ReconstructionStatistics& statistics, uint64_t budget) {
+                std::vector<TrackObservation>& track, double& error, ReconstructionStatistics& statistics, uint64_t budget) {
         const View& view = views[reference];
         sfm::Vec3 reference_ray;
         if (input_records.empty() || (view.source_camera &&
@@ -290,7 +321,7 @@ struct Reconstruction::Impl {
             for (const auto source : sources) if (source != previous) { ++count; previous = source; }
             if (count > best_count) { best_count = count; best = i; }
         }
-        if (best_count < (size_t)config.geometry.min_source_images) { ++statistics.insufficient_support; return false; }
+        if (best_count < (size_t)support_geometry.min_source_images) { ++statistics.insufficient_support; return false; }
         const Record seed = records[best];
         DiskArray<SourceRecord> ranked(work / ("support-ranked-" + std::to_string(reference) + ".bin"),budget / 8);
         auto anchor = seed; anchor.target = reference;
@@ -336,21 +367,30 @@ struct Reconstruction::Impl {
         PointEstimate result;
         DiskArray<uint32_t> retained(work / ("point-retained-" + std::to_string(reference) + ".bin"),budget / 32);
         if (!refine_unique_point(config.matching_space == "source" && total > 0 ? initial * (1 / total) : vector(seed.point),
-                                 observations,config.geometry,retained,result,[&] { check(); })) {
+                                 observations,support_geometry,retained,result,[&] { check(); })) {
             ++statistics.insufficient_support; return false;
         }
         bool retained_reference = false;
         for (const auto index : retained) retained_reference |= index == reference_index;
         if (!retained_reference) { ++statistics.insufficient_support; return false; }
-        statistics.max_reference_reprojection_error = std::max(statistics.max_reference_reprojection_error,result.max_reprojection_error);
-        statistics.sum_reference_max_reprojection_error += result.max_reprojection_error;
-        const auto support = retained.size();
-        statistics.min_reference_support = statistics.min_reference_support ? std::min<uint64_t>(statistics.min_reference_support,support) : support;
-        statistics.max_reference_support = std::max<uint64_t>(statistics.max_reference_support,support);
-        statistics.sum_reference_support += support;
-        const auto bin = std::min<size_t>(statistics.reference_reprojection_histogram.size() - 1,
-            (size_t)(result.max_reprojection_error / config.geometry.max_reprojection_error * statistics.reference_reprojection_histogram.size()));
-        ++statistics.reference_reprojection_histogram[bin];
+        track.clear();
+        std::vector<const View*> others;
+        for (const auto index : retained) {
+            const auto o = observations[index];
+            track.push_back({(uint32_t)(o.view - views.data()), {(float)o.pixel.x, (float)o.pixel.y}});
+            if (o.view->source_image != view.source_image) others.push_back(o.view);
+        }
+        double bar = plan.depth_precision;
+        if (two_image_rule && plan.two_image_depth_precision > 0) {
+            std::vector<int64_t> sources{view.source_image};
+            for (const View* other : others) sources.push_back(other->source_image);
+            std::sort(sources.begin(),sources.end());
+            if (std::unique(sources.begin(),sources.end()) - sources.begin() == 2) bar = plan.two_image_depth_precision;
+        }
+        if (bar > 0 && !(best_depth_per_cell(result.position, view, others, width, height) <= bar)) {
+            ++statistics.imprecise; return false;
+        }
+        error = result.max_reprojection_error;
         store(surface.point, result.position);
         surface.support = (uint32_t)retained.size();
         double weight = 0;
@@ -401,7 +441,7 @@ struct Reconstruction::Impl {
 
     ReferenceResult refine_reference(uint32_t v) {
         const auto started = std::chrono::steady_clock::now();
-        ReferenceResult result{work / ("reference-" + std::to_string(v) + ".bin")};
+        ReferenceResult result{work / ("reference-" + std::to_string(v) + ".bin"), work / ("reference-tracks-" + std::to_string(v) + ".bin")};
         const uint64_t requested = std::min<uint64_t>(config.samples_per_reference, (uint64_t)width * height);
         std::set<uint32_t> selected;
         std::ifstream disk_selection;
@@ -427,6 +467,8 @@ struct Reconstruction::Impl {
             }
         }
         DiskArray<RefinedSurface> accepted(work / ("accepted-" + std::to_string(v) + ".bin"), reference_budget / 4);
+        DiskArray<TrackObservation> tracks(work / ("tracks-" + std::to_string(v) + ".bin"), reference_budget / 16);
+        std::vector<TrackObservation> track;
         for (int t = 0; t * kRows < height; ++t) {
             visit_tile(v,t,reference_budget,[&](uint32_t pixel,const auto& records) {
                 if (config.matching_space == "source" && requested) {
@@ -437,7 +479,11 @@ struct Reconstruction::Impl {
                     } else if (!selected.count(pixel)) return;
                 }
                 RefinedSurface p; p.pixel = pixel;
-                if (refine(v,records,p.surface,p.spacing,result.statistics,reference_budget)) accepted.push_back(p);
+                if (refine(v,records,p.surface,p.spacing,track,p.error,result.statistics,reference_budget)) {
+                    p.track_count = keep_tracks ? (uint32_t)track.size() : 0;
+                    if (keep_tracks) for (const auto& o : track) tracks.push_back(o);
+                    accepted.push_back(p);
+                }
             });
         }
         auto find = [&](uint32_t pixel, Surface& surface) {
@@ -464,6 +510,11 @@ struct Reconstruction::Impl {
             write_disk_record(output,entry);
         }
         output.flush(); if (!output) throw std::runtime_error("cannot write refined dense reference");
+        if (keep_tracks) {
+            std::ofstream track_output(result.tracks,std::ios::binary | std::ios::trunc);
+            for (const auto o : tracks) write_disk_record(track_output,o);
+            track_output.flush(); if (!track_output) throw std::runtime_error("cannot write dense point tracks");
+        }
         result.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return result;
     }
@@ -473,27 +524,118 @@ struct Reconstruction::Impl {
         stats.triangulated += result.statistics.triangulated;
         stats.insufficient_support += result.statistics.insufficient_support;
         stats.reference_work_seconds += result.seconds;
-        stats.max_reference_reprojection_error = std::max(stats.max_reference_reprojection_error,result.statistics.max_reference_reprojection_error);
-        stats.sum_reference_max_reprojection_error += result.statistics.sum_reference_max_reprojection_error;
-        if (result.statistics.min_reference_support)
-            stats.min_reference_support = stats.min_reference_support ? std::min(stats.min_reference_support,result.statistics.min_reference_support) : result.statistics.min_reference_support;
-        stats.max_reference_support = std::max(stats.max_reference_support,result.statistics.max_reference_support);
-        stats.sum_reference_support += result.statistics.sum_reference_support;
-        for (size_t i = 0; i < stats.reference_reprojection_histogram.size(); ++i)
-            stats.reference_reprojection_histogram[i] += result.statistics.reference_reprojection_histogram[i];
+        stats.imprecise += result.statistics.imprecise;
         {
-            std::ifstream input(result.file,std::ios::binary); RefinedSurface entry;
-            if (!input) throw std::runtime_error("cannot read refined dense reference");
+            std::ifstream input(result.file,std::ios::binary), track_input;
+            if (keep_tracks) track_input.open(result.tracks,std::ios::binary);
+            if (!input || (keep_tracks && !track_input)) throw std::runtime_error("cannot read refined dense reference");
+            RefinedSurface entry; std::vector<TrackObservation> track;
             while (read_disk_record(input,entry)) {
-                check(); ++stats.refined;
-                if (entry.spacing > 0 && std::isfinite(entry.spacing)) {
-                    if (spacings.size() < run_records) spacings.push_back(entry.spacing);
-                    else { const auto index = sampling_hash(stats.refined) % stats.refined; if (index < spacings.size()) spacings[index] = entry.spacing; }
+                check();
+                read_track(track_input,entry,track);
+                const auto sources = track_sources(track);
+                if (two_image_rule && sources.size() == 2) {
+                    write_disk_record(two_image_output,entry);
+                    for (const auto& o : track) write_disk_record(two_image_output,o);
+                    ++stats.two_image_candidates;
+                    continue;
                 }
-                write_disk_record(surface_output,entry.surface); remember(entry.surface.point,entry.surface.color);
+                if (sources.size() >= 3 && two_image_rule) {
+                    write_disk_record(error_output,entry.error); ++long_tracks;
+                    if (free_space) free_space->observe(vector(entry.surface.point),sources);
+                }
+                emit(entry,track);
             }
         }
-        fs::remove(result.file); ++published_references;
+        fs::remove(result.file); if (keep_tracks) fs::remove(result.tracks); ++published_references;
+    }
+
+    void read_track(std::ifstream& input, const RefinedSurface& entry, std::vector<TrackObservation>& track) {
+        track.resize(entry.track_count);
+        for (auto& o : track)
+            if (!read_disk_record(input,o) || o.view >= views.size()) throw std::runtime_error("truncated dense point track");
+    }
+
+    std::vector<int64_t> track_sources(const std::vector<TrackObservation>& track) const {
+        std::vector<int64_t> sources;
+        for (const auto& o : track) sources.push_back(views[o.view].source_image);
+        std::sort(sources.begin(),sources.end());
+        sources.erase(std::unique(sources.begin(),sources.end()),sources.end());
+        return sources;
+    }
+
+    // Quality statistics describe what is published, so a dropped two-image candidate never enters them.
+    void emit(RefinedSurface entry, const std::vector<TrackObservation>& track) {
+        entry.surface.id = kept_points++; ++stats.refined;
+        if (config.reprojection_check) {
+            write_disk_record(range_output,ObservationRange{observation_count,track.size()});
+            for (const auto& o : track) write_disk_record(observation_output,o);
+            observation_count += track.size();
+        }
+        stats.max_reference_reprojection_error = std::max(stats.max_reference_reprojection_error,entry.error);
+        stats.sum_reference_max_reprojection_error += entry.error;
+        const uint64_t support = entry.surface.support;
+        stats.min_reference_support = stats.min_reference_support ? std::min(stats.min_reference_support,support) : support;
+        stats.max_reference_support = std::max(stats.max_reference_support,support);
+        stats.sum_reference_support += support;
+        const auto bin = std::min<size_t>(stats.reference_reprojection_histogram.size() - 1,
+            (size_t)(entry.error / config.geometry.max_reprojection_error * stats.reference_reprojection_histogram.size()));
+        ++stats.reference_reprojection_histogram[bin];
+        if (entry.spacing > 0 && std::isfinite(entry.spacing)) {
+            if (spacings.size() < run_records) spacings.push_back(entry.spacing);
+            else { const auto index = sampling_hash(kept_points) % kept_points; if (index < spacings.size()) spacings[index] = entry.spacing; }
+        }
+        write_disk_record(surface_output,entry.surface); remember(entry.surface.point,entry.surface.color);
+    }
+
+    // Exact, from disk: a sample sized by the budget would let the budget change the cloud.
+    double long_track_median() {
+        flush_disk_output(error_output); error_output.close();
+        const double median = external_median(work / "long-track-errors.bin", long_tracks, config.image_cache_bytes / 8, [&] { check(); });
+        fs::remove(work / "long-track-errors.bin");
+        return median;
+    }
+
+    // The bar is the median error of the run's three-image points, so it waits for every reference.
+    void admit_two_image_points() {
+        two_image_output.flush(); if (!two_image_output) throw std::runtime_error("dense two-image point write failed");
+        two_image_output.close();
+        stats.two_image_bar = long_track_median();
+        std::ifstream input(work / "two-image.bin",std::ios::binary);
+        struct Candidate { RefinedSurface entry; std::vector<TrackObservation> track; std::vector<int64_t> sources; char verdict = 0; };
+        std::vector<Candidate> block;
+        const unsigned workers = std::max(1u,std::min(config.cpu_workers ? (unsigned)config.cpu_workers : std::thread::hardware_concurrency(),
+                                                      std::max(1u,std::thread::hardware_concurrency())));
+        auto judge = [&] {
+            std::atomic<size_t> next{0};
+            auto work_on = [&] {
+                for (size_t i; (i = next.fetch_add(1)) < block.size();) {
+                    auto& c = block[i];
+                    if (!(c.entry.error <= stats.two_image_bar)) c.verdict = 'e';
+                    else if (free_space && free_space->sees_through(vector(c.entry.surface.point),c.sources)) c.verdict = 's';
+                    else c.verdict = 'k';
+                }
+            };
+            std::vector<std::future<void>> tasks;
+            for (unsigned w = 1; w < workers; ++w) tasks.push_back(std::async(std::launch::async,work_on));
+            work_on(); for (auto& t : tasks) t.get();
+            for (auto& c : block) {
+                if (c.verdict == 'e') ++stats.two_image_over_bar;
+                else if (c.verdict == 's') ++stats.seen_through;
+                else { ++stats.two_image_admitted; emit(c.entry,c.track); }
+            }
+            block.clear();
+        };
+        Candidate c;
+        while (read_disk_record(input,c.entry)) {
+            check();
+            read_track(input,c.entry,c.track);
+            c.sources = track_sources(c.track);
+            block.push_back(c);
+            if (block.size() == 65536) judge();
+        }
+        judge();
+        input.close(); fs::remove(work / "two-image.bin");
     }
 
     void drain_references(bool wait) {
@@ -523,9 +665,15 @@ struct Reconstruction::Impl {
             if (progress) progress("refine",published_references,views.size());
         }
         while (!references.empty()) { drain_references(true); if (progress) progress("refine",published_references,views.size()); }
+        if (two_image_rule) admit_two_image_points();
+        if (config.reprojection_check) {
+            observation_output.flush(); range_output.flush();
+            if (!observation_output || !range_output) throw std::runtime_error("dense point observation write failed");
+            observation_output.close(); range_output.close();
+        }
         surface_output.flush(); if (!surface_output) throw std::runtime_error("dense surface write failed");
         surface_output.close();
-        if (!stats.refined) throw std::runtime_error("dense filtering produced no points; check overlap, baseline, masks and distinct-image support");
+        if (!kept_points) throw std::runtime_error("dense filtering produced no points; check overlap, baseline, masks and distinct-image support");
         if (config.voxel_size > 0) stats.resolved_voxel_size = config.voxel_size;
         else {
             if (spacings.empty()) throw std::runtime_error("cannot determine dense point spacing");
@@ -544,6 +692,9 @@ struct Reconstruction::Impl {
         stats.fused = result.surfaces;
         stats.fusion_workers = result.workers; stats.fusion_partitions = result.partitions;
         stats.fusion_boundary_candidates = result.boundary_candidates;
+        const uint64_t records = drop_far_isolated(fused, dataset);
+        std::ofstream exported_ids;
+        if (config.reprojection_check) exported_ids.open(work / "exported-ids.bin", std::ios::binary | std::ios::trunc);
         PointCloudWriter writer(ply, PlyCoordinates::Float64);
         reset_preview();
         if (!config.remove_outliers) {
@@ -551,7 +702,7 @@ struct Reconstruction::Impl {
             uint64_t read = 0;
             while (read_disk_record(input,p)) {
                 check();
-                if (progress && ++read % 65536 == 0) progress("export",read,stats.fused);
+                if (progress && ++read % 65536 == 0) progress("export",read,records);
                 if (config.point_limit && writer.count() >= config.point_limit) continue;
                 double raw[3], xyz[3];
                 for (int c = 0; c < 3; ++c) raw[c] = p.point[c] + dataset.center[c];
@@ -561,14 +712,14 @@ struct Reconstruction::Impl {
                 }
                 uint8_t rgb[3];
                 for (int c = 0; c < 3; ++c) rgb[c] = (uint8_t)std::lround(std::clamp(p.color[c], 0.f, 1.f) * 255);
-                writer.append(xyz, rgb);
+                writer.append(xyz, rgb); if (exported_ids.is_open()) write_disk_record(exported_ids, p.id);
                 remember(p.point, p.color);
             }
         }
         if (config.remove_outliers) {
-            if (stats.fused > INT32_MAX) throw std::runtime_error("dense exact outlier index exceeds its int32 address range");
-            const uint64_t index_bytes = stats.fused * (4 * sizeof(float) + sizeof(int32_t) + sizeof(uint8_t));
-            const int neighbors = (int)std::min<uint64_t>(config.outlier_neighbors, stats.fused - 1);
+            if (records > INT32_MAX) throw std::runtime_error("dense exact outlier index exceeds its int32 address range");
+            const uint64_t index_bytes = records * (4 * sizeof(float) + sizeof(int32_t) + sizeof(uint8_t));
+            const int neighbors = (int)std::min<uint64_t>(config.outlier_neighbors, records - 1);
             const uint64_t query_bytes = (uint64_t)neighbors * sizeof(float);
             const uint64_t required = index_bytes + query_bytes;
             if (required > config.image_cache_bytes)
@@ -576,10 +727,10 @@ struct Reconstruction::Impl {
                     " bytes; host cache budget is " + std::to_string(config.image_cache_bytes) + " bytes");
             const unsigned hardware = std::max(1u, std::thread::hardware_concurrency());
             const unsigned workers = (unsigned)std::min<uint64_t>(std::min(config.cpu_workers ? (unsigned)config.cpu_workers : hardware, hardware),
-                std::min<uint64_t>((stats.fused + 255) / 256, std::max<uint64_t>(1,(config.image_cache_bytes - index_bytes) / std::max<uint64_t>(1,query_bytes))));
+                std::min<uint64_t>((records + 255) / 256, std::max<uint64_t>(1,(config.image_cache_bytes - index_bytes) / std::max<uint64_t>(1,query_bytes))));
             std::ifstream input(work / "fused.bin", std::ios::binary);
             std::vector<float> xyz;
-            xyz.reserve((size_t)stats.fused * 3);
+            xyz.reserve((size_t)records * 3);
             sfm::Vec3 origin;
             Surface p;
             while (read_disk_record(input, p)) {
@@ -590,8 +741,8 @@ struct Reconstruction::Impl {
                     xyz.push_back((float)coordinate);
                 }
             }
-            knn::KdTree3 tree(xyz.data(), (int64_t)stats.fused);
-            std::vector<float> means((size_t)stats.fused);
+            knn::KdTree3 tree(xyz.data(), (int64_t)records);
+            std::vector<float> means((size_t)records);
             std::atomic<uint64_t> next{0};
             std::mutex report;
             auto query = [&] {
@@ -599,12 +750,12 @@ struct Reconstruction::Impl {
                 std::vector<float> distances((size_t)neighbors);
                 for (;;) {
                     const auto begin = next.fetch_add(256);
-                    if (begin >= stats.fused) return;
+                    if (begin >= records) return;
                     if (progress && begin % 65536 == 0) {
                         std::lock_guard<std::mutex> lock(report);
-                        progress("outliers",begin,stats.fused);
+                        progress("outliers",begin,records);
                     }
-                    for (uint64_t i = begin; i < std::min(begin + 256, stats.fused); ++i) {
+                    for (uint64_t i = begin; i < std::min(begin + 256, records); ++i) {
                         check();
                         const int count = tree.query(&xyz[(size_t)i * 3], (int32_t)i, neighbors, distances.data());
                         double sum = 0;
@@ -618,16 +769,16 @@ struct Reconstruction::Impl {
             query();
             for (auto& task : queries) task.get();
             double mean = 0, moment = 0;
-            for (uint64_t i = 0; i < stats.fused; ++i) {
+            for (uint64_t i = 0; i < records; ++i) {
                 const double value = means[(size_t)i];
                 const double delta = value - mean; mean += delta / (i + 1); moment += delta * (value - mean);
             }
-            const double threshold = mean + config.outlier_stddev * std::sqrt(moment / std::max<uint64_t>(1, stats.fused));
+            const double threshold = mean + config.outlier_stddev * std::sqrt(moment / std::max<uint64_t>(1, records));
             input.clear(); input.seekg(0);
             uint64_t index = 0;
             while (read_disk_record(input, p)) {
                 check();
-                if (progress && (index + 1) % 65536 == 0) progress("export",index + 1,stats.fused);
+                if (progress && (index + 1) % 65536 == 0) progress("export",index + 1,records);
                 if (means[(size_t)index++] > threshold || (config.point_limit && writer.count() >= config.point_limit)) continue;
                 double raw[3], xyz_source[3];
                 for (int c = 0; c < 3; ++c) raw[c] = p.point[c] + dataset.center[c];
@@ -637,14 +788,58 @@ struct Reconstruction::Impl {
                 }
                 uint8_t rgb[3];
                 for (int c = 0; c < 3; ++c) rgb[c] = (uint8_t)std::lround(std::clamp(p.color[c], 0.f, 1.f) * 255);
-                writer.append(xyz_source, rgb);
+                writer.append(xyz_source, rgb); if (exported_ids.is_open()) write_disk_record(exported_ids, p.id);
                 remember(p.point, p.color);
             }
         }
         writer.finish();
+        if (exported_ids.is_open()) { flush_disk_output(exported_ids); exported_ids.close(); }
         stats.exported = writer.count();
         if (!stats.exported) throw std::runtime_error("dense fusion and outlier filtering produced an empty cloud");
-        if (progress) progress("export", stats.fused, stats.fused);
+        if (config.reprojection_check) stats.reprojection = check_written(ply, dataset);
+        if (progress) progress("export", records, records);
+    }
+
+    // Rewrites `fused` without the far isolated points; returns the records left.
+    uint64_t drop_far_isolated(const fs::path& fused, const ParsedDataset& dataset) {
+        if (!config.far_isolated) return stats.fused;
+        stats.far_filter = resolve_far_filter(dataset.points.xyz, dataset.gauge_metric);
+        if (!stats.far_filter.active()) return stats.fused;
+        // Only points beyond margin - radius can neighbour a far point, so only they are held.
+        const double reach = stats.far_filter.margin - stats.far_filter.radius;
+        std::vector<sfm::Vec3> outer; std::vector<uint64_t> index;
+        {
+            std::ifstream input(fused,std::ios::binary); Surface p; uint64_t i = 0;
+            while (read_disk_record(input,p)) {
+                check();
+                if (box_excess(stats.far_filter,vector(p.point)) > reach) { outer.push_back(vector(p.point)); index.push_back(i); }
+                ++i;
+            }
+        }
+        std::vector<uint64_t> drop;
+        for (const auto i : far_isolated(outer,stats.far_filter,&stats.far_beyond)) drop.push_back(index[i]);
+        stats.far_isolated = drop.size();
+        if (drop.empty()) return stats.fused;
+        std::sort(drop.begin(),drop.end());
+        const auto kept_path = work / "fused-kept.bin";
+        {
+            std::ifstream input(fused,std::ios::binary); std::ofstream output(kept_path,std::ios::binary | std::ios::trunc);
+            Surface p; uint64_t i = 0; size_t next = 0;
+            while (read_disk_record(input,p)) {
+                check();
+                if (next < drop.size() && drop[next] == i) ++next; else write_disk_record(output,p);
+                ++i;
+            }
+            flush_disk_output(output);
+        }
+        fs::rename(kept_path,fused);
+        return stats.fused - drop.size();
+    }
+
+    ReprojectionSummary check_written(const std::string& ply, const ParsedDataset& dataset) {
+        return reproject_written(ply, work / "exported-ids.bin", work / "observation-ranges.bin", work / "observations.bin",
+                                 views, dataset.raw_to_file, dataset.center, width, height, config.image_cache_bytes / 16,
+                                 [&] { check(); });
     }
 };
 
@@ -668,6 +863,14 @@ void Reconstruction::add_pair(uint32_t a, uint32_t b, const ViewPixels& pa, cons
     impl_->direction(a, b, pa, pb, prediction.forward, prediction.backward, prediction.backward.width == 0 && impl_->config.matching_space != "source");
     if (prediction.backward.width && impl_->config.matching_space != "source") impl_->direction(b, a, pb, pa, prediction.backward, prediction.forward, false);
 }
+
+void Reconstruction::set_filter_plan(const FilterPlan& plan) {
+    if (impl_->finished || impl_->stats.tested) throw std::runtime_error("dense filter plan must precede the first pair");
+    impl_->plan = plan;
+    impl_->stats.depth_precision = plan.depth_precision;
+}
+
+uint64_t Reconstruction::filter_bytes() const { return impl_->stats.free_space_bytes; }
 
 void Reconstruction::complete_reference(uint32_t reference, bool background) {
     if (impl_->finished) throw std::runtime_error("dense reconstruction is already finished");
