@@ -17,7 +17,11 @@ struct HybridModelStats {
     uint32_t sift = 0;       // still registered after the SIFT solve
     uint32_t restored = 0;   // put back from the learned pose, without points
     size_t points_before = 0, points_after = 0;
-    double error_before = 0, error_after = 0;   // mean, each frontend's own pixels
+    double error_before = 0, error_after = 0;   // mean, source pixels
+    // With SS_SFM_HYBRID_LEARNED_POINTS: the learned tracks added, and the
+    // mean error over both families.
+    size_t points_learned = 0;
+    double error_combined = 0;
 };
 
 struct HybridStats {

@@ -216,6 +216,56 @@ uint32_t restoreLost(const Reconstruction& src, Reconstruction& dst,
     return (uint32_t)lost.size();
 }
 
+// The learned frontend's tracks as well, triangulated against the SIFT
+// solve's poses without moving them: each image's rows become SIFT's followed
+// by the learned ones, and the two families never share a track.
+void addLearnedPoints(std::vector<Reconstruction>& models, std::vector<FeatureSet>& sf,
+                      MatchesDatabase& sdb, const std::vector<FeatureSet>& lf,
+                      const MatchesDatabase& ldb, const MapperOptions& mo,
+                      const std::vector<uint32_t>& cam_ids, const RigTable& rigs,
+                      const SequenceTable& seqs, HybridStats& st) {
+    const size_t n = sf.size();
+    std::vector<uint32_t> offset(n);
+    for (size_t i = 0; i < n; i++) {
+        FeatureSet& f = sf[i];
+        offset[i] = f.count();
+        const bool colors = f.hasColors() && lf[i].hasColors();
+        f.keypoints.insert(f.keypoints.end(), lf[i].keypoints.begin(), lf[i].keypoints.end());
+        if (colors)
+            f.colors.insert(f.colors.end(), lf[i].colors.begin(), lf[i].colors.end());
+        else
+            f.colors.clear();
+        sdb.images[i].num_features = f.count();
+    }
+    for (const TwoViewMatches& t : ldb.pairs) {
+        std::vector<FeatureMatch> m;
+        m.reserve(t.matches.size());
+        for (const FeatureMatch& fm : t.matches)
+            m.push_back({fm.idx1 + offset[t.image1], fm.idx2 + offset[t.image2]});
+        sdb.pairs.push_back({t.image1, t.image2, t.config, MatchList(std::move(m))});
+    }
+    Mapper mapper(sdb, sf, mo, cam_ids, &rigs, &seqs, nullptr);
+    for (size_t k = 0; k < models.size(); k++) {
+        Reconstruction& m = models[k];
+        if (m.numRegistered() < 2) continue;
+        for (auto& kv : m.images) {
+            Image& im = kv.second;
+            const FeatureSet& f = sf[kv.first];
+            for (uint32_t r = offset[kv.first]; r < f.count(); r++)
+                im.points2D.push_back({f.keypoints[r].x, f.keypoints[r].y});
+            im.point3D_ids.resize(f.count(), kInvalidPoint3D);
+        }
+        const size_t before = m.points3D.size();
+        m = mapper.triangulateFixed(m);
+        if (k < st.models.size()) {
+            st.models[k].points_learned = m.points3D.size() - std::min(before, m.points3D.size());
+            st.models[k].error_combined = meanError(m, sf);
+        }
+        slog::diag(Tag::Map, "[hybrid] model %zu: %zu SIFT points, %zu with the learned tracks",
+                   k, before, m.points3D.size());
+    }
+}
+
 }  // namespace
 
 bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& feats,
@@ -251,6 +301,10 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         // Under the epipolar gate the ratio test only has to reject the
         // ambiguous, not the wrong: repeated texture is what the gate is for.
         sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", guided ? 0.9 : 0.8);
+        sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", 1) != 0;
+        sc.sift.peak_threshold *= envNumber("SFM_HYBRID_PEAK_SCALE", 1.0);
+        sc.sift.max_num_features =
+            (int)envNumber("SFM_HYBRID_FEATURES", cfg.sift.max_num_features);
         st.images = only.size();
         st.image_size = sc.max_image_size;
         st.features = sc.sift.max_num_features;
@@ -418,6 +472,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
                         (long long)ms.points_after, L::num(ms.error_before, 2),
                         L::num(ms.error_after, 2)});
             }
+        if (spirula::env_on("SFM_HYBRID_LEARNED_POINTS"))
+            addLearnedPoints(out, sf, sdb, feats, db, mo, cs2.ids, rigs, seqs, st);
         models = std::move(out);
         feats = std::move(sf);
         db = std::move(sdb);
@@ -438,12 +494,13 @@ bool writeHybridReport(const fs::path& path, const HybridStats& st) {
     f << "hybrid " << st.images << ' ' << st.image_size << ' ' << st.features << ' ' << st.pairs
       << ' ' << st.verified << ' ' << st.putative << ' ' << st.guided_kept << ' ' << st.inliers
       << ' ' << st.seconds << '\n';
-    f << "# model images sift restored points_before points_after error_before error_after\n";
+    f << "# model images sift restored points_before points_after error_before error_after "
+         "points_learned error_combined\n";
     for (size_t k = 0; k < st.models.size(); k++) {
         const HybridModelStats& m = st.models[k];
         f << "model " << k << ' ' << m.images << ' ' << m.sift << ' ' << m.restored << ' '
           << m.points_before << ' ' << m.points_after << ' ' << m.error_before << ' '
-          << m.error_after << '\n';
+          << m.error_after << ' ' << m.points_learned << ' ' << m.error_combined << '\n';
     }
     return (bool)f;
 }
