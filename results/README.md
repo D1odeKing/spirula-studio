@@ -212,3 +212,40 @@ set. The build passes the same five sfm tests.
 It reproduces hybrid_nocc to within 0.02% of points. The leftover difference
 is the LoMa ladder's own run-to-run noise: its input model held 606,561
 points against 606,875.
+
+## Build 4 (81859d4b): band matching
+
+Build 4 passes the five sfm tests and `preset_roundtrip_test` (the GUI switch).
+Every run has hybrid_b3's command over A's LoMa matches; only the binary, the
+workspace and the env change. All four placed 676 of 678 images.
+
+| run | env | SIFT kept / restored | points | observations | mean px | median px | inliers | stage s |
+|---|---|---|---|---|---|---|---|---|
+| hybrid_b3 (build 3) | — | 676 / 0 | 494,055 | 1,264,384 | 1.745 | 1.429 | 1,949,508 | 88 |
+| hybrid_b4_gate | — | 676 / 0 | 494,221 | 1,264,760 | 1.744 | 1.428 | 1,949,622 | 68 |
+| hybrid_band | MATCH=band | 676 / 0 | 1,671,280 | 3,496,364 | 2.126 | 1.879 | 10,685,406 | 202 |
+| hybrid_band_r08 | band, RATIO=0.8 | 676 / 0 | 1,115,680 | 2,485,546 | 2.062 | 1.791 | 4,935,035 | 130 |
+| hybrid_band_r095 | band, RATIO=0.95 | 676 / 0 | 1,911,700 | 3,916,761 | 2.124 | 1.879 | 16,185,318 | 349 |
+
+| run | putative | kept by band / gate | verified pairs |
+|---|---|---|---|
+| hybrid_b4_gate | 34,921,988 | 2,060,901 | 10,246 / 11,449 |
+| hybrid_band | 20,909,415 | 12,021,340 | 11,356 / 11,428 |
+| hybrid_band_r08 | 8,495,325 | 5,423,538 | 11,360 / 11,437 |
+| hybrid_band_r095 | 36,081,163 | 18,340,867 | 11,381 / 11,448 |
+
+- **b4 with no env reproduces b3** (494,221 against 494,055 points, 1.744
+  against 1.745 px).
+- **Band matching multiplies SIFT's own density**: 3.4x points at the default
+  ratio (1.67M) and 3.9x at 0.95 (1.91M). That is more than LoMa's tracks
+  added in hybrid_learned (1.05M), and these are all SIFT points with
+  SIFT-refined poses. Nearly every pair verifies (99%+).
+- **The price is error**: 2.06–2.13 px mean, against 1.74 at the gate's
+  default. Every band run is over the 2 px line the run report uses, so all
+  three exit 3 (PARTIAL). The model is complete; no run failed. Band
+  matching takes candidates the ratio test alone would drop, and a share of
+  them sit at the edge of the 3 px gate.
+- **Ratio**: 0.8 cuts points 33% for only 0.06 px. 0.95 adds 14% points at
+  the same error as 0.9, for 1.7x the stage time (349 s). Of the band runs,
+  0.95 gives the most points for its error.
+- Stage time stays under 6 min at every ratio, well inside the 10 min limit.
