@@ -20,8 +20,9 @@ Any image SIFT cannot hold is put back at its learned pose, carried into the
 SIFT frame by a Sim3, with no points. A failure keeps the learned model.
 `SS_SFM_HYBRID_MATCH=band` searches the band instead: each SIFT keypoint is
 compared only with the other image's keypoints on the arc its ray sweeps there,
-epipole to vanishing point, the ratio test over those alone (0.9), then one
-match per keypoint on the other side. The GUI's "Refine with SIFT" (Advanced,
+epipole to vanishing point, the ratio test over those alone (0.9), from both
+sides, keeping mutual nearest neighbours (`BAND_MUTUAL=0`: one match per
+keypoint on the other side instead). The GUI's "Refine with SIFT" (Advanced,
 learned features only) passes `--hybrid-sift`.
 `hybrid.txt` records the stage. Experiment knobs, all `SS_SFM_HYBRID_*`:
 `MATCH` (`gate`, `band`, `none`), `GUIDED`, `RATIO`, `CROSS_CHECK`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`,
@@ -41,6 +42,9 @@ Errors in source pixels.
 | hybrid, high, ratio 0.95, no cross-check (default) | 676 | 494,144 | 1.739 |
 | hybrid, high, + `LEARNED_POINTS` | 676 | 1,051,321 | 2.104 |
 | hybrid, extreme, ratio 0.9 + cross-check | 676 | 558,674 | 1.234 |
+| hybrid, high, band 0.8, one per keypoint | 676 | 1,115,680 | 2.062 |
+| hybrid, high, band 0.9, one per keypoint | 676 | 1,671,280 | 2.126 |
+| hybrid, high, band 0.95, one per keypoint | 676 | 1,911,700 | 2.124 |
 
 The stage itself is about a minute at high. LoMa leaves out 2 images where SIFT
 leaves out 33, so step 0's question is answered: the learned frontend places
@@ -48,8 +52,13 @@ images SIFT cannot, and SIFT keeps all but a few of them with points. Without
 the gate (ratio 0.8, cross-check) there are 22% fewer points and verification
 takes twice as long.
 
-Open: whether band matching should replace the gate as the default (being
-measured), and more SIFT features at high.
+The band finds 2.3 to 3.9 times the points but every observation gets worse
+(median 1.43 to 1.88 px) and the stage takes 2 to 5 times as long: a ratio
+test over a few dozen candidates on a 9 px strip passes near neighbours along
+the line. So the gate stays the default.
+
+Open: band matching with the mutual test and a narrower band, and more SIFT
+features at high.
 
 ## Why
 

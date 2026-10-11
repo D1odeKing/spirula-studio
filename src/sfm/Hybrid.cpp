@@ -219,10 +219,11 @@ int distanceU8(const uint8_t* a, const uint8_t* b, uint32_t dim) {
 
 // Guided search: each keypoint of i is compared only with the keypoints of j on
 // the arc its ray sweeps in j, epipole to vanishing point, widened by the
-// tolerance; the ratio test runs over those alone, then one match per j keypoint.
+// tolerance. The ratio test runs over those alone; `mutual` runs it from j's side
+// too and keeps only mutual nearest neighbours, else one match per j keypoint.
 void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::vector<Vec3>& bb,
-               const FeatureSet& fa, const FeatureSet& fb, double ratio, size_t cap,
-               std::vector<FeatureMatch>& out, uint64_t& putative) {
+               const FeatureSet& fa, const FeatureSet& fb, double ratio, bool mutual,
+               size_t cap, std::vector<FeatureMatch>& out, uint64_t& putative) {
     out.clear();
     if (g.rotation_only || fa.dim != fb.dim || fa.dtype != DType::U8 || fb.dtype != DType::U8)
         return;
@@ -248,6 +249,12 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
     const double ratio2 = ratio * ratio;
     const double slack = std::asin(std::min(1.0, g.tol));
     std::vector<std::pair<int, uint32_t>> best(bb.size(), {INT_MAX, 0});
+    std::vector<int> second(bb.size(), INT_MAX);
+    struct Found {
+        uint32_t p, q;
+        int d;
+    };
+    std::vector<Found> found;
     for (uint32_t p = 0; p < (uint32_t)ba.size(); p++) {
         const Vec3 r = mul(g.R, ba[p]);
         const Vec3 rp = r - e * r.dot(e);
@@ -265,6 +272,12 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
             const Vec3& b = bb[q];
             if (std::fabs(nrm.dot(b)) > g.tol || b.dot(e) < min_cos || b.dot(rh) < -g.tol) return;
             const int d = distanceU8(dp, db + (size_t)q * dim, dim);
+            if (d < best[q].first) {
+                second[q] = best[q].first;
+                best[q] = {d, p};
+            } else if (d < second[q]) {
+                second[q] = d;
+            }
             if (d < d1) {
                 d2 = d1;
                 d1 = d;
@@ -291,14 +304,21 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
         }
         if (d1 == INT_MAX || (d2 != INT_MAX && (double)d1 >= ratio2 * d2)) continue;
         putative++;
-        if (d1 < best[q1].first) best[q1] = {d1, p};
+        found.push_back({p, q1, d1});
+    }
+    // Without `mutual`, j's nearest is taken among the accepted only.
+    if (!mutual) {
+        std::fill(best.begin(), best.end(), std::make_pair(INT_MAX, 0u));
+        for (const Found& f : found)
+            if (f.d < best[f.q].first) best[f.q] = {f.d, f.p};
     }
     std::vector<float> dist;
-    for (uint32_t q = 0; q < (uint32_t)best.size(); q++)
-        if (best[q].first != INT_MAX) {
-            out.push_back({best[q].second, q});
-            dist.push_back((float)best[q].first);
-        }
+    for (const Found& f : found) {
+        if (best[f.q].second != f.p || best[f.q].first != f.d) continue;
+        if (mutual && second[f.q] != INT_MAX && (double)f.d >= ratio2 * second[f.q]) continue;
+        out.push_back({f.p, f.q});
+        dist.push_back((float)f.d);
+    }
     keepClosest(out, dist, cap);
 }
 
@@ -495,6 +515,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         std::unique_ptr<IFeatureMatcher> matcher;
         if (mode != "band")
             matcher = createFeatureMatcher(sc.matcher, sc.match, sc.lightglue, sc.loma_match);
+        const bool mutual = envNumber("SFM_HYBRID_BAND_MUTUAL", 1) != 0;
         uint64_t putative = 0, kept = 0;
         auto matchFn = [&](size_t b, size_t e, std::vector<std::vector<FeatureMatch>>& out) {
             if (mode == "band") {
@@ -506,7 +527,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
                     for (size_t p = next++; p < e; p = next++)
                         bandMatch(geometry(p), pairBearings(p, false), pairBearings(p, true),
                                   sf[pairs[p].first], sf[pairs[p].second], sc.match.max_ratio,
-                                  sc.match.max_num_matches, out[p - b], mine);
+                                  mutual, sc.match.max_num_matches, out[p - b], mine);
                     found += mine;
                 };
                 runWorkers(worker, cfg.threads, e - b);
