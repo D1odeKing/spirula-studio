@@ -1,0 +1,1 @@
+bin_base/spirula.exe sfm auto "H:/Hershy Site GS/GS runs/a7iii_inside/images" -o ws_sift_prog --manifest manifest.yaml --quality high --features sift --progressive

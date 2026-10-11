@@ -492,7 +492,7 @@ void dataset_adapt_preset(const std::string& preset,
     if (preset != "360-camera" || sources.empty()) return;
     // A packed dual-lens file (.insv/.360) is already handled: the pano plan
     // warps it into views and decides their lens, which is not this question.
-    // An .insp or .lrv measures 2:1 and is two fisheye circles, not a panorama.
+    // An .insp, .lrv or .prx measures 2:1 and is two fisheye circles, not a panorama.
     if (any_pano360(sources)) return;
     for (const PrepInput& s : sources)
         if (has_fisheye_lens(s)) return;

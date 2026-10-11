@@ -141,7 +141,7 @@ struct PrepInput {
     // Set instead when the file says it IS a 360 packing this build cannot
     // place, for the line that says its tracks are being left as they are.
     bool pano360_unsupported = false;
-    // Fisheye circles side by side in each frame of a .lrv, or each .insp of
+    // Fisheye circles side by side in each frame of a .lrv / .prx, or each .insp of
     // a folder (app::packed_lens_count); two are cut apart into cam0/, cam1/.
     // 0 = not such an input, or not measured yet.
     int packed_lenses = 0;
@@ -443,7 +443,7 @@ const Backends& backends();
 
 // Video container extensions the GUI offers, in the file dialog and for
 // drag-and-drop. Sized here so a range-for over it works from another TU.
-inline constexpr int kNumVideoExtensions = 14;
+inline constexpr int kNumVideoExtensions = 15;
 extern const char* const kVideoExtensions[kNumVideoExtensions];
 
 // Does this path name one of them? (Extension only; the file need not exist.)
@@ -454,7 +454,7 @@ bool is_dual_fisheye_path(const std::string& path);
 // A GoPro MAX .360 by its name. The packing itself is what probe_pano360
 // confirms; this only decides whether it is worth asking.
 bool is_pano360_path(const std::string& path);
-// An Insta360 .insp photo or .lrv proxy: one or two fisheye circles packed
+// An Insta360 .insp photo or .lrv / .prx proxy: one or two fisheye circles packed
 // into each frame, which PrepInput::packed_lenses counts.
 bool is_packed_lens_path(const std::string& path);
 
