@@ -22,3 +22,4 @@ b5 queue start Sun Oct 11 14:03:00 EDT 2026
 hybrid_b5_band exit=3 seconds=1612
 hybrid_b5_band_px2 exit=0 seconds=1617
 hybrid_b5_band_r08_px2 exit=0 seconds=1591
+hybrid_b5_gate_px2 exit=0 seconds=1476
