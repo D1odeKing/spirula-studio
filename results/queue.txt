@@ -10,3 +10,5 @@ hybrid_peak exit=0 seconds=1417
 hybrid_learned exit=3 seconds=1442
 hybrid_nocc exit=0 seconds=1547
 hybrid_extreme exit=0 seconds=9430
+queue done Sat Oct 10 22:52:42 EDT 2026
+hybrid_b3 exit=0 seconds=1489
