@@ -280,3 +280,31 @@ Exit codes: hybrid_b5_band exits 3 (mean over 2 px). The three 2 px runs exit 0.
   494k). It also lets SIFT lose 2 images. The band is what brings the density.
 - Recommended default from this capture: band matching, mutual on, ratio
   0.9, band at 2 px.
+
+## Build 6 (53351e94): band matching by default
+
+Build 6 passes the five sfm tests and `preset_roundtrip_test`. The first
+compile stopped with MSVC out of heap space (C1002/C1060) on four large
+translation units at once. Free RAM was 32 GB afterwards, and the unchanged
+retry built clean. No `SS_SFM_HYBRID_*` is set in either run.
+
+| run | SIFT kept / restored | points | observations | mean px | median px | inliers | `[hybrid] … kept X of Y` | stage s |
+|---|---|---|---|---|---|---|---|---|
+| hybrid_b5_band_px2 (build 5, env) | 676 / 0 | 1,454,903 | 3,089,931 | 1.333 | 1.175 | 6,808,491 | band 6,877,032 of 23,436,832 | 163 |
+| hybrid_b6 (high, defaults) | 676 / 0 | 1,455,018 | 3,090,098 | 1.332 | 1.174 | 6,807,779 | band 6,876,244 of 23,425,283 | 139 |
+| hybrid_extreme (build 2, gate) | 669 / 7 | 558,674 | 1,443,999 | 1.234 | 1.005 | 1,956,766 | gate 2,014,239 of 12,090,716 | 107 |
+| hybrid_b6_extreme (extreme, defaults) | 676 / 0 | 2,514,042 | 5,251,633 | 1.003 | 0.887 | 11,346,871 | band 11,471,252 of 43,459,196 | 179 |
+
+hybrid_b6_extreme reused hybrid_extreme's LoMa matches (9,603 pairs), so its
+total of 23 min has no matching time. Both exit 0, and all runs placed 676/678.
+
+- **hybrid_b6 reproduces b5_band_px2** with no env: 1,455,018 against
+  1,454,903 points, 1.332 against 1.333 px.
+- **At extreme, the new default gives 4.5x the points of the old extreme run
+  at a lower error**: 2.51M points at 1.003 px (0.887 median), against 559k at
+  1.234 px. SIFT kept all 676 images (the old run restored 7). This is the
+  best model of every run: 4.1x LoMa alone's points (607k, 3.02 px) at a
+  third of its error, and 9.2x SIFT alone's (273k, 1.45 px) at lower error.
+- The hybrid stage stays cheap at extreme: 179 s for 11,581 pairs and 43M
+  putative matches.
+- LoMa's feature pass 1 ran out of GPU memory again, as in every extreme run.
