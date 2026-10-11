@@ -21,20 +21,45 @@ bit-identical except where noted below).
 | SfM brute-force matcher (`sfm/feature/Matcher.h`) | descriptor words multiplied | pairs per chunk | 64 cross-checked 8192^2 pairs = 2.0 s, one submit |
 | SIFT pyramid (`sfm/feature/Sift.h`) | pixels x taps | blur steps per submit | 0.83 s at 3200 px, >2 s at 5000 px |
 | SIFT orient / descriptor | keypoints | keypoint ranges | 392 / 222 ms, one dispatch each |
-| inference stream (`nn/vk/Stream.cpp`) | FLOPs, per-op estimate | submits by cost; GEMM rows and attention queries/batches past the cap | SAM 3 memory attention ~190 GFLOP in one dispatch |
+| inference stream (`nn/vk/Stream.cpp`) | FLOPs, per-op estimate, a rate per pipeline | submits by cost; GEMM rows and attention queries/batches past the cap | SAM 3 memory attention ~190 GFLOP in one dispatch |
 | meshing cull / occupancy / bisection / color | pairs or points | launch ranges, capped at the old sizes | cull: 0.11 s per launch on an RTX 5070 |
 | GPU bundle adjustment (`sfm/ba/Solver.h`) | ~ns of RTX 5070 fp64, per-kernel weights rescaled by a first timed launch | LM iteration at barriers; per-obs, per-chunk and Cholesky-tile launches into ranges | one LM iteration of a 6946-image rig capture: 2.4 s on the RTX 5070 itself |
 | training, Vulkan (`backend/vulkan/DispatchBudget.cpp`) | per launch: splat-tile pairs x 4^macro_log2 + pixels for the rasterizer, pixels x levels for the bilateral grid, workgroups otherwise | the launch's longest grid axis into ranges, each its own submit | bilateral-grid backward 5.4 s, raster backward 1.6 s, one dispatch each (4946x3286, 753K splats, Intel UHD) |
 
 The inference stream submits asynchronously, so it brackets every command
-buffer with two timestamps and reads them when the ring slot comes round
-again; until then it assumes 50 GFLOP/s. Attention cost is weighted 2x,
-because flash attention reaches half the efficiency of the GEMMs the rate
-is mostly learned from.
+buffer with two timestamps, the first latched once everything submitted
+before it has finished, and reads them when the ring slot comes round again.
+It keeps one rate per pipeline (kernel entry and specialization constants),
+because a counted FLOP does not cost every kernel the same time. Encoding
+SAM 3 at 1008 px on an Intel UHD, `flash_attn` ran 174 GFLOP/s of its count
+and `gemm_nt_big` 22: with one shared rate each attention block pulled it to
+~170, and the GEMMs after it ran 1.8-2.1 s a submit against the 0.25 s
+target. One rate per entry name is not enough either: sharing it with the SAM
+decoder's head-dim-32 attention, the ViT's global attention in the second
+frame was predicted at 0.12 s and ran 1.2 s unsliced. A submit's measured
+time is shared among its pipelines in proportion to their predicted time,
+which is exact for a submit of one pipeline, as most large ones are, and
+only a sample of at least half the target replaces a rate outright; a
+shorter one moves it halfway in log space, because one GEMM pipeline runs
+shapes of different speed and its short samples kept cutting the next large
+GEMM to half the budget. A pipeline with no timing yet borrows the slowest
+measured rate, or 50 GFLOP/s before anything is measured; attention's cost
+is weighted 2x for that stretch, since flash attention reaches half a GEMM's
+efficiency on NVIDIA. `SS_VK_SUBMIT_LOG=<ms>` covers this stream too,
+printing each long submit's predicted time beside its measured one.
 
-Slicing attention by query block can change the key-split decision per
-slice, so outputs move by float-reordering noise (a handful of mask-edge
-pixels in `spirula geometry`); everything else is bit-identical.
+Encoding one frame for click tracking on that UHD with every submit timed,
+the longest submit went from 2125 ms to 288 ms and the 99th percentile from
+1890 to 265 ms. Holding the budget there costs time: 266-275 s a frame
+against 248 s with the budget lifted (`SS_SUBMIT_BUDGET_MS=100000`, which
+both builds ran at the same speed), and master, whose rate swung between the
+two kernels' speeds, took 211-256 s. On an RTX 3070 the budget slices next
+to nothing -- 13722 dispatches over 8 frames against 13695 with it lifted,
+the difference being memory attention, predicted at 229 ms and run in 222 --
+and 20 frames with a click and `--text person` took 62.7 s on average over
+five alternated pairs against master's 63.1. Masks are bit-identical on both
+GPUs: attention decides its key split for the whole problem, not per slice,
+which `budget_slicing_test` holds it to.
 
 Bundle adjustment weights its kernels as measured on the RTX 5070, and the
 first launch of each big kernel on a device is a 1/32-budget range timed
@@ -92,3 +117,16 @@ Not covered: the CUDA backend, and the per-splat kernels (projection, sort,
 optimizer, densify). Those are linear in splat count and have no hotspot; the
 largest, the fused projection backward + optimizer, took 45 ms at 753K splats
 on that iGPU, so about 300 ms at 5M.
+
+## macOS
+
+macOS 26 kills a command buffer that keeps the window server waiting
+(`kIOGPUCommandBufferCallbackErrorImpactingInteractivity`) while the display
+is on. An M2 Max lost its device this way three times masking with SAM 2.1
+and Grounding DINO, 20 to 340 images into a run, where the tracker's memory
+attention takes ~0.3 s a frame. MLX training (ml-explore/mlx#3267) and
+llama.cpp meet the same kill, and both answer it with a knob of Apple's GPU
+driver, `AGX_RELAX_CDM_CTXSTORE_TIMEOUT=1`, read when the first Metal device
+opens. `src/app/Main.cpp` sets it unless the environment already has a
+value, so every tool and every child the GUI starts runs with it; `=0`
+restores the driver's default.

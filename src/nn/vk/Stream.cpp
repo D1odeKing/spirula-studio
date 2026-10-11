@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <unordered_map>
 #include "core/Env.h"
 #include "core/GpuStall.h"
 #include "core/SubmitBudget.h"
@@ -41,17 +42,29 @@ struct Stream::Impl {
     uint64_t        cb_value[kRing] = {};  // timeline value each ring slot waits on
     int             cur = 0;
     bool            recording = false;
-    uint32_t        recorded = 0;  // dispatches in the command buffer being built
-    double          work = 0;      // their summed cost
+    uint32_t        recorded = 0;   // dispatches in the command buffer being built
+    double          predicted = 0;  // their GPU seconds, at each pipeline's rate
+
+    // One rate per pipeline, because a counted FLOP costs each kernel, and each
+    // specialization of one, its own time: on an Intel UHD flash_attn ran at 8x
+    // the GEMM's rate, and one shared rate sized the GEMMs after it at 2 s a submit.
+    std::unordered_map<VkPipeline, spirula::SubmitBudget> rates;
+    // A pipeline not yet timed borrows the slowest measured rate, or before any
+    // this prior: a 2-CU iGPU's attention rate, which a fast GPU outgrows at once.
+    static constexpr double kPriorFlops = 50e9;
+    double floor_rate = kPriorFlops;
+    const double target = spirula::SubmitBudget().target();
+
+    struct Part {
+        spirula::SubmitBudget* rate;
+        double work, seconds;  // seconds as predicted when recorded
+    };
+    std::vector<Part> open;  // per pipeline, of the command buffer being built
 
     // Two timestamps per ring slot bracket each submission; read back once the
-    // slot retires, they are what the budget learns this device's rate from.
-    VkQueryPool     submit_queries = VK_NULL_HANDLE;
-    double          slot_work[kRing] = {};  // cost of an unharvested submission
-    // Assumed until measured: a 2-CU iGPU's attention rate, so the first
-    // submits of a process are safe everywhere and a fast GPU outgrows it at once.
-    static constexpr double kPriorFlops = 50e9;
-    spirula::SubmitBudget budget{kPriorFlops};
+    // slot retires, they are what the rates are learned from.
+    VkQueryPool       submit_queries = VK_NULL_HANDLE;
+    std::vector<Part> slot_parts[kRing];  // of an unharvested submission
 
     VkSemaphore timeline = VK_NULL_HANDLE;
     uint64_t    submitted = 0;
@@ -75,10 +88,12 @@ struct Stream::Impl {
 
     bool initialized = false;
     bool drain_failed = false;
+    std::vector<std::string> logged;  // entries, under SS_VK_SUBMIT_LOG only
 
     void init();
     void resolveQueries();
     void harvest(int slot);
+    double rateOf(const spirula::SubmitBudget& b) const;
 };
 
 Stream& Stream::get() {
@@ -176,6 +191,25 @@ void Stream::shutdown() {
 
 namespace {
 
+double submit_log_ms() {
+    static const double ms = [] {
+        const char* v = spirula::env("VK_SUBMIT_LOG");
+        return v ? std::max(0.0, std::atof(v)) : 0.0;
+    }();
+    return ms;
+}
+
+std::string logged_summary(const std::vector<std::string>& names) {
+    if (names.empty()) return "copies and fills only";
+    std::vector<std::string> seen;
+    for (const std::string& n : names)
+        if (std::find(seen.begin(), seen.end(), n) == seen.end()) seen.push_back(n);
+    std::string out;
+    for (size_t i = 0; i < seen.size() && i < 6; i++) out += (i ? ", " : "") + seen[i];
+    if (seen.size() > 6) out += " (+" + std::to_string(seen.size() - 6) + " more)";
+    return out;
+}
+
 void wait_timeline(const Context& ctx, VkSemaphore timeline, const uint64_t* value) {
     VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
     wi.semaphoreCount = 1;
@@ -216,8 +250,10 @@ VkCommandBuffer Stream::begin() {
     NN_VK_CHECK(vkBeginCommandBuffer(s.cbs[s.cur], &bi));
     s.recording = true;
     if (s.submit_queries) {
+        // BOTTOM, not TOP: latched once all earlier submits finish, so a command
+        // buffer queued behind another is not charged for the wait.
         vkCmdResetQueryPool(s.cbs[s.cur], s.submit_queries, 2 * s.cur, 2);
-        vkCmdWriteTimestamp(s.cbs[s.cur], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        vkCmdWriteTimestamp(s.cbs[s.cur], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
                             s.submit_queries, 2 * s.cur);
     }
     if (s.query_pool) {
@@ -265,34 +301,68 @@ void Stream::flush() {
     si.pCommandBuffers = &s.cbs[s.cur];
     si.signalSemaphoreCount = 1;
     si.pSignalSemaphores = &s.timeline;
+    const double log_ms = submit_log_ms();
+    const double t0 = log_ms > 0 ? now_ms() : 0;
     NN_VK_CHECK(vkQueueSubmit(ctx.queue(), 1, &si, VK_NULL_HANDLE));
     s.wait_sems.clear();
     s.wait_values.clear();
 
     s.cb_value[s.cur] = signal;
-    s.slot_work[s.cur] = s.work;
+    std::swap(s.slot_parts[s.cur], s.open);
+    s.open.clear();
+    if (log_ms > 0) {
+        wait_timeline(ctx, s.timeline, &signal);
+        const double ms = now_ms() - t0;
+        if (ms >= log_ms)
+            NN_LOG_ERROR("[nn-submit] %.1f ms (predicted %.1f), %u dispatches: %s\n", ms,
+                         s.predicted * 1e3, s.recorded, logged_summary(s.logged).c_str());
+        s.logged.clear();
+    }
     s.cur = (s.cur + 1) % Impl::kRing;
     s.recording = false;
     s.recorded = 0;
-    s.work = 0;
+    s.predicted = 0;
 }
 
 // Only for a slot whose submission has retired.
 void Stream::Impl::harvest(int slot) {
-    if (!submit_queries || slot_work[slot] <= 0) return;
+    std::vector<Part>& parts = slot_parts[slot];
     uint64_t ts[2] = {};
-    VkResult r = vkGetQueryPoolResults(Context::get().device(), submit_queries,
-                                       2 * slot, 2, sizeof(ts), ts, sizeof(uint64_t),
-                                       VK_QUERY_RESULT_64_BIT);
-    if (r == VK_SUCCESS && ts[1] > ts[0])
-        budget.record(slot_work[slot],
-                      (double)(ts[1] - ts[0]) * Context::get().timestampPeriod() * 1e-9);
-    slot_work[slot] = 0;
+    if (submit_queries && !parts.empty() &&
+        vkGetQueryPoolResults(Context::get().device(), submit_queries, 2 * slot, 2,
+                              sizeof(ts), ts, sizeof(uint64_t),
+                              VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
+        ts[1] > ts[0]) {
+        const double seconds =
+            (double)(ts[1] - ts[0]) * Context::get().timestampPeriod() * 1e-9;
+        // Shared out as predicted, so a submit of one pipeline -- most large
+        // ones are -- times that pipeline exactly.
+        double predicted = 0;
+        for (const Part& p : parts) predicted += p.seconds;
+        // Only a sample near the budget replaces a rate outright: one GEMM pipeline
+        // runs shapes of different speed, and on an Intel UHD its short samples
+        // kept cutting the next large GEMM to half the budget.
+        for (const Part& p : parts)
+            if (predicted > 0)
+                p.rate->record(p.work, seconds * p.seconds / predicted, target / 2);
+        floor_rate = 0;
+        for (const auto& kv : rates)
+            if (kv.second.measured() && (floor_rate <= 0 || kv.second.rate() < floor_rate))
+                floor_rate = kv.second.rate();
+        if (floor_rate <= 0) floor_rate = kPriorFlops;
+    }
+    parts.clear();
 }
 
-double Stream::workCap() {
+double Stream::Impl::rateOf(const spirula::SubmitBudget& b) const {
     const double pinned = g_cap_override.load();
-    return pinned >= 0 ? pinned : impl().budget.limit();
+    if (pinned >= 0) return pinned / target;
+    return b.rate() > 0 ? b.rate() : floor_rate;
+}
+
+double Stream::workCap(const char* entry, const SpecList& spec) {
+    Impl& s = impl();
+    return s.rateOf(s.rates[Pipelines::get().acquire(entry, spec)]) * s.target;
 }
 
 namespace testing {
@@ -383,8 +453,10 @@ void Stream::dispatch(const char* entry, const SpecList& spec, uint32_t gx, uint
         NN_LOG_ERROR("[ssam-sync] %s (%u,%u,%u)...\n", entry, gx, gy, gz);
 
     VkPipeline pipe = Pipelines::get().acquire(entry, spec);
-    const double cap = workCap();
-    if (s.recording && s.recorded > 0 && s.work + work > cap) flush();
+    spirula::SubmitBudget& rate = s.rates[pipe];
+    const double r = s.rateOf(rate);
+    const double seconds = r > 0 ? work / r : 0;
+    if (s.recording && s.recorded > 0 && s.predicted + seconds > s.target) flush();
     VkCommandBuffer cb = begin();
     vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
     if (params_size)
@@ -403,7 +475,14 @@ void Stream::dispatch(const char* entry, const SpecList& spec, uint32_t gx, uint
         s.query_names.emplace_back(entry);
     }
     barrier(cb);
-    s.work += work;
+    s.predicted += seconds;
+    if (work > 0) {
+        auto it = std::find_if(s.open.begin(), s.open.end(),
+                               [&](const Impl::Part& p) { return p.rate == &rate; });
+        if (it == s.open.end()) s.open.push_back({&rate, work, seconds});
+        else { it->work += work; it->seconds += seconds; }
+    }
+    if (submit_log_ms() > 0) s.logged.emplace_back(entry);
 
     if (debug_sync_enabled()) {
         sync();
@@ -419,7 +498,7 @@ void Stream::dispatch(const char* entry, const SpecList& spec, uint32_t gx, uint
     // NVIDIA result, bit for bit), and there is no reason to want an unbounded
     // batch anyway: submitting sooner lets the GPU start while the host is
     // still recording, and the four-deep ring keeps the host from running away.
-    if (++s.recorded >= max_dispatches_per_batch() || s.work >= cap) flush();
+    if (++s.recorded >= max_dispatches_per_batch() || s.predicted >= s.target) flush();
 }
 
 // Dispatches per command buffer. 64 is comfortably below where ANV starts

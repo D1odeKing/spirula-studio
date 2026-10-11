@@ -36,6 +36,7 @@ public:
         LoadError,  // preview parse failed
         Preparing,  // start_training: re-parse + engine setup
         Training,   // step loop running
+        Evaluating, // held-out render and metrics pass running
         Done,       // finished or stopped (checkpoint saved); engine viewable
         TrainError, // training pipeline failed
     };

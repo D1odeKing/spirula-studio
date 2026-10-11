@@ -13,7 +13,7 @@ workflows; physical or logical device handles are never shared.
 
 Runtime knobs: `SS_NN_LOG=0..3`, `SS_VK_DEVICE=<index|name|auto|uuid:hex>`,
 `SS_PROFILE=1`, `SS_VK_VALIDATION=1`, `SS_NN_DEBUG_SYNC=1`, `SS_NN_COOPMAT=0`,
-`SS_SUBMIT_BUDGET_MS` (docs/notes/gpu-submit-budget.md).
+`SS_SUBMIT_BUDGET_MS`, `SS_VK_SUBMIT_LOG` (docs/notes/gpu-submit-budget.md).
 
 The context probes optional `VK_EXT_memory_budget`. `Context::memoryBudget`
 queries the selected device's current local-heap budgets and usage, or returns

@@ -39,13 +39,15 @@ public:
         return std::max<int64_t>(1, std::min<int64_t>((int64_t)limit(), most));
     }
 
-    void record(double work, double seconds) {
+    // `solid_from` raises how long a sample must be to replace the rate, for a
+    // caller whose shorter samples are unlike the launches it sizes.
+    void record(double work, double seconds, double solid_from = 0) {
         if (work <= 0 || seconds <= 0) return;
         const double r = work / seconds;
         // A sample long enough to be mostly GPU work replaces the prior, and
         // replaces a faster estimate at once; anything else moves halfway in log
         // space, so a short submit's fixed latency cannot starve the next ones.
-        const bool solid = seconds > target_ / 16;
+        const bool solid = seconds > std::max(target_ / 16, solid_from);
         if (rate_ <= 0 || (solid && (!measured_ || r < rate_))) rate_ = r;
         else rate_ = std::sqrt(rate_ * r);
         measured_ = measured_ || solid;

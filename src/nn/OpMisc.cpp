@@ -583,12 +583,14 @@ void local_correlation(const Tensor& out, const Tensor& a, const Tensor& b,
     const KernelName entry = span_entry("resample.local_correlation", {out, a, b, warp});
     auto& stream = vk::Stream::get();
     const double work_per_thread = 32.0 * c;
-    const int64_t chunk = std::max<int64_t>(1, (int64_t)(stream.workCap() / work_per_thread));
+    const vk::SpecList spec{(uint32_t)(a.dtype == DType::F16)};
+    const int64_t chunk =
+        std::max<int64_t>(1, (int64_t)(stream.workCap(entry, spec) / work_per_thread));
     for (int64_t begin = 0; begin < out.numel(); begin += chunk) {
         p.start = (uint32_t)begin;
         p.count = (uint32_t)std::min(chunk, out.numel() - begin);
-        stream.dispatchFlat(entry, {(uint32_t)(a.dtype == DType::F16)}, p.count, 256,
-                            &p, sizeof p, &p.groups_per_row, p.count * work_per_thread);
+        stream.dispatchFlat(entry, spec, p.count, 256, &p, sizeof p, &p.groups_per_row,
+                            p.count * work_per_thread);
     }
 }
 

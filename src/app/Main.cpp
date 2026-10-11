@@ -157,6 +157,12 @@ int finish_tool(int rc) {
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef __APPLE__
+    // macOS 26 kills a long GPU command buffer the window server is waiting on
+    // ("Impacting Interactivity"). Apple's GPU driver reads this when the first
+    // Metal device opens; children inherit it, and a value already set is kept.
+    setenv("AGX_RELAX_CDM_CTXSTORE_TIMEOUT", "1", 0);
+#endif
     // Stop FULL buffering of stdout whenever it is NOT a terminal. Every tool
     // here is routinely run as a CHILD PROCESS with its output piped to a live
     // log -- the GUI does it for reconstruction, masking and meshing -- and the

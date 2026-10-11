@@ -2576,6 +2576,12 @@ SS_MSG(status_preparing,
     ES("preparando"),    PT("preparando"),   IT("preparazione"),
     NL("bezig met voorbereiden"), RU("подготовка"), TR("hazırlanıyor"));
 
+SS_MSG(status_evaluating,
+    EN("evaluating"),     JA("評価中"),         ZH_HANS("评估中"),  ZH_HANT("評估中"),
+    KO("평가 중"),         DE("Auswertung läuft"), FR("évaluation"),
+    ES("evaluando"),      PT("avaliando"),      IT("valutazione in corso"),
+    NL("bezig met evalueren"), RU("оценка"),     TR("değerlendiriliyor"));
+
 SS_MSG(status_ready,
     EN("ready"),         JA("準備完了"),      ZH_HANS("就绪"),     ZH_HANT("就緒"),
     KO("준비됨"),         DE("bereit"),       FR("prêt"),         ES("listo"),

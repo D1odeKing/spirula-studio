@@ -187,6 +187,10 @@ void TrainRunner::start_training(const TrainConfig& cfg, const std::string& pres
                 _metrics.push_back(m);
             };
             s->train(cb);
+            if (!s->stop_requested.load() && s->cfg.eval_mode != "all") {
+                _phase = Phase::Evaluating;
+                s->eval();
+            }
             _phase = Phase::Done;
         } catch (const std::exception& e) {
             std::lock_guard<std::mutex> lk(_mu);

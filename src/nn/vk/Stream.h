@@ -71,9 +71,10 @@ public:
     // Dispatches recorded before flush() happens on its own. See the definition
     // for why an unbounded command buffer is not an option.
     static uint32_t max_dispatches_per_batch();
-    // FLOPs one submission may carry before the driver's watchdog is at risk
-    // (core/SubmitBudget.h). An op whose single dispatch would exceed it splits.
-    double workCap();
+    // FLOPs of this kernel one submission may carry before the driver's watchdog
+    // is at risk (core/SubmitBudget.h). An op whose single dispatch would exceed it
+    // splits.
+    double workCap(const char* entry, const SpecList& spec);
 
     // Makes the NEXT submission wait on an external timeline. Used by the video
     // decoder, whose work runs on a different queue family: the decode signals

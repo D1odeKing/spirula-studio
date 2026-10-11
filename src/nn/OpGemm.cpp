@@ -224,13 +224,14 @@ void dispatch_gemm(const Tensor& out, const Tensor& x_in, const Tensor& w_in,
     // Row tiles take one grid axis (65535 cap: a full-resolution 1x1 conv passes
     // 4.2 M rows), each call must stay inside one pointer span and one submit's
     // work budget. Rows are independent, so a tall GEMM is the same call again.
-    auto by_rows = [&](int64_t tile_m, const auto& run) {
+    auto by_rows = [&](int64_t tile_m, const char* entry, const vk::SpecList& kspec,
+                       const auto& run) {
         // A row tile is the dispatch granularity, so the span is counted in tiles.
         const int64_t pitch = std::max(N * 4, (int64_t)p.x_row_stride * x_elem);
         const int64_t tiles = span_rows("gemm", pitch * tile_m);
         const double tile_work = 2.0 * tile_m * N * K;
-        const int64_t budget_tiles =
-            std::max<int64_t>(1, (int64_t)(vk::Stream::get().workCap() / tile_work));
+        const double cap = vk::Stream::get().workCap(entry, kspec);
+        const int64_t budget_tiles = std::max<int64_t>(1, (int64_t)(cap / tile_work));
         const int64_t per_call =
             std::min({tiles, budget_tiles, (int64_t)65535}) * tile_m;
         for (int64_t m0 = 0; m0 < M; m0 += per_call) {
@@ -266,8 +267,9 @@ void dispatch_gemm(const Tensor& out, const Tensor& x_in, const Tensor& w_in,
                                (uint32_t)(residual.valid() ? 1 : 0),
                                (uint32_t)(tile_m / 32),
                                (uint32_t)(gather ? g.ci : 0)};
-            by_rows(tile_m, [&](const GemmParams& q, int64_t rows) {
-                vk::Stream::get().dispatch("gemm_coop.gemm_nt_coop", cspec, tn,
+            const char* entry = "gemm_coop.gemm_nt_coop";
+            by_rows(tile_m, entry, cspec, [&](const GemmParams& q, int64_t rows) {
+                vk::Stream::get().dispatch(entry, cspec, tn,
                                            (uint32_t)((rows + tile_m - 1) / tile_m), 1,
                                            &q, sizeof(q), 2.0 * rows * N * K);
             });
@@ -291,7 +293,7 @@ void dispatch_gemm(const Tensor& out, const Tensor& x_in, const Tensor& w_in,
         const bool wide =
             M >= kBigTileLimit && N >= kBigTileLimit && w.dtype == DType::F16;
         const TileKernel& k = wide ? tile_kernels().f16 : tile_kernels().any;
-        by_rows(k.tile, [&](const GemmParams& q, int64_t rows) {
+        by_rows(k.tile, k.entry, spec, [&](const GemmParams& q, int64_t rows) {
             dispatch_tile(k, spec, rows, N, q);
         });
     }
