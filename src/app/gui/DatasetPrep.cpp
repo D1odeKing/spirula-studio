@@ -725,7 +725,7 @@ std::vector<std::vector<std::string>> input_sequences(const PrepJob& job,
         return a.empty() ? b : b.empty() ? a : a + "/" + b;
     };
     std::vector<std::vector<std::string>> out;
-    if (!in.is_video && !in.sequential) return out;
+    if (!in.sequential) return out;
     if (in.subcameras.empty()) {
         out.emplace_back();
         for (const std::string& lens : lens_dirs(job, in))

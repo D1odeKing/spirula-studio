@@ -364,6 +364,28 @@ inline bool KeyButton(const Msg& m, float w, const char* key, bool on = false) {
     corner_key(key);
     return hit;
 }
+namespace detail {
+inline bool toggle_button(const char* label, bool* v) {
+    const bool on = *v;
+    const ImVec4* c = ImGui::GetStyle().Colors;
+    ImGui::PushStyleColor(ImGuiCol_Button, on ? c[ImGuiCol_ButtonActive] : c[ImGuiCol_FrameBg]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                          on ? c[ImGuiCol_ButtonActive] : c[ImGuiCol_FrameBgHovered]);
+    ImGui::PushStyleColor(ImGuiCol_Text, on ? c[ImGuiCol_Text] : c[ImGuiCol_TextDisabled]);
+    const bool hit = ImGui::Button(label);
+    ImGui::PopStyleColor(3);
+    if (hit) *v = !on;
+    return hit;
+}
+}  // namespace detail
+// A switch drawn as a button whose label is what it switches: pressed while
+// on, greyed while off. Tighter than a checkbox in a row of several.
+inline bool ToggleButton(const Msg& m, bool* v) {
+    return detail::toggle_button(detail::label(m), v);
+}
+inline bool ToggleButton(const Msg& m, std::initializer_list<Arg> a, bool* v) {
+    return detail::toggle_button(detail::label(format(m, a), m), v);
+}
 inline bool SmallButton(const Msg& m) {
     return ImGui::SmallButton(detail::label(m));
 }

@@ -241,7 +241,6 @@ void SfmRunner::take_reconstruction(SfmJob& job) {
     job.overlap = _live.overlap;
     job.loop_closure = _live.loop_closure;
     job.prefilter_sequential = _live.prefilter_sequential;
-    job.use_sequence = _live.use_sequence;
     job.init_focal_px = _live.init_focal_px;
     job.init_distortion = _live.init_distortion;
     job.distortion_refine = _live.distortion_refine;
@@ -267,6 +266,8 @@ void SfmRunner::take_reconstruction(SfmJob& job) {
         job.prep.inputs[i].focal_factor = _live.prep.inputs[i].focal_factor;
         job.prep.inputs[i].subcameras = _live.prep.inputs[i].subcameras;
         job.prep.inputs[i].sequential = _live.prep.inputs[i].sequential;
+        job.prep.inputs[i].use_imu = _live.prep.inputs[i].use_imu;
+        job.prep.inputs[i].use_gps = _live.prep.inputs[i].use_gps;
     }
 }
 
@@ -506,8 +507,16 @@ sfm::Manifest SfmRunner::build_manifest(const SfmJob& job, const PrepResult& pre
         c.prefix = pc.subdir;
         c.telemetry = pc.path;
         c.fps = pc.fps;
+        for (const PrepInput& in : job.prep.inputs)
+            if (in.is_video && in.path == pc.path && in.subdir == pc.subdir) {
+                c.imu = in.use_imu;
+                c.gps = in.use_gps;
+            }
         man.captures.push_back(std::move(c));
     }
+    for (const PrepInput& in : job.prep.inputs)
+        if (!in.is_video && (!in.use_imu || !in.use_gps))
+            man.exif.push_back({in.subdir, in.use_gps, in.use_imu});
     man.rigs = build_rigs(job.prep, &prep);
     man.sequences = build_sequences(job);
     return man;
@@ -515,7 +524,6 @@ sfm::Manifest SfmRunner::build_manifest(const SfmJob& job, const PrepResult& pre
 
 std::vector<sfm::SequenceDef> SfmRunner::build_sequences(const SfmJob& job) {
     std::vector<sfm::SequenceDef> out;
-    if (!job.use_sequence) return out;
     for (const PrepInput& in : job.prep.inputs)
         for (std::vector<std::string>& members : input_sequences(job.prep, in)) {
             sfm::SequenceDef d;

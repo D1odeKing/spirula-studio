@@ -705,6 +705,15 @@ std::string stageSignature(const SfmConfig& cfg, uint32_t cmd) {
             out += "\n";
         }
     }
+    // Verification reads the gyro and GPS proposes pairs. Only what is held
+    // back is listed, so a state matched before the switches existed still fits.
+    if (cmd & (CMD_MATCH | CMD_MAP)) {
+        for (const TelemetryInput& t : cfg.telemetry_inputs)
+            if (!t.imu || !t.gps)
+                out += "telemetry " + t.prefix + (t.imu ? "" : " no-imu") + (t.gps ? "" : " no-gps") +
+                       "\n";
+        for (const std::string& p : cfg.exif_gps_off) out += "exif-gps-off " + p + "\n";
+    }
     // A sequence adds its temporal window to the pair list.
     if (cmd & (CMD_MATCH | CMD_MAP))
         for (const SequenceDef& d : cfg.sequences) {

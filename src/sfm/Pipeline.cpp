@@ -236,12 +236,22 @@ SensorCaptures loadSensorCaptures(const SfmConfig& cfg, bool verbose) {
     SensorCaptures out;
     if (cfg.sensor_gauge == "none") return out;
     for (const TelemetryInput& in : cfg.telemetry_inputs) {
+        if (!in.imu && !in.gps) continue;
         Telemetry t;
         std::string err;
         if (!telemetry_read(in.path, t, err) || t.empty()) {
             L::warn(Tag::Orient, M::sensor_file_bad, {in.path, err.empty() ? "-" : err});
             continue;
         }
+        if (!in.imu) {
+            t.gyro.clear();
+            t.accel.clear();
+            t.magnet.clear();
+            t.gravity.clear();
+            t.orientation.clear();
+        }
+        if (!in.gps) t.gps.clear();
+        if (t.empty()) continue;
         const TelemetryCheck c = telemetry_check(t);
         auto lc = std::make_unique<LoadedCapture>();
         if (!lc->timeline.init(t, c, err)) {
@@ -452,6 +462,8 @@ MetricGpsEvidence metricGpsEvidence(const SfmConfig& cfg, const SensorCaptures& 
          !walk && it != fs::recursive_directory_iterator(); it.increment(walk)) {
         if (!it->is_regular_file(ec) || isSidecar(it->path()) ||
             !isImageExt(it->path().extension().string()))
+            continue;
+        if (exifPrefixCovers(cfg.exif_gps_off, relativeTo(it->path(), imagedir).generic_string()))
             continue;
         const ExifData x = readExif(it->path().string());
         if (!x.has_gps) continue;
@@ -687,7 +699,8 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
     for (size_t i = 0; i < models.size() && attitude; i++) {
         if (gauge[i].oriented) continue;
         const AttitudeRef ref =
-            attitudeRefFromImages(models[i], imagedir, cfg.exif_orientation == "apply");
+            attitudeRefFromImages(models[i], imagedir, cfg.exif_orientation == "apply",
+                                  cfg.exif_attitude_off);
         if (ref.image_ids.empty()) continue;
         const AttitudeFit fit = fitAttitudeGauge(models[i], ref, cfg.exif_attitude == "auto");
         const long long model = (long long)i;
@@ -756,7 +769,7 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
                    {(long long)pc.matched, (long long)(pc.matched + pc.unmatched_model),
                     (long long)pc.unmatched_file});
         } else {
-            const MetricGpsCounts gc = metricRefFromGps(models[i], imagedir, ref);
+            const MetricGpsCounts gc = metricRefFromGps(models[i], imagedir, ref, cfg.exif_gps_off);
             L::out(Tag::Orient, M::metric_gps_read,
                    {(long long)gc.matched, (long long)(gc.matched + gc.no_gps),
                     (long long)gc.no_alt});
@@ -1183,7 +1196,7 @@ std::unique_ptr<ExifGpsPriors> makeExifGpsPriors(const SfmConfig& cfg, const std
     int with = 0, no_alt = 0;
     for (size_t i = 0; i < db.images.size(); i++) {
         auto it = stem2name.find(db.images[i].name);
-        if (it == stem2name.end()) continue;
+        if (it == stem2name.end() || exifPrefixCovers(cfg.exif_gps_off, it->second)) continue;
         const ExifData e = readExif((fs::path(imagedir) / it->second).string());
         if (!e.has_gps) continue;
         // As the metric gauge reads it: a fix with no altitude sits at sea level.

@@ -135,10 +135,15 @@ struct PrepInput {
     // The built-in the file's own metadata asks for (app::detect_log_lut).
     // Probed, never saved.
     std::string lut_detected;
-    // The photos were taken one after another and named in that order, so the
-    // reconstruction may trust neighbouring files first (a video's frames
-    // always are; SfmRunner::build_sequences).
+    // Hand the reconstruction this input's frame order (SfmRunner::build_sequences).
+    // Off by default for videos too: off came out more accurate on captures
+    // with no repeated structure for the order to tell apart.
     bool sequential = false;
+    // Whether the reconstruction reads this input's own sensors at all: a
+    // video's IMU and GPS track, or a photo's recorded attitude and EXIF GPS.
+    // How what is read is used is SfmJob's (sensor_gauge, metric_gps, ...).
+    bool use_imu = true;
+    bool use_gps = true;
     int video_tracks = 0;            // 0 = not probed yet
     // The camera folders found under this input, when it arrived with more
     // than one. Empty means the lens above describes all of it.
@@ -540,9 +545,9 @@ int probe_video_tracks(const std::string& ffmpeg_exe, const std::string& path,
 // dual-fisheye file or per view of a 360 plan, none for a single lens.
 std::vector<std::string> lens_dirs(const PrepJob& job, const PrepInput& in);
 
-// The frame sequences an input is, as folders under images/: a video's lens
-// folders, or a folder shot in order -- one per top-level camera folder when
-// they nest (a/cam0, a/cam1, b), as a dataset made from several videos does.
+// The frame sequences a `sequential` input is, as folders under images/: a
+// video's lens folders, or a photo folder -- one per top-level camera folder
+// when they nest (a/cam0, a/cam1, b), as a dataset made from several videos does.
 std::vector<std::vector<std::string>> input_sequences(const PrepJob& job,
                                                       const PrepInput& in);
 

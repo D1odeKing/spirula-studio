@@ -28,13 +28,16 @@ struct AttitudeRef {
 };
 
 // `pixels_turned` is `--exif-orientation apply`, under which a model camera is
-// the turned frame rather than the one the attitude describes.
+// the turned frame rather than the one the attitude describes. Images under a
+// `skip` prefix are not read.
 inline AttitudeRef attitudeRefFromImages(const Reconstruction& rec, const std::string& image_dir,
-                                         bool pixels_turned) {
+                                         bool pixels_turned,
+                                         const std::vector<std::string>& skip = {}) {
     AttitudeRef ref;
     for (const auto& kv : rec.images) {
         if (!kv.second.registered) continue;
         ref.registered++;
+        if (exifPrefixCovers(skip, kv.second.name)) continue;
         const std::string path = (std::filesystem::path(image_dir) / kv.second.name).string();
         const CameraAttitude a = readCameraAttitude(path);
         if (!a.valid) continue;

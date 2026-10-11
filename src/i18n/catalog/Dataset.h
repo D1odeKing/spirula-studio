@@ -8142,36 +8142,40 @@ SS_MSG(capture_internet,
 
 SS_MSG(capture_type_help,
     EN("What the input is, which sets the pairing strategy and how forgiving "
-       "the mapper is. Set from the input type when you picked it."),
+       "the mapper is. Video frames follows the first input's Sequential "
+       "switch."),
     JA("入力が何であるかです。ペアの作り方と、マッパーがどれだけ寛容かが"
-       "これで決まります。入力を選んだ時点で種類から設定されます。"),
-    ZH_HANS("输入是什么，它决定了配对策略以及建图器有多宽容。选择输入时会按"
-            "输入类型自动设定。"),
-    ZH_HANT("輸入是什麼，它決定了配對策略以及建圖器有多寬容。選擇輸入時會按"
-            "輸入類型自動設定。"),
+       "これで決まります。「動画のフレーム」は先頭の入力の「撮影順」に従います。"),
+    ZH_HANS("输入是什么，它决定了配对策略以及建图器有多宽容。“视频帧”跟随第一个"
+            "输入的“按顺序”开关。"),
+    ZH_HANT("輸入是什麼，它決定了配對策略以及建圖器有多寬容。「影片影格」跟隨第一個"
+            "輸入的「按順序」開關。"),
     KO("입력이 무엇인지입니다. 짝짓기 전략과 매퍼가 얼마나 관대한지가 여기서 "
-       "정해집니다. 입력을 고를 때 그 종류에서 자동으로 설정됩니다."),
+       "정해집니다. '동영상 프레임'은 첫 입력의 '순서대로' 스위치를 따릅니다."),
     DE("Was die Eingabe ist; davon hängen die Paarungsstrategie und die "
-       "Nachsicht des Mappers ab. Wird beim Auswählen aus der Eingabeart "
-       "gesetzt."),
+       "Nachsicht des Mappers ab. „Videobilder“ folgt dem Schalter "
+       "„Sequenziell“ der ersten Eingabe."),
     FR("Ce qu'est l'entrée, ce qui fixe la stratégie d'appariement et la "
-       "tolérance du mapper. Défini d'après le type d'entrée au moment du "
-       "choix."),
+       "tolérance du mapper. « Images de vidéo » suit l'interrupteur "
+       "« Séquentiel » de la première entrée."),
     ES("Qué es la entrada, lo que fija la estrategia de emparejamiento y la "
-       "tolerancia del mapeador. Se establece según el tipo de entrada al "
-       "elegirla."),
+       "tolerancia del mapeador. «Fotogramas de vídeo» sigue el interruptor "
+       "«Secuencial» de la primera entrada."),
     PT("O que é a entrada, o que define a estratégia de pareamento e a "
-       "tolerância do mapeador. Definido pelo tipo de entrada ao escolhê-la."),
+       "tolerância do mapeador. “Quadros de vídeo” segue o interruptor "
+       "“Sequencial” da primeira entrada."),
     IT("Che cosa è l'ingresso: da questo dipendono la strategia di "
-       "accoppiamento e quanto è tollerante il mapper. Impostato dal tipo di "
-       "ingresso al momento della scelta."),
+       "accoppiamento e quanto è tollerante il mapper. «Fotogrammi video» segue "
+       "l'interruttore «Sequenziale» del primo ingresso."),
     NL("Wat de invoer is; dat bepaalt de koppelstrategie en hoe mild de mapper "
-       "is. Wordt bij het kiezen uit het invoertype ingesteld."),
+       "is. ‘Videobeelden’ volgt de schakelaar ‘Sequentieel’ van de eerste "
+       "invoer."),
     RU("Чем является вход; от этого зависят стратегия составления пар и "
-       "снисходительность маппера. Задаётся по типу входа при его выборе."),
+       "снисходительность маппера. «Кадры видео» следует переключателю «По "
+       "порядку» первого входа."),
     TR("Girdinin ne olduğu; eşleştirme stratejisini ve haritalayıcının ne "
-       "kadar hoşgörülü olduğunu bu belirler. Girdiyi seçerken türünden "
-       "ayarlanır."));
+       "kadar hoşgörülü olduğunu bu belirler. “Video kareleri”, ilk girdinin "
+       "“Sıralı” anahtarını izler."));
 
 SS_MSG(features,
     EN("Features"),      JA("特徴"),          ZH_HANS("特征"),     ZH_HANT("特徵"),
@@ -9803,12 +9807,6 @@ SS_MSG(sensors_none,
     RU("нет данных датчиков"),
     TR("sensör verisi yok"));
 
-SS_MSG(sensors_imu_gps,
-    EN("IMU + GPS"),     JA("IMU + GPS"),    ZH_HANS("IMU + GPS"), ZH_HANT("IMU + GPS"),
-    KO("IMU + GPS"),     DE("IMU + GPS"),    FR("IMU + GPS"),     ES("IMU + GPS"),
-    PT("IMU + GPS"),     IT("IMU + GPS"),    NL("IMU + gps"),     RU("IMU + GPS"),
-    TR("IMU + GPS"));
-
 SS_MSG(sensors_imu,
     EN("IMU"),           JA("IMU"),          ZH_HANS("IMU"),      ZH_HANT("IMU"),
     KO("IMU"),           DE("IMU"),          FR("IMU"),           ES("IMU"),
@@ -9832,90 +9830,72 @@ SS_MSG(sensors_photo_gps,
     ES("GPS en {0}/{1}"),
     PT("GPS em {0}/{1}"),
     IT("GPS in {0}/{1}"),
-    NL("gps in {0}/{1}"),
+    NL("Gps in {0}/{1}"),
     RU("GPS в {0}/{1}"),
     TR("{0}/{1} dosyada GPS"));
 
-SS_MSG(sensors_photo_gps_attitude,
-    EN("GPS + attitude in {0}/{1}"),
-    JA("GPS・姿勢あり {0}/{1}"),
-    ZH_HANS("{0}/{1} 张有 GPS 与姿态"),
-    ZH_HANT("{0}/{1} 張有 GPS 與姿態"),
-    KO("GPS·자세 {0}/{1}장"),
-    DE("GPS + Lage in {0}/{1}"),
-    FR("GPS + attitude dans {0}/{1}"),
-    ES("GPS + actitud en {0}/{1}"),
-    PT("GPS + atitude em {0}/{1}"),
-    IT("GPS + assetto in {0}/{1}"),
-    NL("gps + stand in {0}/{1}"),
-    RU("GPS + ориентация в {0}/{1}"),
-    TR("{0}/{1} dosyada GPS + duruş"));
-
-SS_MSG(sensors_photo_gps_attitude_split,
-    EN("GPS in {0}/{2}, attitude in {1}/{2}"),
-    JA("GPSあり {0}/{2}、姿勢あり {1}/{2}"),
-    ZH_HANS("{0}/{2} 张有 GPS，{1}/{2} 张有姿态"),
-    ZH_HANT("{0}/{2} 張有 GPS，{1}/{2} 張有姿態"),
-    KO("GPS {0}/{2}장, 자세 {1}/{2}장"),
-    DE("GPS in {0}/{2}, Lage in {1}/{2}"),
-    FR("GPS dans {0}/{2}, attitude dans {1}/{2}"),
-    ES("GPS en {0}/{2}, actitud en {1}/{2}"),
-    PT("GPS em {0}/{2}, atitude em {1}/{2}"),
-    IT("GPS in {0}/{2}, assetto in {1}/{2}"),
-    NL("gps in {0}/{2}, stand in {1}/{2}"),
-    RU("GPS в {0}/{2}, ориентация в {1}/{2}"),
-    TR("{0}/{2} dosyada GPS, {1}/{2} dosyada duruş"));
-
 SS_MSG(sensors_photo_attitude,
-    EN("attitude in {0}/{1}"),
+    EN("Attitude in {0}/{1}"),
     JA("姿勢あり {0}/{1}"),
     ZH_HANS("{0}/{1} 张有姿态"),
     ZH_HANT("{0}/{1} 張有姿態"),
     KO("자세 {0}/{1}장"),
     DE("Lage in {0}/{1}"),
-    FR("attitude dans {0}/{1}"),
-    ES("actitud en {0}/{1}"),
-    PT("atitude em {0}/{1}"),
-    IT("assetto in {0}/{1}"),
-    NL("stand in {0}/{1}"),
-    RU("ориентация в {0}/{1}"),
+    FR("Attitude dans {0}/{1}"),
+    ES("Actitud en {0}/{1}"),
+    PT("Atitude em {0}/{1}"),
+    IT("Assetto in {0}/{1}"),
+    NL("Stand in {0}/{1}"),
+    RU("Ориентация в {0}/{1}"),
     TR("{0}/{1} dosyada duruş"));
 
 SS_MSG(sensors_photo_attitude_help,
     EN("Attitude is which way the camera pointed -- the yaw, pitch and roll a "
        "drone records with each photo. The reconstruction takes which way is "
-       "up, and north, from it."),
+       "up, and north, from it. Off ignores it entirely; Advanced > Sensors "
+       "sets how it is used when on."),
     JA("姿勢とは、ドローンが写真ごとに記録するカメラの向き (ヨー・ピッチ・ロール) "
-       "です。再構成はここから上方向と北を決めます。"),
+       "です。再構成はここから上方向と北を決めます。オフにすると完全に無視します。"
+       "オンのときの使い方は 詳細設定 > センサー で決めます。"),
     ZH_HANS("姿态是无人机随每张照片记录的相机朝向 (偏航、俯仰、横滚)。重建由它确定"
-            "上方向和北向。"),
+            "上方向和北向。关闭则完全忽略；开启时如何使用由 高级 > 传感器 决定。"),
     ZH_HANT("姿態是無人機隨每張相片記錄的相機朝向 (偏航、俯仰、橫滾)。重建由它確定"
-            "上方向和北向。"),
+            "上方向和北向。關閉則完全忽略；開啟時如何使用由 進階 > 感測器 決定。"),
     KO("자세는 드론이 사진마다 기록하는 카메라의 방향 (요·피치·롤) 입니다. 재구성은 "
-       "이것으로 위 방향과 북쪽을 정합니다."),
+       "이것으로 위 방향과 북쪽을 정합니다. 끄면 완전히 무시합니다. 켰을 때 어떻게 "
+       "쓸지는 고급 > 센서에서 정합니다."),
     DE("Die Lage ist, wohin die Kamera zeigte -- Gier-, Nick- und Rollwinkel, wie "
        "eine Drohne sie zu jedem Foto aufzeichnet. Die Rekonstruktion nimmt "
-       "daraus, wo oben und wo Norden ist."),
+       "daraus, wo oben und wo Norden ist. Aus ignoriert sie ganz; wie sie "
+       "eingeschaltet genutzt wird, legt Erweitert > Sensoren fest."),
     FR("L'attitude est l'orientation de la caméra -- lacet, tangage et roulis -- "
        "telle qu'un drone l'enregistre avec chaque photo. La reconstruction en "
-       "tire le haut et le nord."),
+       "tire le haut et le nord. Désactivée, elle est entièrement ignorée ; "
+       "Avancé > Capteurs règle son usage quand elle est activée."),
     ES("La actitud es hacia dónde apuntaba la cámara -- guiñada, cabeceo y "
        "alabeo -- tal como un dron la registra con cada foto. La reconstrucción "
-       "toma de ella la vertical y el norte."),
+       "toma de ella la vertical y el norte. Desactivada, se ignora por "
+       "completo; Avanzado > Sensores decide cómo se usa cuando está activada."),
     PT("A atitude é para onde a câmera apontava -- guinada, arfagem e rolamento "
        "-- tal como um drone a regista com cada foto. A reconstrução tira dela a "
-       "vertical e o norte."),
+       "vertical e o norte. Desligada, é totalmente ignorada; Avançado > "
+       "Sensores define como é usada quando ligada."),
     IT("L'assetto è dove puntava la fotocamera -- imbardata, beccheggio e rollio "
        "-- come un drone lo registra con ogni foto. La ricostruzione ne ricava la "
-       "verticale e il nord."),
+       "verticale e il nord. Disattivato, viene ignorato del tutto; Avanzate > "
+       "Sensori stabilisce come usarlo quando è attivo."),
     NL("De stand is waar de camera heen wees -- gier-, stamp- en rolhoek, zoals "
        "een drone die bij elke foto vastlegt. De reconstructie haalt er boven en "
-       "noord uit."),
+       "noord uit. Uit negeert hem volledig; Geavanceerd > Sensoren bepaalt hoe "
+       "hij aan wordt gebruikt."),
     RU("Ориентация — куда смотрела камера: рыскание, тангаж и крен, как дрон "
-       "записывает их с каждым снимком. Реконструкция берёт из неё верх и север."),
+       "записывает их с каждым снимком. Реконструкция берёт из неё верх и север. "
+       "Выключено — полностью игнорируется; как она используется во включённом "
+       "виде, задаёт Дополнительно > Датчики."),
     TR("Duruş, kameranın nereye baktığıdır -- bir dronun her fotoğrafla kaydettiği "
        "sapma, yunuslama ve yatış açıları. Yeniden yapılandırma yukarıyı ve "
-       "kuzeyi buradan alır."));
+       "kuzeyi buradan alır. Kapalıyken tamamen yok sayılır; açıkken nasıl "
+       "kullanılacağını Gelişmiş > Sensörler belirler."));
 
 SS_MSG(sensors_carrier_tooltip,
     EN("Telemetry format: {0}"),
@@ -9931,6 +9911,251 @@ SS_MSG(sensors_carrier_tooltip,
     NL("Telemetrieformaat: {0}"),
     RU("Формат телеметрии: {0}"),
     TR("Telemetri biçimi: {0}"));
+
+SS_MSG(sensors_video_imu_help,
+    EN("This video's IMU -- gyro, accelerometer and recorded orientation. The "
+       "reconstruction takes which way is up and the metric scale from it, and "
+       "checks its matches against it. Off ignores it entirely; Advanced > "
+       "Sensors sets how it is used when on."),
+    JA("この動画のIMU (ジャイロ、加速度計、記録された姿勢) です。再構成はここから"
+       "上方向と実寸を求め、マッチの検証にも使います。オフにすると完全に無視します。"
+       "オンのときの使い方は 詳細設定 > センサー で決めます。"),
+    ZH_HANS("这个视频的 IMU (陀螺仪、加速度计和记录的姿态)。重建由它确定上方向和"
+            "实际尺度，并用它检验匹配。关闭则完全忽略；开启时如何使用由 高级 > "
+            "传感器 决定。"),
+    ZH_HANT("這個影片的 IMU (陀螺儀、加速度計和記錄的姿態)。重建由它確定上方向和"
+            "實際尺度，並用它檢驗匹配。關閉則完全忽略；開啟時如何使用由 進階 > "
+            "感測器 決定。"),
+    KO("이 동영상의 IMU (자이로, 가속도계, 기록된 자세) 입니다. 재구성은 이것으로 "
+       "위쪽 방향과 실척을 정하고, 매칭 검증에도 씁니다. 끄면 완전히 무시합니다. "
+       "켰을 때 어떻게 쓸지는 고급 > 센서에서 정합니다."),
+    DE("Die IMU dieses Videos -- Gyroskop, Beschleunigungsmesser und "
+       "aufgezeichnete Lage. Die Rekonstruktion nimmt daraus, wo oben ist, und "
+       "den metrischen Maßstab, und prüft ihre Zuordnungen daran. Aus ignoriert "
+       "sie ganz; wie sie eingeschaltet genutzt wird, legt Erweitert > Sensoren "
+       "fest."),
+    FR("L'IMU de cette vidéo -- gyroscope, accéléromètre et orientation "
+       "enregistrée. La reconstruction en tire le haut et l'échelle métrique, et "
+       "y vérifie ses appariements. Désactivée, elle est entièrement ignorée ; "
+       "Avancé > Capteurs règle son usage quand elle est activée."),
+    ES("La IMU de este vídeo: giroscopio, acelerómetro y orientación "
+       "registrada. La reconstrucción toma de ella la vertical y la escala "
+       "métrica, y comprueba con ella sus correspondencias. Desactivada, se "
+       "ignora por completo; Avanzado > Sensores decide cómo se usa cuando está "
+       "activada."),
+    PT("A IMU deste vídeo: giroscópio, acelerómetro e orientação registada. A "
+       "reconstrução tira dela a vertical e a escala métrica, e verifica com ela "
+       "as correspondências. Desligada, é totalmente ignorada; Avançado > "
+       "Sensores define como é usada quando ligada."),
+    IT("L'IMU di questo video: giroscopio, accelerometro e orientamento "
+       "registrato. La ricostruzione ne ricava la verticale e la scala metrica, "
+       "e vi verifica le corrispondenze. Disattivata, viene ignorata del tutto; "
+       "Avanzate > Sensori stabilisce come usarla quando è attiva."),
+    NL("De IMU van deze video: gyroscoop, versnellingsmeter en vastgelegde "
+       "stand. De reconstructie haalt er boven en de metrische schaal uit, en "
+       "toetst er haar overeenkomsten aan. Uit negeert hem volledig; Geavanceerd "
+       "> Sensoren bepaalt hoe hij aan wordt gebruikt."),
+    RU("IMU этого видео — гироскоп, акселерометр и записанная ориентация. "
+       "Реконструкция берёт из неё направление вверх и масштаб в метрах и "
+       "проверяет по ней сопоставления. Выключено — полностью игнорируется; как "
+       "она используется во включённом виде, задаёт Дополнительно > Датчики."),
+    TR("Bu videonun IMU'su: jiroskop, ivmeölçer ve kaydedilen duruş. Yeniden "
+       "oluşturma yukarı yönünü ve metrik ölçeği bundan alır ve eşleşmelerini "
+       "buna göre denetler. Kapalıyken tamamen yok sayılır; açıkken nasıl "
+       "kullanılacağını Gelişmiş > Sensörler belirler."));
+
+SS_MSG(sensors_video_gps_help,
+    EN("This video's GPS track, used for the metric scale, the compass heading "
+       "and the model's place on the map. Keep it on outdoors when the capture "
+       "spans tens of metres or more. Turn it off for a small or indoor scene: "
+       "GPS there is off by metres, more than the scene's own size, and only "
+       "misleads the reconstruction."),
+    JA("この動画のGPSトラックです。"
+       "実寸、方位、地図上の位置に使います。"
+       "屋外で数十メートル以上にわたる撮影ではオンのままに。"
+       "狭いシーンや屋内ではオフにします。"
+       "そこでは GPS の誤差がシーン自体より大きい数メートルにもなり、再構成を誤らせるだけです。"),
+    ZH_HANS("这个视频的 GPS 轨迹，用于确定实际尺度、罗盘方位和模型在地图上的位置。"
+            "户外拍摄范围达数十米以上时保持开启。"
+            "小场景或室内请关闭：那里的 GPS 误差有好几米，比场景本身还大，只会误导重建。"),
+    ZH_HANT("這個影片的 GPS 軌跡，用於確定實際尺度、羅盤方位和模型在地圖上的位置。"
+            "戶外拍攝範圍達數十公尺以上時保持開啟。"
+            "小場景或室內請關閉：那裡的 GPS 誤差有好幾公尺，比場景本身還大，只會誤導重建。"),
+    KO("이 동영상의 GPS 경로로, 실척, 나침반 방위, 지도 위 모델의 위치에 씁니다. "
+       "야외에서 수십 미터 이상을 촬영했다면 켜 두세요. "
+       "작은 장면이나 실내라면 끄세요. "
+       "그런 곳의 GPS는 장면 자체보다 큰 몇 미터씩 틀려서 재구성을 오도할 뿐입니다."),
+    DE("Die GPS-Spur dieses Videos, genutzt für den metrischen Maßstab, die "
+       "Kompassrichtung und den Platz des Modells auf der Karte. Draußen "
+       "anlassen, wenn die Aufnahme zig Meter oder mehr umfasst. Bei einer "
+       "kleinen Szene oder drinnen ausschalten: GPS liegt dort um Meter daneben,"
+       " mehr als die Szene groß ist, und führt die Rekonstruktion nur in die "
+       "Irre."),
+    FR("La trace GPS de cette vidéo, utilisée pour l'échelle métrique, le cap et"
+       " la place du modèle sur la carte. Laissez-le actif en extérieur quand la"
+       " prise couvre des dizaines de mètres ou plus. Désactivez-le pour une "
+       "petite scène ou en intérieur : le GPS s'y trompe de plusieurs mètres, "
+       "plus que la taille de la scène, et ne fait qu'égarer la reconstruction."),
+    ES("La traza GPS de este vídeo, usada para la escala métrica, el rumbo y el "
+       "lugar del modelo en el mapa. Déjalo activado en exteriores cuando la "
+       "captura abarca decenas de metros o más. Desactívalo en una escena "
+       "pequeña o en interiores: allí el GPS se equivoca en metros, más que el "
+       "tamaño de la escena, y solo confunde a la reconstrucción."),
+    PT("O trajeto GPS deste vídeo, usado para a escala métrica, o rumo e o lugar"
+       " do modelo no mapa. Deixe-o ligado no exterior quando a captura abrange "
+       "dezenas de metros ou mais. Desligue-o numa cena pequena ou no interior: "
+       "aí o GPS erra por metros, mais do que o tamanho da cena, e só engana a "
+       "reconstrução."),
+    IT("La traccia GPS di questo video, usata per la scala metrica, la direzione"
+       " della bussola e il posto del modello sulla mappa. Lascialo attivo "
+       "all'aperto quando la ripresa copre decine di metri o più. Spegnilo per "
+       "una scena piccola o al chiuso: lì il GPS sbaglia di metri, più della "
+       "scena stessa, e non fa che fuorviare la ricostruzione."),
+    NL("Het gps-spoor van deze video, gebruikt voor de metrische schaal, de "
+       "kompasrichting en de plaats van het model op de kaart. Laat het buiten "
+       "aan als de opname tientallen meters of meer beslaat. Zet het uit bij een"
+       " kleine scène of binnen: gps zit er meters naast, meer dan de scène "
+       "groot is, en misleidt de reconstructie alleen."),
+    RU("GPS-трек этого видео: по нему задаются масштаб в метрах, курс по компасу"
+       " и место модели на карте. Оставьте включённым на улице, если съёмка "
+       "охватывает десятки метров и больше. Выключите для небольшой сцены или в "
+       "помещении: там GPS ошибается на метры, больше размера самой сцены, и "
+       "только сбивает реконструкцию."),
+    TR("Bu videonun GPS izi; metrik ölçek, pusula yönü ve modelin haritadaki "
+       "yeri için kullanılır. Açık havada çekim onlarca metre ya da daha "
+       "fazlasını kapsıyorsa açık tutun. Küçük ya da iç mekân sahnesinde "
+       "kapatın: oradaki GPS sahnenin kendisinden büyük, metrelerce hatalıdır ve"
+       " yeniden oluşturmayı yalnızca yanıltır."));
+
+SS_MSG(sensors_photo_gps_help,
+    EN("The GPS position in these photos' EXIF, used for the metric scale, the "
+       "compass heading and the model's place on the map. Keep it on outdoors "
+       "when the capture spans tens of metres or more. Turn it off for a small "
+       "or indoor scene: GPS there is off by metres, more than the scene's own "
+       "size, and only misleads the reconstruction."),
+    JA("これらの写真の EXIF にある GPS 位置です。"
+       "実寸、方位、地図上の位置に使います。"
+       "屋外で数十メートル以上にわたる撮影ではオンのままに。"
+       "狭いシーンや屋内ではオフにします。"
+       "そこでは GPS の誤差がシーン自体より大きい数メートルにもなり、再構成を誤らせるだけです。"),
+    ZH_HANS("这些照片 EXIF 中的 GPS 位置，用于确定实际尺度、罗盘方位和模型在地图上的位置。"
+            "户外拍摄范围达数十米以上时保持开启。"
+            "小场景或室内请关闭：那里的 GPS 误差有好几米，比场景本身还大，只会误导重建。"),
+    ZH_HANT("這些相片 EXIF 中的 GPS 位置，用於確定實際尺度、羅盤方位和模型在地圖上的位置。"
+            "戶外拍攝範圍達數十公尺以上時保持開啟。"
+            "小場景或室內請關閉：那裡的 GPS 誤差有好幾公尺，比場景本身還大，只會誤導重建。"),
+    KO("이 사진들의 EXIF에 있는 GPS 위치로, 실척, 나침반 방위, 지도 위 모델의 위치에 씁니다. "
+       "야외에서 수십 미터 이상을 촬영했다면 켜 두세요. "
+       "작은 장면이나 실내라면 끄세요. "
+       "그런 곳의 GPS는 장면 자체보다 큰 몇 미터씩 틀려서 재구성을 오도할 뿐입니다."),
+    DE("Die GPS-Position im EXIF dieser Fotos, genutzt für den metrischen "
+       "Maßstab, die Kompassrichtung und den Platz des Modells auf der Karte. "
+       "Draußen anlassen, wenn die Aufnahme zig Meter oder mehr umfasst. Bei "
+       "einer kleinen Szene oder drinnen ausschalten: GPS liegt dort um Meter "
+       "daneben, mehr als die Szene groß ist, und führt die Rekonstruktion nur "
+       "in die Irre."),
+    FR("La position GPS dans l'EXIF de ces photos, utilisée pour l'échelle "
+       "métrique, le cap et la place du modèle sur la carte. Laissez-le actif en"
+       " extérieur quand la prise couvre des dizaines de mètres ou plus. "
+       "Désactivez-le pour une petite scène ou en intérieur : le GPS s'y trompe "
+       "de plusieurs mètres, plus que la taille de la scène, et ne fait "
+       "qu'égarer la reconstruction."),
+    ES("La posición GPS en el EXIF de estas fotos, usada para la escala métrica,"
+       " el rumbo y el lugar del modelo en el mapa. Déjalo activado en "
+       "exteriores cuando la captura abarca decenas de metros o más. Desactívalo"
+       " en una escena pequeña o en interiores: allí el GPS se equivoca en "
+       "metros, más que el tamaño de la escena, y solo confunde a la "
+       "reconstrucción."),
+    PT("A posição GPS no EXIF destas fotos, usada para a escala métrica, o rumo "
+       "e o lugar do modelo no mapa. Deixe-o ligado no exterior quando a captura"
+       " abrange dezenas de metros ou mais. Desligue-o numa cena pequena ou no "
+       "interior: aí o GPS erra por metros, mais do que o tamanho da cena, e só "
+       "engana a reconstrução."),
+    IT("La posizione GPS nell'EXIF di queste foto, usata per la scala metrica, "
+       "la direzione della bussola e il posto del modello sulla mappa. Lascialo "
+       "attivo all'aperto quando la ripresa copre decine di metri o più. "
+       "Spegnilo per una scena piccola o al chiuso: lì il GPS sbaglia di metri, "
+       "più della scena stessa, e non fa che fuorviare la ricostruzione."),
+    NL("De gps-positie in de EXIF van deze foto's, gebruikt voor de metrische "
+       "schaal, de kompasrichting en de plaats van het model op de kaart. Laat "
+       "het buiten aan als de opname tientallen meters of meer beslaat. Zet het "
+       "uit bij een kleine scène of binnen: gps zit er meters naast, meer dan de"
+       " scène groot is, en misleidt de reconstructie alleen."),
+    RU("Положение GPS в EXIF этих фотографий: по нему задаются масштаб в метрах,"
+       " курс по компасу и место модели на карте. Оставьте включённым на улице, "
+       "если съёмка охватывает десятки метров и больше. Выключите для небольшой "
+       "сцены или в помещении: там GPS ошибается на метры, больше размера самой "
+       "сцены, и только сбивает реконструкцию."),
+    TR("Bu fotoğrafların EXIF'indeki GPS konumu; metrik ölçek, pusula yönü ve "
+       "modelin haritadaki yeri için kullanılır. Açık havada çekim onlarca metre"
+       " ya da daha fazlasını kapsıyorsa açık tutun. Küçük ya da iç mekân "
+       "sahnesinde kapatın: oradaki GPS sahnenin kendisinden büyük, metrelerce "
+       "hatalıdır ve yeniden oluşturmayı yalnızca yanıltır."));
+
+SS_MSG(sensors_off_in_advanced,
+    EN("Turned off for every input under Advanced > Sensors: {0}."),
+    JA("詳細設定 > センサー の「{0}」で、すべての入力に対してオフになっています。"),
+    ZH_HANS("已在 高级 > 传感器 的“{0}”中对所有输入关闭。"),
+    ZH_HANT("已在 進階 > 感測器 的「{0}」中對所有輸入關閉。"),
+    KO("고급 > 센서의 '{0}'에서 모든 입력에 대해 꺼져 있습니다."),
+    DE("Unter Erweitert > Sensoren für alle Eingaben ausgeschaltet: {0}."),
+    FR("Désactivé pour toutes les entrées dans Avancé > Capteurs : {0}."),
+    ES("Desactivado para todas las entradas en Avanzado > Sensores: {0}."),
+    PT("Desligado para todas as entradas em Avançado > Sensores: {0}."),
+    IT("Disattivato per tutti gli ingressi in Avanzate > Sensori: {0}."),
+    NL("Voor alle invoer uitgeschakeld onder Geavanceerd > Sensoren: {0}."),
+    RU("Выключено для всех входов в разделе Дополнительно > Датчики: {0}."),
+    TR("Gelişmiş > Sensörler altında tüm girdiler için kapalı: {0}."));
+
+SS_MSG(sensors_unused_colmap,
+    EN("COLMAP reads no sensor data; only the built-in reconstruction uses it."),
+    JA("COLMAP はセンサーデータを読みません。使うのは内蔵の再構成だけです。"),
+    ZH_HANS("COLMAP 不读取传感器数据，只有内置重建会使用。"),
+    ZH_HANT("COLMAP 不讀取感測器資料，只有內建重建會使用。"),
+    KO("COLMAP은 센서 데이터를 읽지 않습니다. 내장 재구성만 사용합니다."),
+    DE("COLMAP liest keine Sensordaten; nur die eingebaute Rekonstruktion nutzt "
+       "sie."),
+    FR("COLMAP ne lit aucune donnée de capteur ; seule la reconstruction "
+       "intégrée les utilise."),
+    ES("COLMAP no lee datos de sensores; solo la reconstrucción integrada los "
+       "usa."),
+    PT("O COLMAP não lê dados de sensores; só a reconstrução integrada os usa."),
+    IT("COLMAP non legge i dati dei sensori; li usa solo la ricostruzione "
+       "integrata."),
+    NL("COLMAP leest geen sensordata; alleen de ingebouwde reconstructie "
+       "gebruikt ze."),
+    RU("COLMAP не читает данные датчиков; их использует только встроенная "
+       "реконструкция."),
+    TR("COLMAP sensör verisi okumaz; onu yalnızca yerleşik yeniden oluşturma "
+       "kullanır."));
+
+SS_MSG(sensors_section_caption,
+    EN("How the sensors left on in the input rows are used. Off here turns that "
+       "sensor off for every input."),
+    JA("入力の各行でオンのままのセンサーをどう使うかです。ここでオフにすると、"
+       "そのセンサーはすべての入力でオフになります。"),
+    ZH_HANS("在各输入行中保持开启的传感器如何使用。在这里关闭，则该传感器对所有"
+            "输入都关闭。"),
+    ZH_HANT("在各輸入列中保持開啟的感測器如何使用。在這裡關閉，則該感測器對所有"
+            "輸入都關閉。"),
+    KO("입력 행에서 켜 둔 센서를 어떻게 쓸지입니다. 여기서 끄면 그 센서는 모든 "
+       "입력에서 꺼집니다."),
+    DE("Wie die in den Eingabezeilen eingeschalteten Sensoren genutzt werden. "
+       "Aus schaltet den Sensor hier für alle Eingaben ab."),
+    FR("Comment sont utilisés les capteurs laissés actifs dans les lignes "
+       "d'entrée. Désactiver ici coupe ce capteur pour toutes les entrées."),
+    ES("Cómo se usan los sensores que quedan activados en las filas de entrada. "
+       "Desactivarlo aquí lo apaga para todas las entradas."),
+    PT("Como são usados os sensores deixados ligados nas linhas de entrada. "
+       "Desligar aqui desliga esse sensor para todas as entradas."),
+    IT("Come si usano i sensori lasciati attivi nelle righe degli ingressi. "
+       "Disattivarlo qui lo spegne per tutti gli ingressi."),
+    NL("Hoe de sensoren die in de invoerrijen aan staan worden gebruikt. Hier "
+       "uitzetten schakelt die sensor voor alle invoer uit."),
+    RU("Как используются датчики, оставленные включёнными в строках входов. "
+       "Выключение здесь отключает датчик для всех входов."),
+    TR("Girdi satırlarında açık bırakılan sensörlerin nasıl kullanılacağı. "
+       "Burada kapatmak o sensörü tüm girdiler için kapatır."));
 
 SS_MSG(sfm_metric_gps_help,
     EN("Write the model in metres, sized and turned to the GPS in the photos' "
@@ -15368,152 +15593,81 @@ inline const DatasetPresetText* preset_text(const char* name) {
 }
 
 
-SS_MSG(frames_in_order,
-    EN("Shot in order"),
-    JA("撮影順に並んでいる"),
-    ZH_HANS("按拍摄顺序"),
-    ZH_HANT("按拍攝順序"),
-    KO("촬영 순서대로"),
-    DE("In Reihenfolge aufgenommen"),
-    FR("Prises dans l'ordre"),
-    ES("Tomadas en orden"),
-    PT("Captadas por ordem"),
-    IT("Scattate in ordine"),
-    NL("In volgorde opgenomen"),
-    RU("Сняты по порядку"),
-    TR("Sırayla çekildi"));
+SS_MSG(source_sequential,
+    EN("Sequential"),    JA("撮影順"),       ZH_HANS("按顺序"),    ZH_HANT("按順序"),
+    KO("순서대로"),       DE("Sequenziell"),  FR("Séquentiel"),    ES("Secuencial"),
+    PT("Sequencial"),    IT("Sequenziale"),  NL("Sequentieel"),   RU("По порядку"),
+    TR("Sıralı"));
 
-SS_MSG(frames_in_order_help,
-    EN("The photos in this folder were taken one after another and are named in "
-       "shooting order, so the reconstruction may treat neighbouring files as "
-       "neighbouring views. A video's frames always are."),
-    JA("このフォルダーの写真は続けて撮影され、ファイル名が撮影順になっているため、"
-       "再構成では隣り合うファイルを隣り合う視点として扱えます。動画のフレームは"
-       "常にそうです。"),
-    ZH_HANS("这个文件夹里的照片是连续拍摄的，且文件名按拍摄顺序排列，重建时可以把"
-            "相邻的文件当作相邻的视角。视频帧总是如此。"),
-    ZH_HANT("這個資料夾裡的相片是連續拍攝的，且檔名按拍攝順序排列，重建時可以把"
-            "相鄰的檔案當作相鄰的視角。影片影格總是如此。"),
-    KO("이 폴더의 사진은 연속으로 촬영되었고 파일 이름이 촬영 순서대로여서, "
-       "재구성에서 이웃한 파일을 이웃한 시점으로 다룰 수 있습니다. 동영상 프레임은 "
-       "항상 그렇습니다."),
-    DE("Die Fotos in diesem Ordner wurden nacheinander aufgenommen und sind in "
-       "Aufnahmereihenfolge benannt, sodass die Rekonstruktion benachbarte Dateien "
-       "als benachbarte Ansichten behandeln darf. Die Frames eines Videos sind es "
-       "immer."),
-    FR("Les photos de ce dossier ont été prises l'une après l'autre et sont nommées "
-       "dans l'ordre de prise de vue, si bien que la reconstruction peut traiter des "
-       "fichiers voisins comme des vues voisines. Les images d'une vidéo le sont "
-       "toujours."),
-    ES("Las fotos de esta carpeta se tomaron una tras otra y están nombradas en orden "
-       "de captura, así que la reconstrucción puede tratar archivos vecinos como "
-       "vistas vecinas. Los fotogramas de un vídeo siempre lo son."),
-    PT("As fotografias desta pasta foram captadas uma após a outra e têm nomes por "
-       "ordem de captação, pelo que a reconstrução pode tratar ficheiros vizinhos "
-       "como vistas vizinhas. Os quadros de um vídeo são-no sempre."),
-    IT("Le foto in questa cartella sono state scattate una dopo l'altra e sono "
-       "nominate in ordine di scatto, quindi la ricostruzione può trattare file "
-       "vicini come viste vicine. I fotogrammi di un video lo sono sempre."),
-    NL("De foto's in deze map zijn na elkaar genomen en in opnamevolgorde benoemd, "
-       "zodat de reconstructie naburige bestanden als naburige gezichtspunten mag "
-       "behandelen. De frames van een video zijn dat altijd."),
-    RU("Фотографии в этой папке сняты одна за другой и названы в порядке съёмки, "
-       "поэтому реконструкция может считать соседние файлы соседними ракурсами. "
-       "Кадры видео таковы всегда."),
-    TR("Bu klasördeki fotoğraflar art arda çekilmiş ve çekim sırasına göre "
-       "adlandırılmıştır; bu yüzden yeniden oluşturma komşu dosyaları komşu "
-       "bakış açıları olarak ele alabilir. Bir videonun kareleri her zaman "
-       "öyledir."));
-
-SS_MSG(use_sequence,
-    EN("Use the frame order"),
-    JA("フレームの順序を使う"),
-    ZH_HANS("利用帧的顺序"),
-    ZH_HANT("利用影格的順序"),
-    KO("프레임 순서 사용"),
-    DE("Bildreihenfolge nutzen"),
-    FR("Utiliser l'ordre des images"),
-    ES("Usar el orden de los fotogramas"),
-    PT("Usar a ordem dos quadros"),
-    IT("Usare l'ordine dei fotogrammi"),
-    NL("Beeldvolgorde gebruiken"),
-    RU("Учитывать порядок кадров"),
-    TR("Kare sırasını kullan"));
-
-SS_MSG(use_sequence_help,
-    EN("For video frames and folders marked as shot in order: the mapper places "
-       "each image among its neighbours in the sequence before it consults the "
-       "rest of the model, and starts the model from a neighbouring pair. That is "
-       "what keeps a repeated structure -- one turn of a spiral staircase, a "
-       "symmetric gate seen from both sides -- from being folded onto its twin. "
-       "Off reconstructs from image content alone."),
-    JA("動画のフレームと「撮影順に並んでいる」フォルダーに対して、マッパーは各"
-       "画像をまずシーケンス内の隣接画像の間に配置してからモデルの残りを参照し、"
-       "モデルも隣接ペアから始めます。らせん階段の一周や両側から撮った対称的な"
-       "ゲートのような繰り返し構造が、そっくりな相手の上に折り畳まれるのを防ぎ"
-       "ます。オフでは画像の内容だけで再構成します。"),
-    ZH_HANS("对视频帧和标记为“按拍摄顺序”的文件夹：建图时先把每张图像放到序列中"
-            "相邻图像之间，再参考模型的其余部分，并从一对相邻图像开始建模。这样"
-            "重复的结构——螺旋楼梯的一圈、从两侧拍摄的对称门框——就不会被折叠到"
-            "它的孪生结构上。关闭后仅凭图像内容重建。"),
-    ZH_HANT("對影片影格和標記為「按拍攝順序」的資料夾：建圖時先把每張影像放到序列中"
-            "相鄰影像之間，再參考模型的其餘部分，並從一對相鄰影像開始建模。這樣"
-            "重複的結構——螺旋樓梯的一圈、從兩側拍攝的對稱門框——就不會被摺疊到"
-            "它的孿生結構上。關閉後僅憑影像內容重建。"),
-    KO("동영상 프레임과 '촬영 순서대로'로 표시한 폴더에 대해: 매퍼는 각 이미지를 "
-       "먼저 시퀀스의 이웃 사이에 놓은 뒤 모델의 나머지를 참고하고, 이웃한 한 쌍에서 "
-       "모델을 시작합니다. 나선 계단의 한 바퀴나 양쪽에서 본 대칭 게이트 같은 "
-       "반복 구조가 쌍둥이 구조 위로 접히는 것을 막아 줍니다. 끄면 이미지 내용만으로 "
-       "재구성합니다."),
-    DE("Für Videoframes und als in Reihenfolge aufgenommen markierte Ordner: Der "
-       "Mapper setzt jedes Bild zuerst zwischen seine Nachbarn in der Sequenz, "
-       "bevor er den Rest des Modells befragt, und beginnt das Modell mit einem "
-       "benachbarten Paar. Das verhindert, dass eine wiederholte Struktur -- eine "
-       "Windung einer Wendeltreppe, ein symmetrisches Tor von beiden Seiten -- auf "
-       "ihren Zwilling gefaltet wird. Aus rekonstruiert allein aus dem Bildinhalt."),
-    FR("Pour les images d'une vidéo et les dossiers marqués comme pris dans l'ordre : "
-       "le mapper place chaque image parmi ses voisines de la séquence avant de "
-       "consulter le reste du modèle, et démarre le modèle sur une paire voisine. "
-       "C'est ce qui empêche une structure répétée -- un tour d'escalier en "
-       "colimaçon, un portique symétrique vu des deux côtés -- d'être repliée sur "
-       "sa jumelle. Désactivé, la reconstruction ne se fonde que sur le contenu des "
-       "images."),
-    ES("Para fotogramas de vídeo y carpetas marcadas como tomadas en orden: el "
-       "mapeador coloca cada imagen entre sus vecinas de la secuencia antes de "
-       "consultar el resto del modelo, y arranca el modelo desde un par vecino. Eso "
-       "evita que una estructura repetida -- una vuelta de una escalera de caracol, "
-       "una puerta simétrica vista desde ambos lados -- se pliegue sobre su gemela. "
-       "Desactivado, reconstruye solo a partir del contenido de las imágenes."),
-    PT("Para quadros de vídeo e pastas marcadas como captadas por ordem: o mapeador "
-       "coloca cada imagem entre as suas vizinhas na sequência antes de consultar o "
-       "resto do modelo, e começa o modelo a partir de um par vizinho. É isso que "
-       "impede que uma estrutura repetida -- uma volta de uma escada em caracol, um "
-       "portal simétrico visto de ambos os lados -- seja dobrada sobre a sua gémea. "
-       "Desligado, reconstrói apenas a partir do conteúdo das imagens."),
-    IT("Per i fotogrammi di un video e le cartelle segnate come scattate in ordine: "
-       "il mapper colloca ogni immagine tra le sue vicine nella sequenza prima di "
-       "consultare il resto del modello, e avvia il modello da una coppia vicina. È "
-       "ciò che impedisce a una struttura ripetuta -- un giro di scala a chiocciola, "
-       "un portale simmetrico visto da entrambi i lati -- di essere ripiegata sulla "
-       "sua gemella. Spento, ricostruisce dal solo contenuto delle immagini."),
-    NL("Voor videoframes en mappen gemarkeerd als in volgorde opgenomen: de mapper "
-       "plaatst elk beeld eerst tussen zijn buren in de reeks voordat hij de rest "
-       "van het model raadpleegt, en begint het model met een naburig paar. Dat "
-       "voorkomt dat een herhaalde structuur -- één winding van een wenteltrap, een "
-       "symmetrische poort van beide kanten gezien -- op zijn tweeling wordt "
-       "gevouwen. Uit reconstrueert alleen uit de beeldinhoud."),
-    RU("Для кадров видео и папок, помеченных как снятые по порядку: маппер сначала "
-       "ставит каждое изображение среди его соседей по последовательности и лишь "
-       "затем обращается к остальной модели, а саму модель начинает с соседней "
-       "пары. Именно это не даёт повторяющейся структуре -- витку винтовой "
-       "лестницы, симметричным воротам, снятым с двух сторон -- сложиться на своего "
-       "двойника. Выключено: реконструкция только по содержимому изображений."),
-    TR("Video kareleri ve sırayla çekildi olarak işaretlenen klasörler için: "
-       "haritalayıcı her görüntüyü modelin geri kalanına bakmadan önce dizideki "
-       "komşularının arasına yerleştirir ve modeli komşu bir çiftten başlatır. "
-       "Yinelenen bir yapının -- bir döner merdivenin bir turu, iki yandan görülen "
-       "simetrik bir kapı -- ikizinin üzerine katlanmasını önleyen budur. Kapalıyken "
-       "yalnızca görüntü içeriğinden yeniden oluşturur."));
+SS_MSG(source_sequential_help,
+    EN("Use this input's frame order (a video's, or photos named in shooting "
+       "order) so neighbouring frames are placed first. Turn it on for a "
+       "repetitive scene -- stairs, corridors, rows of identical windows -- where "
+       "views from different places look alike and can be mixed up. Leave it off "
+       "otherwise: matching by image content alone is usually more accurate."),
+    JA("この入力のフレームの順序 (動画の順序、または撮影順に名前が付いた写真) を使い、"
+       "隣接フレームを先に配置します。階段、廊下、同じ窓の並びのように、別の場所からの"
+       "眺めがそっくりで取り違えやすい繰り返しの多いシーンではオンにします。それ以外は"
+       "オフのままに。画像の内容だけでマッチする方が通常は正確です。"),
+    ZH_HANS("利用这个输入的帧顺序 (视频的顺序，或按拍摄顺序命名的照片)，先放置相邻帧。"
+            "对重复性强的场景——楼梯、走廊、一排排相同的窗户——不同位置看到的画面相似、"
+            "容易混淆，应打开。其他情况保持关闭：仅凭图像内容匹配通常更准确。"),
+    ZH_HANT("利用這個輸入的影格順序 (影片的順序，或按拍攝順序命名的相片)，先放置相鄰影格。"
+            "對重複性強的場景——樓梯、走廊、一排排相同的窗戶——不同位置看到的畫面相似、"
+            "容易混淆，應打開。其他情況保持關閉：僅憑影像內容匹配通常更準確。"),
+    KO("이 입력의 프레임 순서 (동영상의 순서, 또는 촬영 순서대로 이름 붙은 사진) 를 써서 "
+       "이웃 프레임을 먼저 놓습니다. 계단, 복도, 똑같은 창문이 늘어선 곳처럼 다른 "
+       "위치에서 본 모습이 닮아 헷갈리기 쉬운 반복적인 장면이면 켭니다. 그 밖에는 꺼 "
+       "두세요. 이미지 내용만으로 매칭하는 쪽이 보통 더 정확합니다."),
+    DE("Nutzt die Bildreihenfolge dieser Eingabe (die eines Videos oder von Fotos, "
+       "die in Aufnahmereihenfolge benannt sind), sodass benachbarte Bilder zuerst "
+       "platziert werden. Einschalten bei einer sich wiederholenden Szene -- "
+       "Treppen, Flure, Reihen gleicher Fenster --, in der Ansichten von "
+       "verschiedenen Orten gleich aussehen und verwechselt werden können. Sonst "
+       "aus lassen: Zuordnung allein nach Bildinhalt ist meist genauer."),
+    FR("Utilise l'ordre des images de cette entrée (celui d'une vidéo, ou de photos "
+       "nommées dans l'ordre de prise de vue) pour placer d'abord les images "
+       "voisines. À activer pour une scène répétitive -- escaliers, couloirs, "
+       "rangées de fenêtres identiques -- où des vues prises à des endroits "
+       "différents se ressemblent et peuvent être confondues. Sinon, laissez-le "
+       "désactivé : apparier sur le seul contenu des images est généralement plus "
+       "précis."),
+    ES("Usa el orden de los fotogramas de esta entrada (el de un vídeo, o fotos "
+       "nombradas en orden de captura) para colocar primero los fotogramas "
+       "vecinos. Actívalo en una escena repetitiva -- escaleras, pasillos, filas "
+       "de ventanas idénticas -- donde vistas desde lugares distintos se parecen y "
+       "pueden confundirse. Si no, déjalo desactivado: emparejar solo por el "
+       "contenido de las imágenes suele ser más preciso."),
+    PT("Usa a ordem dos quadros desta entrada (a de um vídeo, ou fotos nomeadas por "
+       "ordem de captação) para colocar primeiro os quadros vizinhos. Ligue-o numa "
+       "cena repetitiva -- escadas, corredores, filas de janelas iguais -- onde "
+       "vistas de lugares diferentes se parecem e podem ser confundidas. Caso "
+       "contrário, deixe-o desligado: emparelhar só pelo conteúdo das imagens "
+       "costuma ser mais preciso."),
+    IT("Usa l'ordine dei fotogrammi di questo ingresso (quello di un video, o di "
+       "foto nominate in ordine di scatto) per collocare prima i fotogrammi "
+       "vicini. Attivalo per una scena ripetitiva -- scale, corridoi, file di "
+       "finestre identiche -- dove viste da punti diversi si somigliano e possono "
+       "essere confuse. Altrimenti lascialo spento: abbinare solo in base al "
+       "contenuto delle immagini è di solito più preciso."),
+    NL("Gebruikt de beeldvolgorde van deze invoer (die van een video, of van foto's "
+       "die in opnamevolgorde zijn benoemd), zodat naburige beelden eerst worden "
+       "geplaatst. Zet het aan bij een repetitieve scène -- trappen, gangen, rijen "
+       "gelijke ramen -- waar beelden van verschillende plekken op elkaar lijken "
+       "en verwisseld kunnen worden. Laat het anders uit: koppelen op alleen de "
+       "beeldinhoud is meestal nauwkeuriger."),
+    RU("Использует порядок кадров этого входа (видео или фотографий, названных в "
+       "порядке съёмки), чтобы соседние кадры ставились первыми. Включайте для "
+       "повторяющейся сцены — лестницы, коридоры, ряды одинаковых окон, — где виды "
+       "из разных мест похожи и их можно перепутать. В остальных случаях "
+       "оставьте выключенным: сопоставление только по содержимому изображений "
+       "обычно точнее."),
+    TR("Bu girdinin kare sırasını (bir videonunkini ya da çekim sırasına göre "
+       "adlandırılmış fotoğrafları) kullanarak komşu kareleri önce yerleştirir. "
+       "Merdivenler, koridorlar, aynı pencerelerden sıralar gibi farklı yerlerden "
+       "görünüşlerin birbirine benzediği ve karıştırılabildiği yinelenen bir "
+       "sahnede açın. Aksi halde kapalı bırakın: yalnızca görüntü içeriğine göre "
+       "eşleştirme genellikle daha doğrudur."));
 
 // ---- Grounding DINO (a TextDetector for SAM 2.1), and BiRefNet ----
 

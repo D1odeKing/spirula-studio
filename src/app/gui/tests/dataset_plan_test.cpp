@@ -394,6 +394,26 @@ int main() {
                    p[ModelPart::Mapping].why == Why::Settings,
                "a mapper setting only maps again");
         j = made;
+        j.prep.inputs[0].use_gps = false;
+        p = plan(j);
+        expect(p[ModelPart::Features].act == Act::Reuse &&
+                   p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].changes.size() == 1 &&
+                   p[ModelPart::Matching].changes[0].key == "gps",
+               "a video's GPS switched off matches again, naming itself");
+        j = made;
+        j.prep.inputs[0].sequential = true;
+        p = plan(j);
+        expect(p[ModelPart::Matching].act == Act::Redo &&
+                   p[ModelPart::Matching].changes.size() == 1 &&
+                   p[ModelPart::Matching].changes[0].key == "sequence" &&
+                   p[ModelPart::Matching].changes[0].scope == "cam0,cam1",
+               "a video's order, asked for, is its two lenses as one sequence");
+        bool switches = false;
+        for (const StepField& f : model_fields(made))
+            switches = switches || f.key == "sequence" || f.key == "imu" || f.key == "gps";
+        expect(!switches, "a video's order is off by default, and sensors left on add no field");
+        j = made;
         j.prep.mask_dilate_ratio = 0.08f;
         p = plan(j, redo);
         expect(p[ModelPart::Features].act == Act::Redo &&
@@ -645,6 +665,35 @@ int main() {
         p = plan(j);
         expect(p[Step::Frames].act == Act::Redo && p.ask(),
                "... and still notices a new rate");
+    }
+
+    // ---- a row's switches, back from the record ------------------------------
+    {
+        const fs::path w = ws.string() + "_order";
+        build(w, video_job(w));
+        SfmJob back = video_job(w);
+        back.prep.inputs[0].use_imu = false;
+        restore_record_inputs(read_dataset_record(w.string()), back.prep, back.camera_model);
+        expect(!back.prep.inputs[0].sequential && back.prep.inputs[0].use_imu,
+               "a record made with the switches at their defaults gives them back");
+
+        SfmJob ran = video_job(w);
+        ran.prep.inputs[0].sequential = true;
+        ran.prep.inputs[0].use_gps = false;
+        build(w, ran);
+        // As a record from before the switch has the row: every video went in
+        // order, and only the model's sequence says so.
+        SfmJob unset = ran;
+        unset.prep.inputs[0].sequential = false;
+        const bool all[kNumSteps] = {true, true, true, true};
+        write_record_settings(w.string(), "{}", encode_record_inputs({unset.prep.inputs, {}}), all);
+        back = video_job(w);
+        restore_record_inputs(read_dataset_record(w.string()), back.prep, back.camera_model);
+        expect(back.prep.inputs[0].sequential, "a video that ran in order comes back in order");
+        expect(!back.prep.inputs[0].use_gps && back.prep.inputs[0].use_imu,
+               "... with its sensor switches as they were");
+        expect(plan(back)[Step::Model].act == Act::Reuse, "... and its model is reused");
+        fs::remove_all(w);
     }
 
     // ---- and what the old stamps still say, back on the panel --------------

@@ -57,7 +57,9 @@ same fields however the panel was arranged:
   segmentation settings, split into those that make training masks and those
   that make `feature_masks/`.
 - Reconstruction: per *camera folder* under `images/` (`cam0`, `cam1`, ...),
-  the lens and focal it gets; rigs and sequences as their member folders; then
+  the lens and focal it gets; rigs and sequences as their member folders; per
+  input, a sensor switched off on its row (`imu` / `attitude` / `gps`, listed
+  only when off, so a record from before the switches compares equal); then
   the engine's own settings. Folders, not input rows, because a video's one
   row and the same frames dropped back as a folder with two sub-folders are
   different rows over the same cameras.
@@ -145,9 +147,11 @@ Dropping `<dataset>/images` gives the panel one photo folder with a
 sub-folder per camera. `restore_record_inputs()` gives each sub-folder the
 lens, focal, rig and order the reconstruction's fields recorded for that
 folder, so the reconstruction's fields come out the same and it is reused.
-A folder shot in order whose camera folders nest (`a/cam0`, `a/cam1`, `b`) is
-one sequence per top-level folder (`input_sequences()`), which is what a
-dataset made from several videos is. What cannot be carried over is noted
+A folder marked Sequential whose camera folders nest (`a/cam0`, `a/cam1`, `b`)
+is one sequence per top-level folder (`input_sequences()`), which is what a
+dataset made from several videos is. A video row restored from a record made
+before its Sequential switch existed comes back on when the model's fields
+hold a sequence under its folder: every video went in order then. What cannot be carried over is noted
 rather than guessed: a video's telemetry does not come with its frames (it
 never was a field), and a 360 file's rig rotations, which only the file knows,
 become a free rig -- a difference the plan shows, and that "keep" answers.

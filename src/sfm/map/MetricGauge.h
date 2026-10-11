@@ -522,9 +522,11 @@ struct MetricGpsCounts {
 };
 
 // Reference positions from each registered image's own EXIF, in a local ENU
-// metre frame. Altitude is optional; a fix without one is still a fix.
+// metre frame. Altitude is optional; a fix without one is still a fix. Images
+// under a `skip` prefix count as carrying none.
 inline MetricGpsCounts metricRefFromGps(const Reconstruction& rec, const std::string& image_dir,
-                                        MetricRef& ref) {
+                                        MetricRef& ref,
+                                        const std::vector<std::string>& skip = {}) {
     MetricGpsCounts c;
     std::vector<Geodetic> g;
     std::vector<Vec3> centres;
@@ -532,7 +534,9 @@ inline MetricGpsCounts metricRefFromGps(const Reconstruction& rec, const std::st
     for (const auto& kv : rec.images) {
         if (!kv.second.registered) continue;
         const ExifData e =
-            readExif((std::filesystem::path(image_dir) / kv.second.name).string());
+            exifPrefixCovers(skip, kv.second.name)
+                ? ExifData{}
+                : readExif((std::filesystem::path(image_dir) / kv.second.name).string());
         if (!e.has_gps) {
             c.no_gps++;
             continue;

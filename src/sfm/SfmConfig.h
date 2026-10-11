@@ -69,6 +69,9 @@ struct TelemetryInput {
     std::string path;
     double fps = 0;           // stem index -> seconds; 0 = the file's own rate
     double time_offset = 0;   // seconds added to every frame time
+    // Off drops that half of the file's readings before anything sees them;
+    // the lens calibration it carries is still read.
+    bool imu = true, gps = true;
 };
 
 // The aggregate. Sub-option structs are held unchanged so that library callers
@@ -202,6 +205,9 @@ struct SfmConfig {
     std::string telemetry;
     std::string sensor_gauge = "auto";
     std::vector<TelemetryInput> telemetry_inputs;   // manifest entries + --telemetry
+    // Image path prefixes whose own EXIF GPS / recorded attitude is ignored
+    // (the manifest's `exif:`); "" covers every image.
+    std::vector<std::string> exif_gps_off, exif_attitude_off;
     // The same sensors inside the reconstruction (sfm/map/SensorPriors.h):
     // verification with the gyro's rotation fixed, registrations and solves
     // held to the sensors, pairs within `sensor_pair_radius` metres of GPS.

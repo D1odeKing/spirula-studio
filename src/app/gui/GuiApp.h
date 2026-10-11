@@ -409,7 +409,7 @@ private:
     void draw_new_dataset();
     void draw_dataset_source();       // input list / output / resume
     bool draw_source_lut(size_t input);
-    void draw_sensor_badge(const PrepInput& s);
+    void draw_sensor_toggles(PrepInput& s);
     void draw_dataset_basics();       // the four or five knobs a beginner needs
     void draw_source_cameras();       // one lens per input, when there are several
     void draw_rig_kinds(const std::vector<CameraGroup>& groups,

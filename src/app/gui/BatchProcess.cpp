@@ -455,19 +455,14 @@ void check_dataset_stage(const BatchRow& row, const BatchCapabilities& caps,
         out.push_back(issue_of(msg::chk_dense_model_missing, kSt, true,
                                s.sfm.dense.config.checkpoint));
 
-    // A preset made for photographs, pointed at a video (or the other way
-    // round): it still runs, and it picks the wrong pairing strategy.
-    if (!row.sources.empty() && !row.dataset_preset.path.empty()) {
-        bool any_video = false, any_photos = false;
-        for (const std::string& p : row.sources) {
-            const bool vid = !fs::is_directory(p, ec) && is_video_path(p);
-            any_video = any_video || vid;
-            any_photos = any_photos || !vid;
-        }
-        if (s.sfm.data_type == 1 && !any_video && any_photos)
-            out.push_back(issue_of(msg::chk_capture_is_photos, kSt, false));
-        if (s.sfm.data_type != 1 && any_video && !any_photos)
-            out.push_back(issue_of(msg::chk_capture_is_video, kSt, false));
+    // A preset that pairs frames in video order, pointed at photographs: it
+    // still runs, and it picks the wrong pairing strategy. The other way round
+    // is ordinary -- a video's order is off unless asked for.
+    if (!row.sources.empty() && !row.dataset_preset.path.empty() && s.sfm.data_type == 1) {
+        bool any_video = false;
+        for (const std::string& p : row.sources)
+            any_video = any_video || (!fs::is_directory(p, ec) && is_video_path(p));
+        if (!any_video) out.push_back(issue_of(msg::chk_capture_is_photos, kSt, false));
     }
 
     const std::string ws = batch_dataset_workspace(row);
@@ -733,6 +728,8 @@ bool batch_build_dataset_job(const BatchRow& row, const std::string& ffmpeg_exe,
             app::apply_mask_set(in.stencil, set);
         }
     }
+    // A row has no Sequential switch to tick: a preset captured as video is it.
+    for (PrepInput& in : sources) in.sequential = in.is_video && settings.sfm.data_type == 1;
     resolve_source_lenses(sources, settings.sfm, settings.colmap);
     assign_source_subdirs(sources);
     refresh_subcameras(sources);

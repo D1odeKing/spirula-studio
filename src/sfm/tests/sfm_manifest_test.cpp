@@ -9,9 +9,11 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "data/Yaml.h"
 #include "sfm/Pipeline.h"
+#include "sfm/core/Exif.h"
 #include "sfm/core/Manifest.h"
 #include "sfm/core/Rig.h"
 #include "sfm/tests/TestMain.h"
@@ -223,6 +225,57 @@ static int cmdManifestTest(int, char**) {
               "the same manifest without the flag parses");
         check(!req2.cfg.mask_dir.empty(),
               "and then the manifest's mask_dir is what is used");
+    }
+
+    // Sensors held back per capture and per folder: on unless said, and a
+    // switch left on signs nothing, so earlier resume states still match.
+    {
+        write_file(dir + "/sensors.yaml",
+                   "captures:\n"
+                   "  - prefix: a\n"
+                   "    telemetry: a.insv\n"
+                   "    imu: false\n"
+                   "  - prefix: b\n"
+                   "    telemetry: b.mp4\n"
+                   "exif:\n"
+                   "  - prefix: drone/\n"
+                   "    attitude: false\n"
+                   "  - prefix: .\n"
+                   "    gps: false\n");
+        const Manifest s = manifest_read(dir + "/sensors.yaml");
+        check(s.captures.size() == 2 && !s.captures[0].imu && s.captures[0].gps &&
+                  s.captures[1].imu && s.captures[1].gps,
+              "a capture's IMU switch, both on when unsaid");
+        check(s.exif.size() == 2 && s.exif[0].prefix == "drone" && s.exif[0].gps &&
+                  !s.exif[0].attitude && s.exif[1].prefix.empty() && !s.exif[1].gps,
+              "a folder's EXIF switches; '.' is the whole capture");
+        write_file(dir + "/sensors2.yaml", manifest_write(s));
+        check(manifest_write(manifest_read(dir + "/sensors2.yaml")) == manifest_write(s),
+              "the switches survive a round trip");
+
+        SfmConfig sc;
+        std::string sd;
+        check(manifest_apply(s, sc, {}, sd).empty() && sc.telemetry_inputs.size() == 2 &&
+                  !sc.telemetry_inputs[0].imu && sc.telemetry_inputs[0].gps &&
+                  sc.telemetry_inputs[1].imu,
+              "a capture's switches reach the config");
+        check(sc.exif_attitude_off == std::vector<std::string>{"drone"} &&
+                  sc.exif_gps_off == std::vector<std::string>{""},
+              "and a folder's, as prefixes");
+        check(exifPrefixCovers({"drone"}, "drone/a.jpg") &&
+                  !exifPrefixCovers({"drone"}, "drone2/a.jpg") && exifPrefixCovers({""}, "x.jpg"),
+              "a prefix covers a folder, not a name it begins");
+
+        SfmConfig on = sc;
+        on.telemetry_inputs[0].imu = true;
+        on.exif_gps_off.clear();
+        on.exif_attitude_off.clear();
+        check(stageSignature(sc, CMD_MATCH) != stageSignature(on, CMD_MATCH),
+              "held-back sensors change what matching is signed with");
+        SfmConfig none = on;
+        none.telemetry_inputs.clear();
+        check(stageSignature(on, CMD_MATCH) == stageSignature(none, CMD_MATCH),
+              "sensors left on sign nothing");
     }
 
     // A rig kind fills in the extrinsics it implies and survives a round trip;

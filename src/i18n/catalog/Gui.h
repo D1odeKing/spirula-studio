@@ -9512,26 +9512,6 @@ SS_MSG(chk_capture_is_photos,
        "is foto's."),
     RU("Пресет сделан для видео, но на входе этой строки фотографии."),
     TR("Hazır ayar video için yapılmış ama bu satırın girdileri fotoğraf."));
-SS_MSG(chk_capture_is_video,
-    EN("The preset was made for photographs, but this row's inputs are video."),
-    JA("このプリセットは写真向けですが、この行の入力は動画です。"),
-    ZH_HANS("这个预设是给照片用的，但这一行的输入是视频。"),
-    ZH_HANT("這個預設是給照片用的，但這一列的輸入是影片。"),
-    KO("이 프리셋은 사진용인데, 이 행의 입력은 동영상입니다."),
-    DE("Die Voreinstellung ist für Fotos gemacht, die Eingaben dieser Zeile "
-       "sind aber Video."),
-    FR("Le préréglage est fait pour des photos, mais les entrées de cette "
-       "ligne sont de la vidéo."),
-    ES("El ajuste está hecho para fotos, pero las entradas de esta fila son "
-       "vídeo."),
-    PT("A predefinição foi feita para fotos, mas as entradas desta linha são "
-       "vídeo."),
-    IT("La preimpostazione è fatta per le foto, ma gli ingressi di questa riga "
-       "sono video."),
-    NL("De voorinstelling is voor foto's gemaakt, maar de invoer van deze rij "
-       "is video."),
-    RU("Пресет сделан для фотографий, но на входе этой строки видео."),
-    TR("Hazır ayar fotoğraf için yapılmış ama bu satırın girdileri video."));
 SS_MSG(chk_workspace_empty,
     EN("There is nowhere to put the dataset this row builds."),
     JA("この行が作るデータセットの置き場所がありません。"),

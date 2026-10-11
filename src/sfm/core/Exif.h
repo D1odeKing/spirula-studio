@@ -382,6 +382,17 @@ inline ExifData readExif(const std::string& path) {
     return parseExifTiff(seg.data() + 6, seg.size() - 6);
 }
 
+// Is `name`, a '/'-separated path under the image directory, under one of
+// `prefixes`? "" covers every image. What SfmConfig::exif_gps_off and
+// exif_attitude_off are matched with.
+inline bool exifPrefixCovers(const std::vector<std::string>& prefixes, const std::string& name) {
+    for (const std::string& p : prefixes)
+        if (p.empty() || (name.size() > p.size() && name.compare(0, p.size(), p) == 0 &&
+                          name[p.size()] == '/'))
+            return true;
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Orientation
 // ---------------------------------------------------------------------------

@@ -460,18 +460,27 @@ void apply_pano_lens(std::vector<PrepInput>& sources, SfmJob& sfm,
 }
 
 
+void apply_capture_order(const std::vector<PrepInput>& sources, SfmJob& sfm,
+                         ColmapJob& colmap) {
+    if (sources.empty()) return;
+    const PrepInput& head = sources[0];
+    const bool ordered = head.is_video && head.sequential;
+    if (sfm.data_type != 2) sfm.data_type = ordered ? 1 : 0;
+    // NOT sequential for a dual-lens video or a 360 file's views: temporal
+    // neighbours miss every cross-lens pair -- 68/118 registered on an X5
+    // capture against 116/118 for automatic, which is content-based.
+    if (colmap.matcher != 3)
+        colmap.matcher = ordered && !is_dual_lens(head) && !any_pano360(sources) ? 2 : 1;
+}
+
+
 void apply_capture_defaults(std::vector<PrepInput>& sources, SfmJob& sfm,
                             ColmapJob& colmap) {
     normalize_source_fps(sources, sfm.prep.video_fps);
     if (sources.empty()) return;
-    const bool video = sources[0].is_video;
     const bool dual = is_dual_lens(sources[0]);
-    sfm.data_type = video ? 1 : 0;
     sfm.pairs = 0;               // automatic
-    // NOT sequential for a dual-lens video: the tracks are concatenated, so
-    // temporal neighbours miss every cross-lens pair -- 68/118 registered on an
-    // X5 capture against 116/118 for automatic, which is content-based.
-    colmap.matcher = (video && !dual) ? 2 : 1;
+    apply_capture_order(sources, sfm, colmap);
     colmap.seq_loop_closure = true;   // if switched to sequential
     if (has_fisheye_lens(sources[0])) {
         colmap.camera_model = "THIN_PRISM_FISHEYE";
@@ -482,11 +491,6 @@ void apply_capture_defaults(std::vector<PrepInput>& sources, SfmJob& sfm,
         colmap.camera_mode = 1;
     }
     if (any_pano360(sources)) {
-        // Views of one frame share no features, so temporal neighbours are not
-        // the pairs that hold a 360 dataset together; the same reasoning as the
-        // dual-lens case above, and content-based selection is the answer.
-        sfm.pairs = 0;
-        colmap.matcher = 2;
         // Every view of every 360 input is the same camera by construction --
         // one focal, one centre, no distortion -- so folder grouping would hand
         // bundle adjustment six copies of it to drift apart.

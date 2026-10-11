@@ -96,8 +96,14 @@ void apply_lens_to_sources(std::vector<PrepInput>& sources, SfmJob& sfm,
 void apply_pano_lens(std::vector<PrepInput>& sources, SfmJob& sfm,
                      ColmapJob& colmap);
 
-// The reconstruction settings the LIST decides: a video is a capture in order,
-// a dual-lens file is a rig, a 360 file is one camera warped into views. Run
+// What the first input's Sequential switch decides: a video handed over in
+// order is captured as one (temporal pairing); anything else pairs by content.
+// Run when that switch moves; "internet" and the vocabulary tree are left be.
+void apply_capture_order(const std::vector<PrepInput>& sources, SfmJob& sfm,
+                         ColmapJob& colmap);
+
+// The reconstruction settings the LIST decides: the capture order above, a
+// dual-lens file is a rig, a 360 file is one camera warped into views. Run
 // when the list changes, before any preset is applied over it.
 void apply_capture_defaults(std::vector<PrepInput>& sources, SfmJob& sfm,
                             ColmapJob& colmap);

@@ -635,6 +635,22 @@ takes 0.3 s; a metric reference the user passes still outranks an upright-only
 sensor frame. `docs/notes/imu-gps-for-sfm.md` records what the files carry
 and what was measured.
 
+One capture's IMU or GPS, or one folder's EXIF position or drone
+attitude, is held back in the manifest -- the GUI writes these from each input
+row's switches, and a held-back half is dropped before anything reads it (the
+file's lens calibration is still used):
+
+```yaml
+captures:
+  - prefix: clip1
+    telemetry: /captures/clip1.insv
+    gps: false          # imu: false likewise
+exif:
+  - prefix: drone       # "." for the whole capture
+    gps: false
+    attitude: false
+```
+
 **The same sensors inside the reconstruction.** Everything above fixes the
 gauge of a finished model. With telemetry present the run also uses it while
 the model is built (`docs/notes/sensor-priors.md`), through one seam a
@@ -886,8 +902,10 @@ spirula sfm auto IMAGES/ -o ws/ --sequence clip1 --sequence clip2   # two clips,
 Images under two members with the same path share one *position* (cam0/00017
 and cam1/00017), so a rig's lenses are one sequence and not two. The manifest's
 `sequences:` list spells the same thing (`members:` per entry), and Spirula
-Studio writes one entry per video and per photo folder ticked "Shot in order",
-unless "Use the frame order" is off. `match` and `map` take `--sequence` too.
+Studio writes one entry per input whose "Sequential" switch is on -- off by
+default for videos and photo folders alike, since content alone came out more
+accurate on captures with nothing repeated in them. `match` and `map` take
+`--sequence` too.
 With no sequence given nothing below runs and the pipeline is byte-for-byte
 the one before sequences existed.
 

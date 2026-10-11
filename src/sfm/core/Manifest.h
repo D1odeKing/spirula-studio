@@ -39,6 +39,14 @@ struct ManifestCapture {
     std::string telemetry;
     double fps = 0;
     double time_offset = 0;   // seconds added to every frame time
+    bool imu = true, gps = true;   // false: that half of the file is ignored
+};
+
+// What the images under `prefix` record about themselves that may be read:
+// the EXIF position, and the attitude a drone writes (core/Attitude.h).
+struct ManifestExif {
+    std::string prefix;
+    bool gps = true, attitude = true;
 };
 
 struct Manifest {
@@ -55,6 +63,7 @@ struct Manifest {
     std::string camera_mode;         // "single" | "folder" | "image"; empty = default
     std::vector<ManifestCamera> cameras;
     std::vector<ManifestCapture> captures;
+    std::vector<ManifestExif> exif;
     // Rigs: members are path prefixes like the cameras', frames are the
     // images sharing a path under them; a member may carry its cam_from_rig
     // (quaternion w,x,y,z and a translation) when it is known.

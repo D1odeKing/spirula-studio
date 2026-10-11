@@ -674,9 +674,12 @@ void GuiApp::write_run_settings(std::ofstream& f) {
     section(msg::runlog_section_prep.get());
     line("workspace", _workspace);
     line("photo_import", photo_import_name(_photo_import));
-    for (const PrepInput& s : _sources)
-        line(s.is_video ? "video_source" : s.sequential ? "photo_source_in_order" : "photo_source",
-             s.path);
+    for (const PrepInput& s : _sources) {
+        line(s.is_video ? "video_source" : "photo_source", s.path);
+        line("sequential", cfg_str(s.sequential));
+        if (!s.use_imu) line(s.is_video ? "imu" : "attitude", cfg_str(false));
+        if (!s.use_gps) line("gps", cfg_str(false));
+    }
     line("use_found_masks", cfg_str(_use_found_masks));
     line("flip_found_masks", cfg_str(_flip_found_masks));
     line("masking_enabled", cfg_str(_mask_enable));
@@ -693,7 +696,6 @@ void GuiApp::write_run_settings(std::ofstream& f) {
     line("overlap", std::to_string(j.overlap));
     line("loop_closure", cfg_str(j.loop_closure));
     // line("prefilter_sequential", cfg_str(j.prefilter_sequential));
-    line("use_sequence", cfg_str(j.use_sequence));
     line("features", std::to_string(j.features));
     line("matcher", std::to_string(j.matcher));
     line("mapper", std::to_string(j.mapper));
@@ -1020,6 +1022,10 @@ void GuiApp::apply_dataset_settings(const DatasetSettings& in) {
 
 void GuiApp::apply_dataset_preset(const DatasetPreset& p) {
     apply_dataset_settings(p.s);
+    // The rows' Sequential switches are not saved; a capture type of video
+    // frames is what stands for them, as a batch row reads it too.
+    for (PrepInput& in : _sources)
+        if (in.is_video) in.sequential = p.s.sfm.data_type == 1;
     _ds_presets.file = p.path;
     _ds_presets.builtin.clear();
     _ds_presets.display = p.name;
@@ -4405,10 +4411,10 @@ void photo_import_combo(PhotoImport* mode, bool no_in_place) {
 
 }  // namespace
 
-// What the sensors of this input hold, beside the row that chose it. The
-// reconstruction uses them without being asked (SfM's sensor and attitude
-// gauges), so what is worth seeing here is whether there is anything to use.
-void GuiApp::draw_sensor_badge(const PrepInput& s) {
+// One switch per kind of sensor this input was found to carry, beside the row
+// that chose it: nothing found is nothing to switch. Greyed, with the reason,
+// where the engine or Advanced > Sensors reads none of it anyway.
+void GuiApp::draw_sensor_toggles(PrepInput& s) {
     std::error_code ec;
     if (s.path.empty() ||
         (s.is_video ? !fs::is_regular_file(s.path, ec)
@@ -4420,26 +4426,53 @@ void GuiApp::draw_sensor_badge(const PrepInput& s) {
         ui::TextDisabled(dmsg::sensors_reading);
         return;
     }
-    if (!s.is_video) {
-        if (t.photos == 0) return;
-        ImGui::SameLine();
-        const long long n = t.photos, gps = t.with_gps, att = t.with_attitude;
-        if (gps == 0 && att == 0) ui::TextDisabled(dmsg::sensors_none);
-        else if (att == 0) ui::TextDisabled(dmsg::sensors_photo_gps, {gps, n});
-        else if (gps == 0) ui::TextDisabled(dmsg::sensors_photo_attitude, {att, n});
-        else if (gps == att) ui::TextDisabled(dmsg::sensors_photo_gps_attitude, {gps, n});
-        else ui::TextDisabled(dmsg::sensors_photo_gps_attitude_split, {gps, att, n});
-        if (att > 0) ui::help_on_hover(dmsg::sensors_photo_attitude_help);
+    const bool imu = s.is_video ? t.gyro || t.accel || t.attitude : t.with_attitude > 0;
+    const bool gps = s.is_video ? t.gps : t.with_gps > 0;
+    if (!imu && !gps) {
+        if (s.is_video || t.photos > 0) {
+            ImGui::SameLine();
+            ui::TextDisabled(dmsg::sensors_none);
+        }
         return;
     }
-    ImGui::SameLine();
-    const bool imu = t.gyro || t.accel || t.attitude;
-    if (!imu && !t.gps) { ui::TextDisabled(dmsg::sensors_none); return; }
-    ui::TextDisabled(imu && t.gps ? dmsg::sensors_imu_gps
-                     : imu        ? dmsg::sensors_imu
-                                  : dmsg::sensors_gps);
-    if (!t.carrier.empty() && ImGui::IsItemHovered())
-        ui::SetTooltip(dmsg::sensors_carrier_tooltip, {t.carrier});
+    const bool colmap = effective_engine() != Engine::BuiltIn;
+    // Nothing under Advanced quiets photo GPS entirely: --metric-gps none still
+    // lets it propose pairs and admit an equirect capture's level prior.
+    const Msg* imu_off = s.is_video ? (_sfm_job.sensor_gauge == 0 ? &dmsg::sfm_sensor_gauge : nullptr)
+                                    : (_sfm_job.exif_attitude == 0 ? &dmsg::sfm_exif_attitude : nullptr);
+    const Msg* gps_off =
+        s.is_video && _sfm_job.sensor_gauge == 0 ? &dmsg::sfm_sensor_gauge : nullptr;
+    auto explain = [&](const Msg& help, const Msg* off) {
+        if (colmap) {
+            ui::help_on_hover_disabled(dmsg::sensors_unused_colmap);
+        } else if (off) {
+            ui::help_on_hover_raw(i18n::format(dmsg::sensors_off_in_advanced, {off->get()}).c_str(),
+                                  ImGuiHoveredFlags_AllowWhenDisabled);
+        } else if (t.carrier.empty()) {
+            ui::help_on_hover(help);
+        } else {
+            const std::string text = std::string(help.get()) + "\n\n" +
+                                     i18n::format(dmsg::sensors_carrier_tooltip, {t.carrier});
+            ui::help_on_hover_raw(text.c_str());
+        }
+    };
+    const long long n = t.photos;
+    if (imu) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled(colmap || imu_off);
+        if (s.is_video) ui::ToggleButton(dmsg::sensors_imu, &s.use_imu);
+        else ui::ToggleButton(dmsg::sensors_photo_attitude, {(long long)t.with_attitude, n}, &s.use_imu);
+        ImGui::EndDisabled();
+        explain(s.is_video ? dmsg::sensors_video_imu_help : dmsg::sensors_photo_attitude_help, imu_off);
+    }
+    if (gps) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled(colmap || gps_off);
+        if (s.is_video) ui::ToggleButton(dmsg::sensors_gps, &s.use_gps);
+        else ui::ToggleButton(dmsg::sensors_photo_gps, {(long long)t.with_gps, n}, &s.use_gps);
+        ImGui::EndDisabled();
+        explain(s.is_video ? dmsg::sensors_video_gps_help : dmsg::sensors_photo_gps_help, gps_off);
+    }
 }
 
 namespace {
@@ -4528,20 +4561,13 @@ void GuiApp::draw_dataset_source() {
         for (size_t i = old; i < _sources.size(); i++)
             _source_path_edits[i] = _sources[i].path;
     }
-    // The rate lives beside the video it describes rather than in the settings
-    // below, so a list of clips reads as the one decision it usually is.
-    bool any_video = false;
-    for (const PrepInput& s : _sources) any_video = any_video || s.is_video;
-    any_video = true;  // TODO: "Shot in order" button
     // The path box takes what the rows leave, measured on the frame before: a
     // translated label or a badge still being read has no width until drawn.
     // Below a dozen characters, the label and badge get a line of their own.
     const float avail = ImGui::GetContentRegionAvail().x;
     const float min_path = ImGui::GetFontSize() * 12.0f;
-    const float controls_w =
-        _source_controls_w > 0.0f ? _source_controls_w : px(any_video ? 250.0f : 160.0f);
-    const float info_w =
-        _source_info_w > 0.0f ? _source_info_w : px(any_video ? 340.0f : 240.0f);
+    const float controls_w = _source_controls_w > 0.0f ? _source_controls_w : px(250.0f);
+    const float info_w = _source_info_w > 0.0f ? _source_info_w : px(340.0f);
     const bool one_line = avail - controls_w - info_w >= min_path;
     const float path_w =
         std::max(min_path, avail - controls_w - (one_line ? info_w : 0.0f));
@@ -4571,6 +4597,9 @@ void GuiApp::draw_dataset_source() {
         ImGui::SameLine();
         if (ui::Button(dmsg::remove)) remove = (int)i;
         {
+            // The rate lives beside the video it describes rather than in the
+            // settings below, so a list of clips reads as the one decision it
+            // usually is.
             ImGui::SameLine();
             if (s.is_video) {
                 ImGui::BeginDisabled(dataset_locked(Stage::Frames));
@@ -4616,10 +4645,13 @@ void GuiApp::draw_dataset_source() {
                     edited |= draw_source_lut(i);
                 }
                 ImGui::EndDisabled();
-            } else {
-                ui::Checkbox(dmsg::frames_in_order, &s.sequential);
-                ui::help_on_hover(dmsg::frames_in_order_help);
+                ImGui::SameLine();
             }
+            ImGui::BeginDisabled(dataset_locked(Stage::Features));
+            if (ui::ToggleButton(dmsg::source_sequential, &s.sequential))
+                apply_capture_order(_sources, _sfm_job, _colmap_job);
+            ImGui::EndDisabled();
+            ui::help_on_hover(dmsg::source_sequential_help);
         }
         row_controls = std::max(row_controls, ImGui::GetItemRectMax().x - path_right +
                                                   ImGui::GetStyle().ItemSpacing.x);
@@ -4649,7 +4681,9 @@ void GuiApp::draw_dataset_source() {
             ui::TextColored(kWarn, dmsg::pano360_unsupported);
             ui::help_on_hover(dmsg::pano360_unsupported_help);
         }
-        draw_sensor_badge(s);
+        ImGui::BeginDisabled(dataset_locked(Stage::Features));
+        draw_sensor_toggles(s);
+        ImGui::EndDisabled();
         // Folded away under Advanced, a LUT still changes every frame.
         if (const std::string lut = s.is_video && !_ds_advanced ? input_lut(_sources, i) : "";
             !lut.empty()) {
@@ -7952,8 +7986,6 @@ void GuiApp::draw_sfm_advanced() {
         ui::Checkbox(dmsg::prefilter_sequential, &_sfm_job.prefilter_sequential);
         ui::help_on_hover(dmsg::prefilter_sequential_help);
     }
-    ui::Checkbox(dmsg::use_sequence, &_sfm_job.use_sequence);
-    ui::help_on_hover(dmsg::use_sequence_help);
     if (sequential_window_applies(_sfm_job)) {
         ImGui::SetNextItemWidth(px(260.0f));
         ui::InputInt(dmsg::sequential_overlap, &_sfm_job.overlap);
@@ -7990,6 +8022,7 @@ void GuiApp::draw_sfm_advanced() {
     // and a drone's recorded attitude. Any one can be all an input has.
     ImGui::Spacing();
     ui::SeparatorText(dmsg::section_sensors);
+    ui::TextDisabledWrapped(dmsg::sensors_section_caption);
     ImGui::SetNextItemWidth(px(260.0f));
     ui::Combo(dmsg::sfm_sensor_gauge, &_sfm_job.sensor_gauge,
               {&dmsg::sfm_sensor_gauge_off, &dmsg::sfm_sensor_gauge_up,
