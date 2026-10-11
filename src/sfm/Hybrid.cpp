@@ -438,10 +438,10 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         // gate: the global nearest neighbour, kept near its epipolar plane;
         // band: the nearest neighbour within that band; none: unguided.
         const char* mv = spirula::env("SFM_HYBRID_MATCH");
-        std::string mode = mv && mv[0] ? mv : "gate";
+        std::string mode = mv && mv[0] ? mv : "band";
         if (spirula::env("SFM_HYBRID_GUIDED") && !spirula::env_on("SFM_HYBRID_GUIDED"))
             mode = "none";
-        if (mode != "band" && mode != "none") mode = "gate";
+        if (mode != "gate" && mode != "none") mode = "band";
         const bool guided = mode != "none";
         sc.match = MatchOptions();
         sc.match.device = cfg.match.device;
@@ -450,8 +450,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         sc.match.descriptor_budget_bytes = cfg.match.descriptor_budget_bytes;
         sc.match.max_num_matches = cfg.match.max_num_matches;
         // The geometry does the rejecting the ratio test and the cross-check would.
-        // Measured on a 678-image interior (a7iii_inside), gate at 0.95 and no
-        // cross-check gave 29% more points than 0.9 with it, +0.12 px.
+        // On a 678-image interior (a7iii_inside), a 2 px band at 0.9 gave three
+        // times the gate's points at 1.33 px against 1.74; 0.8 lost 39% for nothing.
         sc.match.max_ratio =
             (float)envNumber("SFM_HYBRID_RATIO", mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8);
         sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", guided ? 0 : 1) != 0;
@@ -505,7 +505,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
                 keys.emplace(owner[p], pairs[p].second);
             }
         BearingMap bearings = modelBearings(models, sf, keys, cfg.threads);
-        const double tol_px = envNumber("SFM_HYBRID_EPIPOLAR_PX", 1.5 * cfg.max_error);
+        const double tol_px =
+            envNumber("SFM_HYBRID_EPIPOLAR_PX", (mode == "band" ? 2.0 / 3.0 : 1.5) * cfg.max_error);
         auto geometry = [&](size_t p) {
             return pairGeometry(models[owner[p]], sf, pairs[p].first, pairs[p].second, tol_px);
         };
