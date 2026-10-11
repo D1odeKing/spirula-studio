@@ -1,0 +1,28 @@
+[run]     H:/Hershy Site GS/GS runs/a7iii_inside/images -> ws_hybrid_nocc
+[run]     Quality: high   Image size limit: 1600 px   Feature limit: 8192
+[run]     Capture type: individual
+[run]     Lens: opencv   Camera grouping: folder
+[run]     The presets set --max-image-size to 1600 (was 0)
+[run]     The presets set --aliked-max-features to 4096 (was 2048)
+[run]     The presets set --loma-max-features to 4096 (was 2048)
+[run]     The presets set --progressive-error-steps to 12 (was 5)
+[run]     The presets set --progressive-patience to 3 (was 2)
+[run]     The presets set --ratio to 1 (was 0.8)
+[run]     The presets set --pairs to prefilter (was auto)
+[run]     --metric-gps auto: `full` (EXIF GPS with altitude; images: 37)
+[match]   hybrid: pairs: 10233/11444 verified under the learned poses, inliers: 1949571, 00:00:48.255
+[hybrid] epipolar gate kept 2060602 of 34912322 putative matches
+[map]     hybrid model 0: images: 676, kept by SIFT: 676, restored without points: 0; points 606875 -> 494144, mean error 3.00 -> 1.74 px
+[run]     Summary
+[run]     Extraction: 00:00:00.149   Images: 678   Features: 2777088
+[run]     Matching: reused an earlier run's   Pairs kept: 10032   Inliers: 7032858
+[run]     Mapping: 00:25:39.363   Registered: 676/678 images   Points: 494144   Cameras: 4
+[run]     Assembly: 00:00:24.310   Models: 1 -> 1 over 0 level(s)   Merged: 0   Refused: 0   Grown: 0 image(s)   Coverage: 676 -> 676 images
+[run]     Finishing passes (00:00:24.310): split 0, folds cut 0, reseeded 0, dropped 0, repaired by the audit 0, dropped by the audit 0, seams welded 0
+[run]     Per folder:
+[run]     360_images_inside_Masked: 37/37 images registered
+[run]     A7iii_Inside: 639/641 images registered
+[run]     Total: 00:25:39.644
+[run]     Reprojection error: mean 1.739 px, median 1.424 px, over 1264779 observations
+[run]     Written to ws_hybrid_nocc\sparse\0
+[run]     RESULT: OK -- 100% of the images registered, 1.74 px mean reprojection
