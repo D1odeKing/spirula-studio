@@ -112,3 +112,44 @@ not yet tried, in order of cost:
 - Not started: hybrid_extreme (A at `--quality extreme`), then A with
   `SS_SFM_HYBRID_RATIO=0.95` and `1.0` over A's matches.
 - `resume_queue.sh` runs the rest in that order; `queue.txt` is the run log.
+
+## Build 2 (42e547c3): density knobs
+
+All five use A's flags and A's LoMa matches (`--reuse-matches keep`), and
+build 2's binary. The environment for each is in its `cmd.txt`.
+
+| run | env | SIFT kept / restored | points | observations | mean px | median px |
+|---|---|---|---|---|---|---|
+| hybrid (A, build 1) | — | 673 / 3 | 382,112 | 1,014,341 | 1.616 | 1.304 |
+| hybrid_r095 | ratio 0.95 | 674 / 2 | 423,323 | 1,111,855 | 1.664 | 1.350 |
+| hybrid_peak | ratio 0.95, peak ×0.5 | 674 / 2 | 435,805 | 1,127,880 | 1.726 | 1.425 |
+| hybrid_nocc | ratio 0.95, no cross-check | 676 / 0 | 494,144 | 1,264,779 | 1.739 | 1.424 |
+| hybrid_learned | ratio 0.95, + LoMa tracks | 675 / 1 | 1,051,321 | 2,803,362 | 2.104 | 1.784 |
+
+| run | putative | after gate | verified pairs | inliers |
+|---|---|---|---|---|
+| hybrid_r095 | 13,417,538 | 1,665,829 | 9,156 / 11,442 | 1,603,760 |
+| hybrid_peak | 14,206,618 | 1,684,790 | 9,264 / 11,436 | 1,621,794 |
+| hybrid_nocc | 34,912,322 | 2,060,602 | 10,233 / 11,444 | 1,949,571 |
+| hybrid_learned | 13,423,959 | 1,666,215 | 9,162 / 11,446 | 1,604,142 |
+
+Every hybrid stage took 64–69 s.
+
+- **Cross-check off is the best SIFT-only lever here.** It gives +29% points
+  over A (494k), and SIFT keeps all 676 images, so none need restoring. The
+  error rises 0.12 px. The gate does the work the cross-check did: 2.6x more
+  putatives, still 95% verified after the gate.
+- **Ratio 0.95** gives +11% points for +0.05 px.
+- **Peak ×0.5** gives +3% on top of 0.95 for +0.06 px. At an 8,192-feature cap
+  a lower floor mostly swaps which features are kept. Raising
+  `SS_SFM_HYBRID_FEATURES` alongside it is the untested next step.
+- **LoMa tracks on the SIFT poses** give 1.05M points, 1.7x LoMa alone, and
+  the mean drops from LoMa's 3.02 to 2.10 px. The run exits 3 (PARTIAL)
+  because its mean is over 2 px; it is not a failure. The 628k LoMa points are
+  triangulated with no BA of their own, so they carry LoMa's keypoint
+  precision. For a splat seed this is the densest model of all the runs.
+
+In every run, the baseline included, LoMa's third feature pass ran out of GPU
+memory (10 GB asked of an 8 GB card) and was undone. The metric frame was not
+applied either: only the 37 equirect images carry GPS, and they do not spread
+out. Neither comes from the hybrid.
