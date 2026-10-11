@@ -49,6 +49,7 @@ Errors in source pixels.
 | hybrid, high, band 0.9, mutual, 2 px (default) | 676 | 1,454,903 | 1.333 |
 | hybrid, high, band 0.8, mutual, 2 px | 676 | 891,486 | 1.323 |
 | hybrid, high, gate, 2 px | 674 + 2 restored | 422,666 | 1.364 |
+| hybrid, extreme, band (default) | 676 | 2,514,042 | 1.003 |
 
 The stage itself is about a minute at high. LoMa leaves out 2 images where SIFT
 leaves out 33, so step 0's question is answered: the learned frontend places
@@ -63,7 +64,10 @@ gives 2.9 times the gate's points at 1.33 px against 1.74, more points than
 LoMa's own model at well under half its error, in about 2.5 minutes. Ratio 0.8
 loses 39% of the points for no gain; a 2 px gate loses 15% and two images.
 
-Open: the band at extreme, and more SIFT features at high.
+At extreme the band gives 4.5 times the old extreme run's points at 1.00 px
+against 1.23, keeps all 676 images (the old run restored 7), in 3 minutes.
+
+Open: more SIFT features at high.
 
 ## Why
 
