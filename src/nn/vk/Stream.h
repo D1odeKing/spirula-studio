@@ -65,6 +65,9 @@ public:
     // --- synchronization --------------------------------------------------
     void flush();  // submit what is recorded (does not wait)
     void sync();   // flush + wait for the queue to drain
+    // sync() for teardown, which must not throw: destructors free. Once it has
+    // failed the device is lost or hung, and every later call returns at once.
+    void drain() noexcept;
     // Dispatches recorded before flush() happens on its own. See the definition
     // for why an unbounded command buffer is not an option.
     static uint32_t max_dispatches_per_batch();

@@ -3278,6 +3278,30 @@ SS_MSG(metric_failed,
        "системе -- {1}"),
     TR("Model {0}: metrik çerçeve UYGULANMADI, normalize çerçevede yazıldı -- {1}"));
 
+SS_MSG(metric_mapped,
+    EN("Model {0}: metric frame kept from the GPS factors the reconstruction was solved with "
+       "-- scale {1}, radius {2} m"),
+    JA("モデル {0}: 再構築で使った GPS 因子のメートル座標系を保持しました -- 縮尺 {1}、半径 {2} m"),
+    ZH_HANS("模型 {0}: 沿用重建时 GPS 因子所用的米制坐标系 -- 缩放 {1}，半径 {2} m"),
+    ZH_HANT("模型 {0}: 沿用重建時 GPS 因子所用的公尺座標系 -- 縮放 {1}，半徑 {2} m"),
+    KO("모델 {0}: 재구성에 쓰인 GPS 인자의 미터 좌표계를 유지합니다 -- 배율 {1}, 반지름 {2} m"),
+    DE("Modell {0}: metrischer Rahmen der GPS-Faktoren beibehalten, mit denen die "
+       "Rekonstruktion gelöst wurde -- Maßstab {1}, Radius {2} m"),
+    FR("Modèle {0} : repère métrique des facteurs GPS de la reconstruction conservé -- "
+       "échelle {1}, rayon {2} m"),
+    ES("Modelo {0}: se conserva el marco métrico de los factores GPS con que se resolvió la "
+       "reconstrucción -- escala {1}, radio {2} m"),
+    PT("Modelo {0}: mantido o referencial métrico dos fatores GPS com que a reconstrução foi "
+       "resolvida -- escala {1}, raio {2} m"),
+    IT("Modello {0}: mantenuto il sistema metrico dei fattori GPS con cui è stata risolta la "
+       "ricostruzione -- scala {1}, raggio {2} m"),
+    NL("Model {0}: metrisch stelsel behouden van de GPS-factoren waarmee de reconstructie is "
+       "opgelost -- schaal {1}, straal {2} m"),
+    RU("Модель {0}: сохранена метрическая система GPS-факторов, с которыми решалась "
+       "реконструкция -- масштаб {1}, радиус {2} м"),
+    TR("Model {0}: yeniden yapılandırmanın çözüldüğü GPS faktörlerinin metrik çerçevesi "
+       "korundu -- ölçek {1}, yarıçap {2} m"));
+
 SS_MSG(metric_fail_pairs,
     EN("cameras with a metric position: {0}, need 3"),
     JA("メートル位置を持つカメラ: {0}、3 台必要です"),
@@ -3292,6 +3316,21 @@ SS_MSG(metric_fail_pairs,
     NL("camera's met een metrische positie: {0}, er zijn er 3 nodig"),
     RU("камер с метрической позицией: {0}, нужно 3"),
     TR("metrik konumu olan kamera: {0}, 3 gerekli"));
+
+SS_MSG(metric_fail_distinct,
+    EN("distinct metric positions among those cameras: {0} of {1}, need {2}"),
+    JA("それらのカメラのうち異なるメートル位置: {1} 台中 {0}、{2} 必要です"),
+    ZH_HANS("这些相机中不同的米制位置: {1} 台中 {0} 个，需要 {2} 个"),
+    ZH_HANT("這些相機中不同的公尺位置: {1} 台中 {0} 個，需要 {2} 個"),
+    KO("그 카메라들 중 서로 다른 미터 위치: {1} 대 중 {0}, {2} 개가 필요합니다"),
+    DE("verschiedene metrische Positionen unter diesen Kameras: {0} von {1}, benötigt werden {2}"),
+    FR("positions métriques distinctes parmi ces caméras : {0} sur {1}, il en faut {2}"),
+    ES("posiciones métricas distintas entre esas cámaras: {0} de {1}, hacen falta {2}"),
+    PT("posições métricas distintas entre essas câmeras: {0} de {1}, são precisas {2}"),
+    IT("posizioni metriche distinte tra quelle camere: {0} su {1}, ne servono {2}"),
+    NL("verschillende metrische posities onder die camera's: {0} van {1}, er zijn er {2} nodig"),
+    RU("различных метрических позиций среди этих камер: {0} из {1}, нужно {2}"),
+    TR("bu kameralar arasında farklı metrik konum: {1} içinde {0}, {2} gerekli"));
 
 SS_MSG(metric_fail_spread,
     EN("the metric positions do not spread out (radius {0} m); nothing to fit a scale to"),

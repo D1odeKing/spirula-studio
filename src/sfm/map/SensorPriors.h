@@ -45,7 +45,7 @@ struct SensorPriorOptions {
     double min_up_sigma_deg = 1.0;
     int calib_min_pairs = 30;    // two-view pairs a group needs before mapping
     int calib_min_frames = 20;   // posed frames a group needs for the gravity refit
-    double gps_max_error = 5.0;  // metres, the fit's inlier radius
+    double gps_max_error = 0;    // metres, the fit's inlier radius; 0 from its scatter
     double gps_max_error_frac = 0.03;
     // Centre factors, and the frame registrations are checked through; off under
     // --metric-gps none. Positions still propose pairs (gps).
@@ -99,6 +99,7 @@ inline const char* metricFailName(MetricFail r) {
     switch (r) {
         case MetricFail::None: return "none";
         case MetricFail::Pairs: return "pairs";
+        case MetricFail::Distinct: return "distinct";
         case MetricFail::Spread: return "spread";
         case MetricFail::Inliers: return "inliers";
         case MetricFail::Collinear: return "collinear";
@@ -141,26 +142,45 @@ inline double gpsLevelSigma(const MetricFit& fit) {
     return std::max(2.0 * fit.rms, 0.6 * fit.max_error);
 }
 
-// A position the user trusts (--metric-gps full) gets COLMAP 4.1.1's factor:
-// prior_position_fallback_stddev 1 m, isotropic, under CauchyLoss(prior_position_loss_scale).
-constexpr double kTrustedGpsSigma = 1.0;
+// A position the user trusts (--metric-gps full) gets COLMAP 4.1.1's Cauchy factor
+// (prior_position_loss_scale), at the fit's own per-axis scatter doubled for the
+// receiver's correlated error (D74) rather than its 1 m fallback stddev.
+constexpr double kTrustedGpsScatterSigmas = 2.0;
 constexpr double kTrustedGpsCauchy = 7.815;
 
-// A similarity fitted on the inliers, then a centre factor for EVERY positioned image: an
-// inlier mask drops exactly the frames that drifted off between two solves. Level with an up
-// (D75): vertical only trusted, and only where altitude agrees within the radius; else 3x.
+// A similarity fitted on the inliers, then a centre factor for EVERY positioned image: an inlier
+// mask drops exactly the frames that drifted off between solves. Level with an up (D75): vertical
+// only trusted, where altitude agrees within the radius; a fix with no altitude is level only.
 inline MetricFit gpsCentreFactors(MetricRef ref, const Vec3* up_w, double max_error,
-                                  double max_error_frac, PosePriors& out, bool trusted = false) {
+                                  double max_error_frac, PosePriors& out, bool trusted = false,
+                                  const std::vector<char>* level_only = nullptr) {
     MetricFit fit;
     if (ref.centres.size() < 5) return fit;
     const Mat3 R_up = up_w ? rotationUpToZ(*up_w) : mat3Identity();
     for (Vec3& c : ref.centres) c = mul(R_up, c);
-    fit = fitMetricGauge(ref, max_error, up_w ? MetricAxes::Horizontal : MetricAxes::Full,
+    auto levelOnly = [&](size_t i) {
+        return level_only && i < level_only->size() && (*level_only)[i];
+    };
+    // A fix stated at sea level for want of an altitude would tip a full fit.
+    MetricRef fitted;
+    for (size_t i = 0; i < ref.centres.size(); i++)
+        if (up_w || !levelOnly(i)) {
+            fitted.centres.push_back(ref.centres[i]);
+            fitted.targets.push_back(ref.targets[i]);
+            fitted.image_ids.push_back(ref.image_ids[i]);
+        }
+    fit = fitMetricGauge(fitted, max_error, up_w ? MetricAxes::Horizontal : MetricAxes::Full,
                          max_error_frac);
     if (!fit.ok) return fit;
-    const double sh = trusted ? kTrustedGpsSigma : gpsLevelSigma(fit);
+    // 1e-6 of the spread keeps exact (synthetic) positions' factors finite.
+    const double least = 1e-6 * fit.spread;
+    const double sh = trusted ? std::max(kTrustedGpsScatterSigmas * fit.sigma_h, least)
+                              : gpsLevelSigma(fit);
     const bool vertical = trusted ? !up_w || fit.vertical_sigma <= fit.max_error : !up_w;
-    const double sv = !vertical ? 0.0 : trusted ? kTrustedGpsSigma : 3.0 * sh;
+    const double scatter_v = up_w ? fit.vertical_sigma : fit.sigma_v;
+    const double sv = !vertical ? 0.0
+                      : trusted ? std::max(kTrustedGpsScatterSigmas * scatter_v, least)
+                                : 3.0 * sh;
     const Mat3 A = mat3Scale(mul(fit.T.R, R_up), fit.T.scale);
     for (size_t i = 0; i < ref.centres.size(); i++) {
         PriorCentre f;
@@ -168,7 +188,7 @@ inline MetricFit gpsCentreFactors(MetricRef ref, const Vec3* up_w, double max_er
         f.img[0] = ref.image_ids[i];
         f.A[0] = A;
         f.b = ref.targets[i] - fit.T.t;
-        f.sigma = {sh, sh, sv};
+        f.sigma = {sh, sh, levelOnly(i) ? 0.0 : sv};
         f.cauchy = trusted ? kTrustedGpsCauchy : 0.0;
         out.centres.push_back(f);
     }
@@ -178,6 +198,8 @@ inline MetricFit gpsCentreFactors(MetricRef ref, const Vec3* up_w, double max_er
     out.gps.t = fit.T.t;
     out.gps.sigma_h = sh;
     out.gps.gate = fit.max_error;
+    out.gps.centroid = fit.centroid;
+    out.gps.spread = fit.spread;
     return fit;
 }
 
@@ -501,6 +523,7 @@ private:
         const Vec3* gps_up = up.ok ? &up.up : nullptr;
         if (!gps_up && opt_.gps_flat && mean_up.norm() > 0) gps_up = &mean_up;
         if (opt_.gps && opt_.gps_centres) gpsFactors(frames, gps_up, out);
+        out.gps.up = up.ok ? GpsUp::Imu : gps_up ? GpsUp::Cameras : GpsUp::Fitted;
         return out;
     }
 
@@ -751,9 +774,10 @@ private:
 // on one (levelUpFactors), else full unless gps_flat takes the cameras' up (D75).
 class ExifGpsPriors : public PriorSource {
 public:
+    // `no_alt[i]`: fix i states no altitude, so it holds its image level only.
     ExifGpsPriors(const std::vector<std::optional<Geodetic>>& fixes, SensorPriorOptions opt,
-                  std::vector<char> level = {})
-        : opt_(opt), level_(std::move(level)) {
+                  std::vector<char> level = {}, std::vector<char> no_alt = {})
+        : opt_(opt), level_(std::move(level)), no_alt_(std::move(no_alt)) {
         std::vector<Geodetic> g;
         for (const std::optional<Geodetic>& f : fixes)
             if (f) g.push_back(*f);
@@ -788,6 +812,15 @@ public:
         return true;
     }
     void disableLevel() override { level_off_ = true; }
+    bool positionError(uint32_t img, const Pose& pose, const GpsFrame& f,
+                       double& metres) const override {
+        Vec3 p;
+        if (!f.ok || !position(img, p)) return false;
+        Vec3 r = mul(f.A, cameraCenter(pose)) + f.t - p;
+        if (f.flat || noAlt(img)) r.z = 0;
+        metres = r.norm();
+        return true;
+    }
 
     PosePriors factors(const std::vector<PosedImage>& imgs) override {
         PosePriors out;
@@ -812,12 +845,14 @@ private:
     void gpsFactors(const std::vector<PosedImage>& imgs, const LevelFit& lv, PosePriors& out,
                     SensorFactorStats& st) const {
         MetricRef ref;
+        std::vector<char> level_only;
         for (const PosedImage& p : imgs) {
             Vec3 x;
             if (!position(p.image, x)) continue;
             ref.centres.push_back(cameraCenter(p.pose));
             ref.targets.push_back(x);
             ref.image_ids.push_back(p.image);
+            level_only.push_back(noAlt(p.image));
         }
         st.frames = (int)ref.centres.size();
         // The rule of meanCameraUp (map/Orient.h) over the posed images.
@@ -829,7 +864,8 @@ private:
         const Vec3* gps_up = lv.ok ? &lv.up : flat ? &up : nullptr;
         const MetricFit fit = gpsCentreFactors(std::move(ref), gps_up, opt_.gps_max_error,
                                                opt_.gps_max_error_frac, out,
-                                               opt_.trusted_position);
+                                               opt_.trusted_position, &level_only);
+        out.gps.up = lv.ok ? GpsUp::Declared : gps_up ? GpsUp::Cameras : GpsUp::Fitted;
         st.gps_ok = fit.ok;
         st.gps_rms = fit.rms;
         st.gps_out = fit.ok ? fit.n - fit.inliers : 0;
@@ -840,8 +876,11 @@ private:
             logGpsFit("EXIF GPS", st.frames, fit, st.gps, st.gps_out, out.gps, gps_up != nullptr);
     }
 
+    bool noAlt(uint32_t img) const { return img < no_alt_.size() && no_alt_[img]; }
+
     SensorPriorOptions opt_;
     std::vector<char> level_;
+    std::vector<char> no_alt_;
     std::atomic<bool> level_off_{false};
     std::vector<std::optional<Vec3>> pos_;
     SensorFactorStats stats_;

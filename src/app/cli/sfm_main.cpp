@@ -936,8 +936,8 @@ static int cmdMap(int argc, char** argv) {
     std::unique_ptr<ExifGpsPriors> exif_priors =
         cfg.sensor_map && !priors ? makeExifGpsPriors(cfg, cfg.image_dir, db, cs, opt.verbose)
                                   : nullptr;
-    Mapper mapper(db, feats, opt, cs.ids, &rigs, &seqs,
-                  priors ? static_cast<PriorSource*>(priors.get()) : exif_priors.get());
+    PriorSource* mapped = priors ? static_cast<PriorSource*>(priors.get()) : exif_priors.get();
+    Mapper mapper(db, feats, opt, cs.ids, &rigs, &seqs, mapped);
     std::vector<Reconstruction> models;
     AssembleStats ast;
     if (cfg.resume.empty()) {
@@ -1078,7 +1078,8 @@ static int cmdMap(int argc, char** argv) {
         printExtraModels(models, feats);
     }
     std::vector<sfm::ModelGauge> map_gauge;
-    const bool map_metric = fixGauge(models, cfg, cfg.image_dir, opt.verbose, map_gauge, &sensors);
+    const bool map_metric =
+        fixGauge(models, cfg, cfg.image_dir, opt.verbose, map_gauge, &sensors, mapped);
     recolorPoints(models, cfg);
     splitCamerasBySize(models, feats);
     if (!output.empty()) writeModels(models, output, opt.verbose, map_gauge, &rigs);

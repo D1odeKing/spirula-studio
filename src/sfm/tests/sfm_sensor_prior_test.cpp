@@ -307,10 +307,11 @@ static void testTelemetryPriors() {
         for (const PriorCentre& f : trusted.factors(imgs).centres)
             if (f.n == 1) {
                 n++;
-                ok += f.cauchy == 7.815 && f.sigma.x == 1.0 && f.sigma.y == 1.0 && f.sigma.z == 1.0;
+                ok += f.cauchy == 7.815 && f.sigma.x > 0 && f.sigma.y == f.sigma.x && f.sigma.z > 0;
             }
         for (const PriorCentre& f : pf.centres) plain += f.n == 1 && f.cauchy == 0.0;
-        check(n > 0 && ok == n && plain == gps_n, "factors: trusted GPS is 1 m Cauchy, vertical kept");
+        check(n > 0 && ok == n && plain == gps_n,
+              "factors: trusted GPS is Cauchy at the fit's scatter, vertical kept");
     }
     check(tri_n >= 10, "factors: triples");
 

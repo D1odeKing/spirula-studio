@@ -889,6 +889,51 @@ int cmdMetricSelftest(int, char**) {
               "T14: a few fixes without altitude move neither the vertical place nor its sigma");
     }
 
+    // ---- T15: a radius from the positions' own scatter (max_error 0) --------
+    // Phone metres get a radius near 3.37 sigma and RTK centimetres the 0.5 % floor, through a
+    // tenth of fixes 100 m off; noise as wide as the capture and repeated fixes are refused.
+    {
+        Sim3 T;
+        T.scale = 10.0;
+        T.R = rotFromAxisAngle({0.2, 0.5, -0.4}, 0.7);
+        T.t = {50.0, -20.0, 3.0};
+        const std::vector<Vec3> c = arcCentres(80);
+        std::mt19937 rng(7);
+        auto noisy = [&](double sigma, double outliers) {
+            MetricRef ref = makeRef(c, T);
+            std::normal_distribution<double> N(0.0, sigma);
+            for (size_t i = 0; i < ref.targets.size(); i++) {
+                ref.targets[i] = ref.targets[i] + Vec3{N(rng), N(rng), N(rng)};
+                if (i % 10 == 3 && outliers > 0) ref.targets[i].x += outliers;
+            }
+            return ref;
+        };
+        for (double sigma : {0.02, 3.0}) {
+            const MetricFit f = fitMetricGauge(noisy(sigma, 100.0), 0.0);
+            printf("  T15: sigma %.2f m: radius %.3f m (%.2f sigma), %d/%d inliers, scatter %.3f m\n",
+                   sigma, f.max_error, f.max_error / sigma, f.inliers, f.n, f.sigma);
+            const double floor = kMetricMinRadiusFrac * f.spread;
+            check(f.ok && f.max_error > std::max(2.5 * sigma, 0.99 * floor) &&
+                      f.max_error < std::max(4.5 * sigma, 1.01 * floor) && f.inliers >= 70 &&
+                      f.inliers <= 72 && std::fabs(f.sigma / sigma - 1.0) < 0.25,
+                  "T15: the radius follows the noise to its floor, through 10% outliers");
+            check(f.ok && std::fabs(f.T.scale / T.scale - 1.0) < 0.05,
+                  "T15: the scale through the fit's own radius");
+        }
+        const MetricFit wide = fitMetricGauge(noisy(30.0, 0.0), 0.0);
+        printf("  T15: noise as wide as the capture: ok %d, reason %d, spread %.1f m, radius %.1f m\n",
+               wide.ok, (int)wide.reason, wide.spread, wide.max_error);
+        check(!wide.ok && wide.reason == MetricFail::Spread, "T15: noise past the spread fits nothing");
+
+        MetricRef twice = makeRef(c, T);
+        for (size_t i = 0; i < twice.targets.size(); i++) twice.targets[i] = twice.targets[i % 2 ? 7 : 40];
+        const MetricFit rep = fitMetricGauge(twice, 0.0, MetricAxes::Horizontal);
+        check(!rep.ok && rep.reason == MetricFail::Distinct && rep.distinct == 2,
+              "T15: two fixes repeated forty times are two positions, too few to judge a radius");
+        check(fitMetricGauge(twice, 5.0, MetricAxes::Horizontal).reason != MetricFail::Distinct,
+              "T15: a fixed radius does not count distinct positions");
+    }
+
     printf("%s\n", fails ? "FAIL" : "PASS");
     return fails ? 1 : 0;
 }

@@ -239,23 +239,38 @@ Each timed frame's position from the log (interpolated between distinct
 fixes) in a local east-north-up frame; a similarity from the model onto
 them by `fitMetricGauge` (`map/MetricGauge.h`), horizontal when an up axis
 exists (D75), full otherwise; then one centre factor per positioned frame,
-inliers or not, with `A = s R`, `b = p - t`, sigma twice the fit's RMS with
-a 3 m floor on the level axes and the vertical dropped (or three times
-looser on a full fit). The inflation is D74's finding that a receiver's
-error is correlated and the residuals under-state it. `--metric-gps full`
-states COLMAP's isotropic 1 m under a Cauchy loss instead, and keeps the
-vertical of a level fit only while the altitudes sit within the inlier
-radius of it (their robust sigma); `none` states no centre factor at all.
+inliers or not, with `A = s R`, `b = p - t`, sigma twice the fit's RMS (and
+at least 0.6 of its inlier radius) on the level axes and the vertical
+dropped (or three times looser on a full fit). The inflation is D74's
+finding that a receiver's error is correlated and the residuals under-state
+it. `--metric-gps full` states COLMAP's Cauchy loss instead, at twice the
+fit's own per-axis scatter, level and vertical apiece, where COLMAP falls
+back to 1 m; it keeps the vertical of a level fit only while the altitudes
+sit within the inlier radius of it (their robust sigma). A fix that states
+no altitude is left out of the fit and holds its frame level only; `none`
+states no centre factor at all. The radius itself comes from the fixes'
+scatter (`--metric-max-error 0`, `MetricGauge.h`), so none of these is a
+fixed number of metres.
 
 A level fit is refused when its scale is more than 1.25x the median ratio
 of GPS to model distance between inliers far apart: the up it was levelled
 about tips the camera path. An Avata 360 clip whose attitude gave an up
 about 90 deg off read 35x; unrefused, that fit had `Mapper::gpsCheck` turn
-away every later registration as ~1300 m off. The check refuses a PnP pose
-four inlier radii off right after one inside the radius (a wrong-place
-PnP); when more than a fifth of the images it checked, and at least ten,
-stand refused, the frame is what is wrong, and the model drops it and its
-GPS factors and retries the images it turned away.
+away every later registration as ~1300 m off. The check's radius at a
+camera r metres from the fitted positions' centre is the inlier radius times
+sqrt(1 + (r/R)^2), R their spread: error correlated across the fit leaves
+its frame off by up to the noise at the spread, and the frontier a growing
+model registers on lies past it. A PnP pose four radii off right after a
+check inside the radius is refused once (a wrong-place PnP), and taken the
+next time it registers: the fix can be the outlier, as on a bracketing
+phone's set where one bracket's fix sat 45 m off its images; when more than a
+fifth of the images it checked, and at least ten, stand refused, the frame
+is what is wrong, and the model drops it and its GPS factors and retries the
+images it turned away. Three registrations in a row beyond the radius ask
+for a global BA, at most once per ten registrations or 5 % growth, whichever
+is more: GPS that a BA cannot pull in asked every ten before, n^2/10 BA work
+over a run. After that BA nothing is refused until a check lands inside
+again, since the drift it was asked for need not be gone.
 
 `position()` serves the pair list: `gpsProximityPairs`
 (`feature/GpsPairs.h`) adds every positioned image's twenty nearest others

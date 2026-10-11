@@ -87,7 +87,7 @@ void phrase_structure(const std::vector<int32_t>& ids, std::vector<uint8_t>& all
 Model::~Model() { release(); }
 
 void Model::release() {
-    vk::Stream::get().sync();
+    vk::Stream::get().drain();
     for (auto& kv : geo_) vk::device_free(kv.second.blob);
     geo_.clear();
     if (text_.blob) vk::device_free(text_.blob);

@@ -172,7 +172,7 @@ void Session::load(const std::string& checkpoint, InferencePrecision precision,
 
 void Session::unload() {
     if (!impl_->weights.bytes() && !impl_->arena.capacity() && impl_->images.empty()) return;
-    nn::vk::Stream::get().sync();
+    nn::vk::Stream::get().drain();
     clearFeatureCache();
     impl_->cache = {};
     impl_->arena.release();

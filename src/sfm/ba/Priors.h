@@ -45,16 +45,33 @@ struct PriorCentre {
     bool absolute() const { return n == 1; }
 };
 
-// The metric frame a source's absolute centre factors were stated in, for
-// checking a pose between solves: a camera centre c is A c + t - p metres off
-// its position p, level components only when flat. The solver never reads it.
+// Where a GPS fit's up came from: its own 3D rotation, an IMU, the images' declared
+// level, or the cameras' mean up -- the one that measures nothing.
+enum class GpsUp { Fitted, Imu, Declared, Cameras };
+
+// The metric frame a source's absolute centre factors were stated in, for checking a
+// pose between solves and the gauge of a finished model: a camera centre c is A c + t - p
+// metres off its position p, level components only when flat. The solver never reads it.
 struct GpsFrame {
     bool ok = false;
     bool flat = false;
+    GpsUp up = GpsUp::Fitted;
     Mat3 A = mat3Identity();  // model -> metres: scale, rotation, up alignment
     Vec3 t{0, 0, 0};
     double sigma_h = 0;       // metres, the factors' level sigma
     double gate = 0;          // metres, the fit's inlier radius
+    Vec3 centroid{0, 0, 0};   // metres, the fitted positions' mean
+    double spread = 0;        // metres, their RMS radius; 0 leaves `gate` flat
+
+    // The radius at metric position p. Error correlated across a fit leaves its frame
+    // off by up to its noise at the spread; past it, by that much more per spread out.
+    double gateAt(const Vec3& p) const {
+        if (!(spread > 0)) return gate;
+        Vec3 d = p - centroid;
+        if (flat) d.z = 0;
+        const double r = d.norm() / spread;
+        return gate * std::sqrt(1.0 + r * r);
+    }
 };
 
 // The world up the images that declare their own (PriorSource::declaredUp)

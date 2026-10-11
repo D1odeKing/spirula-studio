@@ -470,7 +470,7 @@ bool Predictor::loaded() const { return impl_ && impl_->m.loaded; }
 
 void Predictor::unload() {
     if (!impl_) return;
-    vk::Stream::get().sync();
+    vk::Stream::get().drain();
     impl_->m.bb.release();
     impl_->m.w.release();
     impl_->m.arena.release();

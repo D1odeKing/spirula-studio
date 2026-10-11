@@ -544,8 +544,14 @@ format (`image_name X Y Z` per line, any right-handed metric frame — a LiDAR
 trajectory, ARKit, RTK); the second reads each registered image's own EXIF GPS
 and converts it to a local east-north-up frame. Either way a similarity is
 fitted from the camera centres with LO-RANSAC over the same `estimateSim3` that
-model merging uses, and `--metric-max-error` is its inlier radius in metres (0
-picks 5 for GPS, 0.5 for a positions file).
+model merging uses, and `--metric-max-error` is its inlier radius in metres. 0,
+the default, takes the radius from the positions themselves: 3.37 sigmas per
+axis (3.03 on a level fit) of their least-median-of-squares scatter about the
+fit, then of the inliers' own, and never under 0.5 % of their spread. An RTK
+flight then judges by centimetres and a phone by metres; a fixed radius is
+either blind on the one or refuses the other. Such a fit needs four distinct
+fixes (five for a full fit): a bracketing phone repeats each fix five times, and
+two fixes fit a level similarity exactly, with a scatter of zero.
 
 `--metric-gps` takes `none`, `horizontal`, `full` or `auto` (the default, in the
 CLI and the GUI), and the difference is the altitude. `auto` picks per capture,
@@ -665,7 +671,9 @@ future sensor implements the same way (`core/PriorSource.h`;
   `--metric-gps none`, which leaves the GPS to pairing alone. Every gauge
   quantity is re-estimated from the poses before each solve and frozen inside
   the factors, so the solver carries no global parameter and the model stays
-  in its own gauge; the finishing gauge fit above then runs as before.
+  in its own gauge; the finishing gauge fit above then runs as before, and
+  where its metric fit is refused, the GPS frame those solves held -- refitted
+  on the final poses -- is kept instead of the normalized one.
 - **Pairing** (`--sensor-pairs`, off): images the GPS puts within
   `--sensor-pair-radius` metres (20) of each other are matched whatever the
   shortlist thought.
@@ -708,7 +716,8 @@ recorded but its `post` reading is never filled -- that model's BA is the caller
 joint solve, not one this check runs itself.
 
 The sources run in order -- the video's sensors, the recorded attitude, a
-metric reference, the fallback -- and read each other: `gauge.txt`'s two bits
+metric reference (else the GPS frame mapping held), the fallback -- and read
+each other: `gauge.txt`'s two bits
 are the state as well as the record, so a reference is not fitted over a model
 the sensors already made metric, the attitude does not re-level a model the
 sensors levelled, `horizontal` skips its own upright pre-transform where either

@@ -2205,7 +2205,7 @@ public:
 
     // A PnP pose against the GPS, through the last solve's fit: four radii off
     // right after an in-radius registration is a wrong-place PnP and refused;
-    // three in a row beyond the radius is drift, and asks for a global BA now.
+    // three in a row beyond the radius is drift, and asks for a global BA soon.
     bool gpsCheck(uint32_t img, const Pose& pose, bool* measured = nullptr) {
         double d;
         if (!priors_ || !gps_frame_.ok || !priors_->positionError(img, pose, gps_frame_, d))
@@ -2213,9 +2213,12 @@ public:
         prior_stats_.gps_checked++;
         gps_checked_imgs_.insert(img);
         if (measured) *measured = true;
-        const double gate = gps_frame_.gate;
+        const double gate =
+            gps_frame_.gateAt(mul(gps_frame_.A, cameraCenter(pose)) + gps_frame_.t);
         prior_stats_.gps_gate = gate;
-        if (d > kGpsRefuseGates * gate && gps_out_run_ == 0) {
+        // Refused once: a second PnP there is taken, so a fix that is itself the outlier
+        // (a phone's bracket 45 m off, a hover's first fit) cannot spend every trial.
+        if (d > kGpsRefuseGates * gate && gps_last_in_ && gps_deferred_imgs_.insert(img).second) {
             reg_fail_.gps_far++;
             prior_stats_.gps_refused++;
             gps_refused_imgs_[img]++;
@@ -2226,20 +2229,32 @@ public:
             return false;
         }
         gps_refused_imgs_.erase(img);
+        gps_last_in_ = d <= gate;
         if (d <= gate) {
             gps_out_run_ = 0;
+            gps_in_since_ba_ = true;
+            gps_ba_backoff_ = 1;
             return true;
         }
         prior_stats_.gps_out++;
-        if (++gps_out_run_ >= 3 && gps_regs_since_ba_ >= 10 && !ba_requested_) {
+        if (++gps_out_run_ >= 3 && gpsBaDue() && !ba_requested_) {
             ba_requested_ = true;
+            if (!gps_in_since_ba_) gps_ba_backoff_ = std::min(2 * gps_ba_backoff_, 1u << 10);
             if (opt_.verbose)
                 slog::diag(slog::Tag::Map,
-                           "[prior] GPS: %s is %.1f m off the fit, %u in a row beyond %.1f m; "
+                           "[prior] GPS: %s is %.2f m off the fit, %u in a row beyond %.2f m; "
                            "bundle adjusting now",
                            db_.images[img].name.c_str(), d, gps_out_run_, gate);
         }
         return true;
+    }
+
+    // A BA the GPS asks for waits ten registrations, or 5% growth (half COLMAP's 10% schedule)
+    // once that is more, doubled for each asked BA that brought no check back inside: GPS no
+    // BA pulls in (a lagging or drifting fix) otherwise asks every ten, n^2/10 BA work in all.
+    bool gpsBaDue() const {
+        const double wait = std::max(10.0, 0.05 * rec_.numRegistered());
+        return gps_regs_since_ba_ >= gps_ba_backoff_ * wait;
     }
 
     // A wrong-place PnP is refused once and placed later; images that stay refused
@@ -2748,8 +2763,8 @@ private:
             if (priors_ && opt_.verbose)
                 slog::diag(slog::Tag::Map,
                            "[prior] GPS check: %u registrations checked, %u registrations "
-                           "refused beyond %.0f m, %u bundle adjustments triggered by %u "
-                           "registrations beyond %.0f m, %u model(s) dropped the frame",
+                           "refused beyond %.2f m, %u bundle adjustments triggered by %u "
+                           "registrations beyond %.2f m, %u model(s) dropped the frame",
                            prior_stats_.gps_checked, prior_stats_.gps_refused,
                            kGpsRefuseGates * prior_stats_.gps_gate,
                            prior_stats_.gps_ba, prior_stats_.gps_out, prior_stats_.gps_gate,
@@ -2927,6 +2942,8 @@ private:
         recent_regs_.clear();
         gps_regs_since_ba_ = 0;
         gps_out_run_ = 0;
+        gps_last_in_ = gps_in_since_ba_ = true;
+        gps_ba_backoff_ = 1;
         ba_requested_ = false;
         bssStart();
         rebuildScores();
@@ -2997,6 +3014,8 @@ private:
                     ba_requested_ = false;
                     gps_out_run_ = 0;
                     gps_regs_since_ba_ = 0;
+                    gps_last_in_ = false;   // drift a BA was asked for need not be gone after it
+                    gps_in_since_ba_ = false;
                 }
                 if (stop_at_ba) break;
                 checkedRefine(false);
@@ -3348,6 +3367,7 @@ private:
         gps_latched_ = gps_latch_rerank_ = false;
         gps_checked_imgs_.clear();
         gps_refused_imgs_.clear();
+        gps_deferred_imgs_.clear();
         level_frame_ = LevelFrame{};
         rig_refined_at_ = 0;
         rec_.points3D.clear();
@@ -6041,6 +6061,7 @@ private:
     bool gps_latch_rerank_ = false;     // ... newly, so a ranking that failed is retried
     std::unordered_set<uint32_t> gps_checked_imgs_;
     std::unordered_map<uint32_t, int> gps_refused_imgs_;   // standing refusals, by count
+    std::unordered_set<uint32_t> gps_deferred_imgs_;       // ever refused on this model
     // openSeams' rule, set on 27 models (canopy, power-corridor, a no-GPS Osmo 360 clip, an Avata 360
     // flight): a seam link shares 0-1 covisible images (any other candidate 27+), its offset is 0.12-0.26 of depth
     // (loop pairs <= 0.033) and its kink ratio 31-138 (other pairs 3 apart or fewer <= 8.3).
@@ -6063,6 +6084,9 @@ private:
     bool level_latched_ = false;       // the level prior is off for the run
     std::unordered_set<uint32_t> level_checked_imgs_, level_refused_imgs_;
     uint32_t gps_out_run_ = 0;         // consecutive registrations beyond its radius
+    bool gps_last_in_ = true;          // the last check was inside it: a far one now is refused
+    bool gps_in_since_ba_ = true;      // a check came inside since the last BA gpsCheck asked for
+    uint32_t gps_ba_backoff_ = 1;      // gpsBaDue's multiplier
     uint32_t gps_regs_since_ba_ = 0;   // registrations since a BA gpsCheck asked for
     static constexpr uint32_t kBssUnseen = UINT32_MAX;
     std::vector<uint32_t> bss_stamp_;  // per image, the check that first saw it registered

@@ -192,7 +192,7 @@ struct SfmConfig {
     // tilt left to the cameras), "full" (altitude as well), or "auto", which
     // resolves per capture before anything reads it (applyMetricGpsAuto).
     std::string metric_gps = "auto";
-    double metric_max_error = 0;        // metres; 0 resolves per source
+    double metric_max_error = 0;        // metres; 0 from the positions' own scatter
     // The camera attitude each image records (map/AttitudeGauge.h): "auto"
     // takes up and north, "up" the tilt alone, "none" ignores it.
     std::string exif_attitude = "auto";
@@ -213,9 +213,9 @@ struct SfmConfig {
     bool level_erp = true;
     double sensor_pair_radius = 20.0;
     double sensor_max_dt = 3.0;   // seconds a gyro rotation prior may span
-    // Cameras farther from the metric fit than this fraction of the reference
-    // positions' RMS radius are outliers too, so a kilometre-long flight is
-    // not judged by a threshold made for a walk (map/MetricGauge.h).
+    // Beside a fixed metric_max_error: cameras farther from the metric fit than this
+    // fraction of the reference positions' RMS radius are outliers too, so a long
+    // flight is not judged by a threshold made for a walk (map/MetricGauge.h).
     double metric_max_error_frac = 0.03;
     // Rigs (sfm/core/Rig.h): --rig and the manifest, resolved against the image
     // names once they are known. `final_free_rig` runs one last bundle

@@ -181,6 +181,10 @@ std::string metricReason(const MetricFit& f) {
     switch (f.reason) {
         case MetricFail::Pairs:
             return spirula::i18n::format(M::metric_fail_pairs, {(long long)f.n});
+        case MetricFail::Distinct:
+            return spirula::i18n::format(
+                M::metric_fail_distinct,
+                {(long long)f.distinct, (long long)f.n, (long long)metricMinDistinct(f.flat)});
         case MetricFail::Spread:
             return spirula::i18n::format(M::metric_fail_spread, {L::num(f.spread, 3)});
         case MetricFail::Inliers:
@@ -397,7 +401,7 @@ static SensorPriorOptions sensorPriorOptions(const SfmConfig& cfg) {
     SensorPriorOptions po;
     po.max_dt = cfg.sensor_max_dt;
     po.gps_centres = cfg.metricGps();
-    po.gps_max_error = cfg.metricGps() && cfg.metric_max_error > 0 ? cfg.metric_max_error : 5.0;
+    po.gps_max_error = cfg.metricGps() ? cfg.metric_max_error : 0.0;
     po.gps_max_error_frac = cfg.metric_max_error_frac;
     po.trusted_position = cfg.metric_gps == "full";
     po.gps_flat = cfg.metric_gps == "horizontal";
@@ -608,9 +612,17 @@ void calibrateSensorPriorsFromDatabase(TelemetryPriors& priors, const MatchesDat
 }
 
 
+static std::vector<PosedImage> posedImagesOf(const Reconstruction& rec) {
+    std::vector<PosedImage> out;
+    for (const auto& kv : rec.images)
+        if (kv.second.registered) out.push_back({kv.first, kv.second.camera_id, kv.second.pose});
+    return out;
+}
+
 bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
               const std::string& imagedir, bool verbose,
-              std::vector<ModelGauge>& gauge, const SensorCaptures* sensors) {
+              std::vector<ModelGauge>& gauge, const SensorCaptures* sensors,
+              PriorSource* mapped) {
     const bool gps = cfg.metricGps();
     const bool flat = cfg.metric_gps == "horizontal";
     const bool file = !cfg.metric_positions.empty();
@@ -640,17 +652,19 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
         sensors = &own;
     }
     const std::vector<std::unique_ptr<LoadedCapture>>& loaded = sensors->loaded;
+    std::vector<MetricFit> log_fit(models.size());   // the GPS log's, where it was fitted
     if (!loaded.empty()) {
         std::vector<SensorCapture> caps = sensors->caps();
         SensorGaugeOptions opt;
         opt.mode = cfg.sensor_gauge == "up" ? SensorMode::Up : SensorMode::Auto;
         opt.gps_full = cfg.metric_gps == "full";
-        opt.gps_max_error = gps ? cfg.metric_max_error : 5.0;
+        opt.gps_max_error = gps ? cfg.metric_max_error : 0.0;
         opt.gps_max_error_frac = cfg.metric_max_error_frac;
         opt.verbose = verbose;
         for (size_t i = 0; i < models.size(); i++) {
             const SensorGaugeResult r = fitSensorGauge(models[i], caps, opt);
             reportSensorGauge(i, r, loaded, verbose);
+            if (r.gps_frames > 0) log_fit[i] = r.gps;
             if (!r.applied) continue;
             applySim3(models[i], r.T);
             gauge[i].oriented = true;
@@ -702,16 +716,36 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
     }
 
     // ---- an outside metric reference --------------------------------------
-    bool all = true;
+    bool readable = true;
     std::map<std::string, Vec3> positions;
     if (file) {
         std::string err;
         if (!readMetricPositions(cfg.metric_positions, positions, err)) {
             L::fail(Tag::Orient, M::metric_positions_bad, {cfg.metric_positions, err});
-            all = false;
+            readable = false;
         }
     }
-    for (size_t i = 0; i < models.size() && all && (gps || file); i++) {
+    // The GPS frame the mapper's bundle adjustments held the model in, refitted on its
+    // final poses: a refused fit below keeps it rather than the normalized frame. The
+    // cameras' guessed up never replaces one a sensor measured.
+    auto keepMapped = [&](size_t i) {
+        if (!mapped || !gps) return false;
+        const GpsFrame f = mapped->factors(posedImagesOf(models[i])).gps;
+        const bool guessed = f.up == GpsUp::Cameras;
+        if (!f.ok || (guessed && gauge[i].oriented)) return false;
+        const double s = std::sqrt(f.A[0] * f.A[0] + f.A[3] * f.A[3] + f.A[6] * f.A[6]);
+        applySim3(models[i], Sim3{s, mat3Scale(f.A, 1.0 / s), f.t});
+        gauge[i].metric = true;
+        gauge[i].scale = "gps";
+        gauge[i].oriented = !guessed;
+        gauge[i].up = f.up == GpsUp::Imu        ? "sensors"
+                      : f.up == GpsUp::Declared ? "level"
+                      : f.up == GpsUp::Fitted   ? "gps"
+                                                : "cameras";
+        L::out(Tag::Orient, M::metric_mapped, {(long long)i, L::num(s, 6), L::num(f.gate, 3)});
+        return true;
+    };
+    for (size_t i = 0; i < models.size() && readable && (gps || file); i++) {
         // A metric sensor frame settles the model; a second reference over it
         // could only disagree with the one already applied.
         if (gauge[i].metric) continue;
@@ -736,12 +770,12 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
             fitMetricGauge(ref, cfg.metric_max_error,
                            flat ? MetricAxes::Horizontal : MetricAxes::Full,
                            cfg.metric_max_error_frac);
-        // A refused fit leaves the model in the frame it came in with -- the
-        // sensors', or the normalized one the fallback below writes. Applying
-        // the identity it returns would still claim the metre.
+        // Applying the identity a refused fit returns would still claim the metre.
         if (!fit.ok) {
-            all = false;
-            L::warn(Tag::Orient, M::metric_failed, {(long long)i, metricReason(fit)});
+            if (keepMapped(i)) continue;
+            // A video's frames carry no EXIF fix; their GPS is the log the sensors fitted.
+            const MetricFit& why = !file && fit.n == 0 && log_fit[i].n > 0 ? log_fit[i] : fit;
+            L::warn(Tag::Orient, M::metric_failed, {(long long)i, metricReason(why)});
             continue;
         }
         applySim3(models[i], composeSim3(fit.T, pre));
@@ -1145,6 +1179,7 @@ std::unique_ptr<ExifGpsPriors> makeExifGpsPriors(const SfmConfig& cfg, const std
     if (imagedir.empty() || !(cfg.sensor_map || cfg.sensor_pairs)) return nullptr;
     const std::map<std::string, std::string> stem2name = imageStemMap(imagedir);
     std::vector<std::optional<Geodetic>> fixes(db.images.size());
+    std::vector<char> level_only(db.images.size(), 0);
     int with = 0, no_alt = 0;
     for (size_t i = 0; i < db.images.size(); i++) {
         auto it = stem2name.find(db.images[i].name);
@@ -1155,6 +1190,7 @@ std::unique_ptr<ExifGpsPriors> makeExifGpsPriors(const SfmConfig& cfg, const std
         fixes[i] = Geodetic{e.lat_deg, e.lon_deg, e.alt_m};
         with++;
         if (!e.has_alt) no_alt++;
+        level_only[i] = !e.has_alt;
     }
     if (!with) return nullptr;
     if (verbose)
@@ -1166,7 +1202,8 @@ std::unique_ptr<ExifGpsPriors> makeExifGpsPriors(const SfmConfig& cfg, const std
             auto it = cams.cameras.find(cams.ids[i]);
             level[i] = it != cams.cameras.end() && it->second.isSpherical();
         }
-    return std::make_unique<ExifGpsPriors>(fixes, sensorPriorOptions(cfg), std::move(level));
+    return std::make_unique<ExifGpsPriors>(fixes, sensorPriorOptions(cfg), std::move(level),
+                                           std::move(level_only));
 }
 
 // The unregistered list as a data file, when SS_UNREG_LOG names one: per
@@ -2601,6 +2638,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         r.exit_code = 2;
         return r;
     }
+    PriorSource* mapped = cfg.sensor_map ? calib.positionPriors() : nullptr;
     AssembleStats ast;
     std::vector<Reconstruction> models;
     std::unique_ptr<ProgressiveAligner> progressive;
@@ -2610,8 +2648,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
                                                            _imagedir, ws);
         models = progressive->run(ast);
     } else {
-        single = std::make_unique<Mapper>(db, feats, mapopt, cs.ids, &rigs, &seqs,
-                                          cfg.sensor_map ? calib.positionPriors() : nullptr);
+        single = std::make_unique<Mapper>(db, feats, mapopt, cs.ids, &rigs, &seqs, mapped);
         models = runMapper(*single, db, feats, cfg, ast);
     }
     Mapper& mapper = progressive ? progressive->mapper() : *single;
@@ -2632,7 +2669,7 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
 
     resolveImageNames(models, _imagedir);
     std::vector<ModelGauge> gauge;
-    const bool auto_metric = fixGauge(models, cfg, _imagedir, verbose, gauge, &sensors);
+    const bool auto_metric = fixGauge(models, cfg, _imagedir, verbose, gauge, &sensors, mapped);
     recolorPoints(models, cfg);
     // The gauge is what a screen was missing: every snapshot before this one is
     // in the seed pair's frame, so a run watched to the end left a tilted model

@@ -230,9 +230,11 @@ struct ModelGauge {
 };
 
 // Levelling, centring and the metric gauge. False when no metric frame fitted.
+// `mapped` is the source the mapper's bundle adjustments took GPS factors from.
 bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
               const std::string& imagedir, bool verbose,
-              std::vector<ModelGauge>& gauge, const SensorCaptures* sensors = nullptr);
+              std::vector<ModelGauge>& gauge, const SensorCaptures* sensors = nullptr,
+              PriorSource* mapped = nullptr);
 
 void resolveImageNames(std::vector<Reconstruction>& models, const std::string& imagedir);
 void recolorPoints(std::vector<Reconstruction>& models, const SfmConfig& cfg);

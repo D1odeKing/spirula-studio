@@ -4219,30 +4219,40 @@ SS_MSG(metric_gps_help,
        "`horizontal`, GPS yoksa ya da --metric-positions varsa `none` seçer"));
 
 SS_MSG(metric_max_error_frac_help,
-    EN("... or this fraction of the reference positions' RMS radius, whichever is larger, so "
-       "a long flight is not judged by a threshold made for a walk"),
-    JA("... または基準位置の RMS 半径のこの割合のうち大きいほう。長い飛行を徒歩用の閾値で"
-       "判定しないためです"),
-    ZH_HANS("……或参考位置 RMS 半径的这一比例，取较大者，这样长距离飞行不会按步行的阈值来判定"),
-    ZH_HANT("……或參考位置 RMS 半徑的這一比例，取較大者，這樣長距離飛行不會按步行的閾值來判定"),
-    KO("... 또는 기준 위치 RMS 반경의 이 비율 중 큰 쪽. 긴 비행을 도보용 문턱으로 판정하지 "
-       "않기 위해서입니다"),
-    DE("... oder dieser Anteil des RMS-Radius der Referenzpositionen, je nachdem, was größer "
-       "ist, damit ein langer Flug nicht nach einer Schwelle für einen Spaziergang beurteilt wird"),
-    FR("... ou cette fraction du rayon RMS des positions de référence, la plus grande des deux, "
-       "pour qu'un long vol ne soit pas jugé avec un seuil fait pour une marche"),
-    ES("... o esta fracción del radio RMS de las posiciones de referencia, la que sea mayor, para "
-       "que un vuelo largo no se juzgue con un umbral hecho para un paseo"),
-    PT("... ou esta fração do raio RMS das posições de referência, o que for maior, para que um "
-       "voo longo não seja julgado por um limiar feito para uma caminhada"),
-    IT("... o questa frazione del raggio RMS delle posizioni di riferimento, la maggiore delle "
-       "due, così un volo lungo non è giudicato con una soglia fatta per una passeggiata"),
-    NL("... of dit deel van de RMS-straal van de referentieposities, wat het grootst is, zodat "
-       "een lange vlucht niet met een drempel voor een wandeling wordt beoordeeld"),
-    RU("... или эта доля RMS-радиуса опорных позиций, что больше, чтобы длинный полёт не "
-       "судили по порогу для прогулки"),
-    TR("... ya da referans konumların RMS yarıçapının bu oranı, hangisi büyükse; uzun bir uçuş "
-       "yürüyüş için yapılmış bir eşikle yargılanmasın diye"));
+    EN("... or, with --metric-max-error above 0, this fraction of the reference positions' "
+       "RMS radius, whichever is larger, so a long flight is not judged by a threshold made "
+       "for a walk"),
+    JA("... または --metric-max-error が 0 より大きいとき、基準位置の RMS 半径のこの割合の"
+       "うち大きいほう。長い飛行を徒歩用の閾値で判定しないためです"),
+    ZH_HANS("……或（--metric-max-error 大于 0 时）参考位置 RMS 半径的这一比例，取较大者，"
+            "这样长距离飞行不会按步行的阈值来判定"),
+    ZH_HANT("……或（--metric-max-error 大於 0 時）參考位置 RMS 半徑的這一比例，取較大者，"
+            "這樣長距離飛行不會按步行的閾值來判定"),
+    KO("... 또는 --metric-max-error 가 0 보다 클 때 기준 위치 RMS 반경의 이 비율 중 큰 쪽. "
+       "긴 비행을 도보용 문턱으로 판정하지 않기 위해서입니다"),
+    DE("... oder, bei --metric-max-error über 0, dieser Anteil des RMS-Radius der "
+       "Referenzpositionen, je nachdem, was größer ist, damit ein langer Flug nicht nach einer "
+       "Schwelle für einen Spaziergang beurteilt wird"),
+    FR("... ou, avec --metric-max-error au-dessus de 0, cette fraction du rayon RMS des "
+       "positions de référence, la plus grande des deux, pour qu'un long vol ne soit pas jugé "
+       "avec un seuil fait pour une marche"),
+    ES("... o, con --metric-max-error por encima de 0, esta fracción del radio RMS de las "
+       "posiciones de referencia, la que sea mayor, para que un vuelo largo no se juzgue con un "
+       "umbral hecho para un paseo"),
+    PT("... ou, com --metric-max-error acima de 0, esta fração do raio RMS das posições de "
+       "referência, o que for maior, para que um voo longo não seja julgado por um limiar "
+       "feito para uma caminhada"),
+    IT("... o, con --metric-max-error sopra 0, questa frazione del raggio RMS delle posizioni "
+       "di riferimento, la maggiore delle due, così un volo lungo non è giudicato con una "
+       "soglia fatta per una passeggiata"),
+    NL("... of, bij --metric-max-error boven 0, dit deel van de RMS-straal van de "
+       "referentieposities, wat het grootst is, zodat een lange vlucht niet met een drempel "
+       "voor een wandeling wordt beoordeeld"),
+    RU("... или, при --metric-max-error больше 0, эта доля RMS-радиуса опорных позиций, что "
+       "больше, чтобы длинный полёт не судили по порогу для прогулки"),
+    TR("... ya da --metric-max-error 0'dan büyükken referans konumların RMS yarıçapının bu "
+       "oranı, hangisi büyükse; uzun bir uçuş yürüyüş için yapılmış bir eşikle yargılanmasın "
+       "diye"));
 
 SS_MSG(rigs_help,
     EN("Use the rigs --rig and the manifest define: one pose per frame, member extrinsics shared "
@@ -4408,29 +4418,29 @@ SS_MSG(final_free_rig_help,
 
 SS_MSG(metric_max_error_help,
     EN("Cameras farther than this many metres from the fitted position are outliers; 0 "
-       "chooses 5 for GPS and 0.5 for a positions file"),
-    JA("当てはめ位置からこのメートル数より離れたカメラを外れ値とします。0 なら GPS で 5、"
-       "位置ファイルで 0.5 を選びます"),
-    ZH_HANS("离拟合位置超过这么多米的相机算作外点; 0 表示 GPS 取 5、位置文件取 0.5"),
-    ZH_HANT("離擬合位置超過這麼多公尺的相機算作外點; 0 表示 GPS 取 5、位置檔取 0.5"),
-    KO("맞춘 위치에서 이 미터 수보다 먼 카메라는 이상치로 봅니다. 0 이면 GPS 는 5, 위치 파일은 "
-       "0.5 를 씁니다"),
+       "takes the radius from how far the positions scatter about the fit"),
+    JA("当てはめ位置からこのメートル数より離れたカメラを外れ値とします。0 なら位置の"
+       "当てはめに対するばらつきから半径を決めます"),
+    ZH_HANS("离拟合位置超过这么多米的相机算作外点; 0 表示按位置相对拟合的离散程度定半径"),
+    ZH_HANT("離擬合位置超過這麼多公尺的相機算作外點; 0 表示按位置相對擬合的離散程度定半徑"),
+    KO("맞춘 위치에서 이 미터 수보다 먼 카메라는 이상치로 봅니다. 0 이면 맞춘 결과에 대한 "
+       "위치의 퍼짐에서 반경을 정합니다"),
     DE("Kameras weiter als so viele Meter von der angepassten Position sind Ausreißer; 0 "
-       "wählt 5 für GPS und 0,5 für eine Positionsdatei"),
+       "nimmt den Radius aus der Streuung der Positionen um die Anpassung"),
     FR("Les caméras à plus de tant de mètres de la position ajustée sont aberrantes ; 0 "
-       "choisit 5 pour le GPS et 0,5 pour un fichier de positions"),
-    ES("Las cámaras a más de tantos metros de la posición ajustada son atípicas; 0 elige 5 "
-       "para GPS y 0,5 para un archivo de posiciones"),
-    PT("Câmeras a mais do que estes metros da posição ajustada são atípicas; 0 escolhe 5 "
-       "para GPS e 0,5 para um ficheiro de posições"),
-    IT("Le camere oltre questi metri dalla posizione stimata sono anomale; 0 sceglie 5 per "
-       "il GPS e 0,5 per un file di posizioni"),
-    NL("Camera's verder dan zoveel meter van de gefitte positie zijn uitschieters; 0 kiest 5 "
-       "voor GPS en 0,5 voor een positiebestand"),
+       "prend le rayon de la dispersion des positions autour de l'ajustement"),
+    ES("Las cámaras a más de tantos metros de la posición ajustada son atípicas; 0 toma el "
+       "radio de la dispersión de las posiciones en torno al ajuste"),
+    PT("Câmeras a mais do que estes metros da posição ajustada são atípicas; 0 toma o raio "
+       "da dispersão das posições em torno do ajuste"),
+    IT("Le camere oltre questi metri dalla posizione stimata sono anomale; 0 ricava il "
+       "raggio dalla dispersione delle posizioni attorno alla stima"),
+    NL("Camera's verder dan zoveel meter van de gefitte positie zijn uitschieters; 0 neemt "
+       "de straal uit de spreiding van de posities rond de fit"),
     RU("Камеры дальше такого числа метров от подогнанной позиции считаются выбросами; 0 "
-       "выбирает 5 для GPS и 0,5 для файла позиций"),
-    TR("Oturtulan konumdan bu kadar metreden uzak kameralar aykırıdır; 0, GPS için 5 ve "
-       "konum dosyası için 0,5 seçer"));
+       "берёт радиус из разброса позиций вокруг подгонки"),
+    TR("Oturtulan konumdan bu kadar metreden uzak kameralar aykırıdır; 0, yarıçapı "
+       "konumların oturtma etrafındaki saçılımından alır"));
 
 SS_MSG(telemetry_help,
     EN("A video whose IMU and GPS cover the images (Insta360 .insv, GoPro .360/.mp4, DJI .OSV, "

@@ -154,8 +154,10 @@ static void testFactors() {
     check(pf.rotations.empty() && pf.ups.empty(), "factors: GPS states no rotation or up");
     check(st.gps_rms > 0.3 && st.gps_rms < 1.2, "factors: fit RMS at the injected noise");
 
-    // Full, not horizontal: no IMU up, so the vertical is kept at 3x the
-    // level sigma, whose floor is 0.6 of the 5 m inlier radius (D74/D75).
+    // Full, not horizontal: no IMU up, so the vertical is kept at 3x the level
+    // sigma, twice the fit's RMS (D74/D75); the radius follows the 0.5 m noise.
+    const double level_sigma = std::max(2.0 * st.gps_rms, 0.6 * pf.gps.gate);
+    check(pf.gps.gate > 1.2 && pf.gps.gate < 2.5, "factors: the radius from the fit's scatter");
     int wrong_img = 0, bad_sigma = 0;
     double r2 = 0, rz2 = 0;
     for (const PriorCentre& f : pf.centres) {
@@ -163,7 +165,8 @@ static void testFactors() {
             wrong_img++;
             continue;
         }
-        if (!(f.sigma.x >= 3.0 && f.sigma.y == f.sigma.x && f.sigma.z == 3.0 * f.sigma.x))
+        if (!(std::fabs(f.sigma.x - level_sigma) < 1e-12 && f.sigma.y == f.sigma.x &&
+              f.sigma.z == 3.0 * f.sigma.x))
             bad_sigma++;
         const Vec3 d = mul(f.A[0], cameraCenter(imgs[f.img[0]].pose)) - f.b;
         r2 += d.dot(d);
@@ -173,7 +176,7 @@ static void testFactors() {
     std::printf("  residual at the truth: %.3f m RMS, vertical %.3f m\n", std::sqrt(r2 / m),
                 std::sqrt(rz2 / m));
     check(wrong_img == 0, "factors: single-image factors on positioned ids only");
-    check(bad_sigma == 0, "factors: full sigma, vertical 3x the level pair");
+    check(bad_sigma == 0, "factors: twice the fit's RMS, vertical 3x the level pair");
     check(std::sqrt(r2 / m) < 1.5 && std::sqrt(rz2 / m) < 1.0,
           "factors: A c - b is the GPS noise at the true poses, vertical included");
 
@@ -183,25 +186,32 @@ static void testFactors() {
     check(none.centres.empty() && !src.lastFactors().gps_ok, "factors: none under five images");
 }
 
-// A trusted source (--metric-gps full) states COLMAP's factor: isotropic 1 m
-// under a Cauchy loss of scale 7.815; the fit, its gate and the fold are unchanged.
+// A trusted source (--metric-gps full) states COLMAP's Cauchy factor (scale 7.815) at twice
+// the fit's own per-axis scatter; the fit, its gate and the fold are the untrusted ones.
 static void testTrustedFactors() {
     const Loop L = makeLoop(15.0);
     SensorPriorOptions po;
     po.trusted_position = true;
     ExifGpsPriors src(L.fixes, po);
     const PosePriors pf = src.factors(L.imgs);
+    ExifGpsPriors plain(L.fixes, SensorPriorOptions{});
+    const PosePriors pp = plain.factors(L.imgs);
     int bad = 0;
     for (const PriorCentre& f : pf.centres)
-        if (!(f.sigma.x == 1.0 && f.sigma.y == 1.0 && f.sigma.z == 1.0 && f.cauchy == 7.815)) bad++;
-    check(pf.centres.size() == 39 && bad == 0, "trusted: isotropic 1 m under Cauchy 7.815");
-    check(src.lastFactors().gps_out == 6 && std::fabs(pf.gps.gate - 5.0) < 1e-9,
+        if (!(f.sigma.x == pf.gps.sigma_h && f.sigma.y == f.sigma.x && f.sigma.z > 0 &&
+              f.cauchy == 7.815))
+            bad++;
+    std::printf("trusted: level sigma %.3f m, vertical %.3f m, gate %.3f m\n", pf.gps.sigma_h,
+                pf.centres.empty() ? 0.0 : pf.centres[0].sigma.z, pf.gps.gate);
+    check(pf.centres.size() == 39 && bad == 0, "trusted: the frame's sigma, a vertical, Cauchy 7.815");
+    check(src.lastFactors().gps_out == 6 && std::fabs(pf.gps.gate - pp.gps.gate) < 1e-12,
           "trusted: the fit and its gate are the untrusted ones");
-    check(std::fabs(pf.gps.sigma_h - 1.0) < 1e-12, "trusted: the frame carries the 1 m sigma");
+    check(pf.gps.sigma_h > 0.7 && pf.gps.sigma_h < 1.4 && pf.centres[0].sigma.z > 0.7 &&
+              pf.centres[0].sigma.z < 1.4,
+          "trusted: twice the 0.5 m noise per axis, not a fixed metre");
 
-    ExifGpsPriors plain(L.fixes, SensorPriorOptions{});
     int huber = 0;
-    for (const PriorCentre& f : plain.factors(L.imgs).centres) huber += f.cauchy == 0.0;
+    for (const PriorCentre& f : pp.centres) huber += f.cauchy == 0.0;
     check(huber == 39, "untrusted: the shared Huber knee, as before");
 
     const Loop U = makeLoop(0.0);
@@ -221,9 +231,9 @@ static void testTrustedFactors() {
     gpsCentreFactors(ref, &up, 5.0, 0.03, lv, true);
     int iso = 0;
     for (const PriorCentre& f : lv.centres)
-        iso += f.sigma.x == 1.0 && f.sigma.y == 1.0 && f.sigma.z == 1.0 && f.cauchy == 7.815;
+        iso += f.sigma.x == f.sigma.y && f.sigma.z > 0 && f.cauchy == 7.815;
     check(!lv.centres.empty() && iso == (int)lv.centres.size() && !lv.gps.flat,
-          "trusted under an up axis: the vertical is kept, isotropic 1 m under Cauchy");
+          "trusted under an up axis: the vertical is kept, under Cauchy");
     // Level fit, full factors: the vertical residual at the truth is the GPS noise.
     double rz2 = 0;
     for (const PriorCentre& f : lv.centres) {
@@ -309,6 +319,45 @@ static void testFoldedFactors() {
           "factors: the folded six carry their residual");
 }
 
+// A fix with no altitude reads as sea level, 250 m under the rest: out of a full fit,
+// level in its factor and in the registration check, and still stated by a level fit.
+static void testNoAltitude() {
+    const Loop L = makeLoop(0.0);
+    std::vector<std::optional<Geodetic>> fixes = L.fixes;
+    std::vector<char> no_alt(fixes.size(), 0);
+    for (int k : {3, 11, 29}) {
+        fixes[(size_t)k]->alt_m = 0.0;
+        no_alt[(size_t)k] = 1;
+    }
+    SensorPriorOptions po;
+    po.trusted_position = true;
+    ExifGpsPriors src(fixes, po, {}, no_alt);
+    const PosePriors pf = src.factors(L.imgs);
+    int level = 0, full = 0;
+    for (const PriorCentre& f : pf.centres) {
+        if (no_alt[f.img[0]]) level += f.sigma.z == 0.0 && f.sigma.x > 0.0;
+        else full += f.sigma.z > 0.0;
+    }
+    double worst = 0, d = 0;
+    bool checked = true;
+    for (int k : {3, 11, 29}) {
+        checked = checked && src.positionError((uint32_t)k, L.imgs[(size_t)k].pose, pf.gps, d);
+        worst = std::max(worst, d);
+    }
+    std::printf("no altitude: %d level and %d full factors, check reads them %.2f m off at worst, "
+                "gate %.2f m\n", level, full, worst, pf.gps.gate);
+    check(pf.gps.ok && level == 3 && full == 36, "no altitude: level factors for those three only");
+    check(checked && worst < 3.0, "no altitude: the check reads them level, not 250 m under");
+    check(pf.gps.gate < 2.5, "no altitude: the sea-level fixes do not widen the fit");
+
+    std::vector<char> none_alt(fixes.size(), 1);
+    SensorPriorOptions hz;
+    hz.gps_flat = true;
+    ExifGpsPriors flat(L.fixes, hz, {}, none_alt);
+    check(flat.factors(L.imgs).centres.size() == 39,
+          "no altitude anywhere: a level fit still states every fix");
+}
+
 // ---- the position check a registration takes ------------------------------
 
 static void testPositionError() {
@@ -342,8 +391,17 @@ static void testPositionError() {
     check(pf.gps.ok && !pf.gps.flat && n == 39 && fold_ok == 6 && rest_ok == 33,
           "check: metres, through the fit");
     check(!src.positionError(7, F2.imgs[7].pose, pf.gps, d), "check: nothing for an image without a fix");
-    check(std::fabs(pf.gps.gate - 5.0) < 1e-9 && std::fabs(pf.gps.sigma_h - 3.0) < 1e-9,
+    const SensorFactorStats fs = src.lastFactors();
+    check(pf.gps.gate > 1.2 && pf.gps.gate < 2.5 &&
+              std::fabs(pf.gps.sigma_h - std::max(2.0 * fs.gps_rms, 0.6 * pf.gps.gate)) < 1e-12,
           "check: the frame carries the fit's radius and the factors' sigma");
+    // Off the fitted positions the radius widens: sqrt(2) at one spread out, sqrt(5) at two.
+    const Vec3 out1 = pf.gps.centroid + Vec3{pf.gps.spread, 0, 0};
+    const Vec3 out2 = pf.gps.centroid + Vec3{0, 2.0 * pf.gps.spread, 0};
+    check(pf.gps.spread > 10 && std::fabs(pf.gps.gateAt(pf.gps.centroid) - pf.gps.gate) < 1e-12 &&
+              std::fabs(pf.gps.gateAt(out1) - std::sqrt(2.0) * pf.gps.gate) < 1e-9 &&
+              std::fabs(pf.gps.gateAt(out2) - std::sqrt(5.0) * pf.gps.gate) < 1e-9,
+          "check: the radius grows past the fitted spread");
 
     // Through the renumbering an atom's mapper sees, with the order reversed.
     std::vector<uint32_t> to_global;
@@ -498,7 +556,7 @@ static void testLevelUps() {
     ExifGpsPriors tsrc(level.fixes, tr, all);
     const PosePriors pt = tsrc.factors(level.imgs);
     int vert = 0;
-    for (const PriorCentre& f : pt.centres) vert += f.sigma.z == 1.0;
+    for (const PriorCentre& f : pt.centres) vert += f.sigma.z > 0;
     std::printf("level + full: %zu ups, %d of %zu centres with a vertical\n", pt.ups.size(), vert,
                 pt.centres.size());
     check(pt.ups.size() == 40 && pt.centres.size() == 39 && vert == 39,
@@ -835,6 +893,62 @@ static void testAutoFromCapture() {
     fs::remove_all(dir);
 }
 
+// ---- the gauge keeps the frame mapping solved in --------------------------------
+
+static Reconstruction modelOf(std::vector<PosedImage> imgs) {
+    Reconstruction rec;
+    for (const PosedImage& p : imgs) {
+        Image im;
+        im.id = p.image;
+        im.camera_id = 1;
+        im.name = "f" + std::to_string(p.image) + ".jpg";
+        im.pose = p.pose;
+        im.registered = true;
+        rec.images[p.image] = im;
+    }
+    return rec;
+}
+
+// A video's frames carry no EXIF fix, so the finishing fit has nothing to fit; the
+// level GPS frame the mapper's solves held is what the model is written in.
+static void testKeptFrame() {
+    const Loop L = makeLoop(0.0, true, 0.002);
+    ExifGpsPriors src(L.fixes, SensorPriorOptions{}, std::vector<char>(40, 1));
+    const fs::path dir = fs::temp_directory_path() / "sfm_kept_frame_test";
+    fs::create_directories(dir);
+    SfmConfig cfg;
+    cfg.metric_gps = "horizontal";
+    cfg.exif_attitude = "none";
+    const SensorCaptures none;
+    // Model 0 is too small for any fit, which must not cost model 1 its own.
+    std::vector<Reconstruction> models{
+        modelOf({L.imgs.begin(), L.imgs.begin() + 3}), modelOf(L.imgs)};
+    std::vector<ModelGauge> gauge;
+    fixGauge(models, cfg, dir.string(), false, gauge, &none, &src);
+    double r2 = 0;
+    int n = 0;
+    for (const auto& kv : models[1].images) {
+        Vec3 p;
+        if (!src.position(kv.first, p)) continue;
+        const Vec3 d = cameraCenter(kv.second.pose) - p;
+        r2 += d.dot(d);
+        n++;
+    }
+    const double rms = std::sqrt(r2 / std::max(n, 1));
+    std::printf("kept frame: model 1 metric %d, oriented %d, up %s; %.3f m RMS off the fixes\n",
+                (int)gauge[1].metric, (int)gauge[1].oriented, gauge[1].up.c_str(), rms);
+    check(!gauge[0].metric, "kept: a model too small for any fit stays unmetric");
+    check(gauge[1].metric && gauge[1].oriented && gauge[1].up == "level" &&
+              gauge[1].scale == "gps",
+          "kept: the mapper's level GPS frame, metric and oriented by the declared up");
+    check(n == 39 && rms < 1.5, "kept: the cameras sit on their fixes, in metres");
+
+    std::vector<Reconstruction> bare{modelOf(L.imgs)};
+    fixGauge(bare, cfg, dir.string(), false, gauge, &none, nullptr);
+    check(!gauge[0].metric, "kept: without the mapper's source there is nothing to keep");
+    fs::remove_all(dir);
+}
+
 static int run(int, char**) {
     testPositionsAndPairs();
     testFactors();
@@ -842,11 +956,13 @@ static int run(int, char**) {
     testTrustedFactors();
     testNoCentres();
     testPositionError();
+    testNoAltitude();
     testLevelCheck();
     testLevelUps();
     testBuilder();
     testAutoRule();
     testAutoFromCapture();
+    testKeptFrame();
     std::printf("%s (%d failure%s)\n", fails ? "FAILED" : "OK", fails, fails == 1 ? "" : "s");
     return fails;
 }

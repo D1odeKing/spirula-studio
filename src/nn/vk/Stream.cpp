@@ -74,6 +74,7 @@ struct Stream::Impl {
     std::map<std::string, std::pair<uint64_t, double>> prof;  // name -> (n, ms)
 
     bool initialized = false;
+    bool drain_failed = false;
 
     void init();
     void resolveQueries();
@@ -101,9 +102,7 @@ void Stream::Impl::init() {
     Context& ctx = Context::get();
 
     // Allocator::free calls this before destroying a buffer.
-    set_drain_hook([] {
-        if (Stream::get().impl_) Stream::get().sync();
-    });
+    set_drain_hook([] { Stream::get().drain(); });
 
     VkCommandPoolCreateInfo cpi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
     cpi.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -152,7 +151,7 @@ void Stream::shutdown() {
     Stream& s = get();
     if (!s.impl_) return;
     if (Context::initialized()) {
-        s.sync();
+        s.drain();
         // Release the drain hook and the buffers BEFORE the objects it needs:
         // Allocator::free would otherwise call back into a Stream whose
         // semaphore and command pool are already gone.
@@ -312,6 +311,17 @@ void Stream::sync() {
     }
     for (int i = 0; i < Impl::kRing; ++i) s.harvest(i);
     s.resolveQueries();
+}
+
+// The failure was already thrown to the operation that met it; teardown only logs.
+void Stream::drain() noexcept {
+    if (!impl_ || impl_->drain_failed) return;
+    try {
+        sync();
+    } catch (const std::exception& e) {
+        impl_->drain_failed = true;
+        NN_LOG_ERROR("[vk] %s; releasing GPU memory without waiting for it\n", e.what());
+    }
 }
 
 void Stream::waitOn(VkSemaphore sem, uint64_t value) {

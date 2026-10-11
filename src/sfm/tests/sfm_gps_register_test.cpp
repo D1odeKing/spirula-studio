@@ -428,8 +428,8 @@ static void testRig(MapperOptions opt) {
     check(once == frames, "rig: every frame the rig places is checked, once");
     check(r0.st.gps_checked == checks && checks > 0, "rig: gps_checked counts every check");
 
-    // A frame four radii off, every time it is checked: it never comes in, and
-    // nothing of it is committed before the check refuses it.
+    // A frame four radii off, every time it is checked: refused once as a whole, the
+    // GPS's refusal and not the gyro's, then taken whole on its next trial.
     {
         size_t pick = 0;
         for (size_t k = 0, seen = 0; k < r0.placed.size(); k++)
@@ -441,11 +441,11 @@ static void testRig(MapperOptions opt) {
         std::printf("rig, frame %u at 25 m: %u/%u registered, frame in: %d %d | refused %u, gyro "
                     "refused %u\n", f, r.model.numRegistered(), n, (int)registered(r.model, f),
                     (int)registered(r.model, M + f), r.st.gps_refused, r.st.refused);
-        check(!registered(r.model, f) && !registered(r.model, M + f),
-              "rig: a refused frame leaves no image registered");
-        check(r.st.gps_refused >= 1 && r.st.refused == 0,
-              "rig: the refusal is counted as the GPS's, not the gyro's");
-        check(r.model.numRegistered() == n - 2, "rig: every other frame registers");
+        check(registered(r.model, f) && registered(r.model, M + f),
+              "rig: a refused frame comes in whole on its next trial");
+        check(r.st.gps_refused >= 1 && r.st.gps_refused <= 2 && r.st.refused == 0,
+              "rig: the refusal is counted once, as the GPS's, not the gyro's");
+        check(r.model.numRegistered() == n, "rig: every frame registers");
     }
 
     // Trigger runs start at script entry j, past ten registrations, on a stretch of
@@ -601,6 +601,17 @@ static int body(int argc, char** argv) {
               limited.solvedAfter(m),
           "trigger: ten registrations between triggered BAs");
 
+    // A drift no BA mends: every check out, the schedule's own BAs sparse. The second request
+    // finds no check came back inside after the first, so the third waits twenty registrations.
+    MapperOptions sparse = opt;
+    sparse.ba_growth_ratio = 3.0;
+    ScriptedGps stuck(std::vector<double>(base.at.size() + 10, 6.0));
+    const Run rs = runWith(sc, sparse, stuck);
+    std::printf("out for good: ba %u out %u, %u/%d registered\n", rs.st.gps_ba, rs.st.gps_out,
+                rs.registered, M);
+    check(rs.st.gps_ba == 2 && rs.registered == (uint32_t)M,
+          "backoff: a BA that brings nothing back inside doubles the wait for the next");
+
     ScriptedGps farGps(script(n, {{j, 25.0}}));
     const Run r4 = runWith(sc, opt, farGps);
     const uint32_t far_img = farGps.image_at.count(j) ? farGps.image_at.at(j) : ~0u;
@@ -633,8 +644,8 @@ static int body(int argc, char** argv) {
     const Run r7 = runWith(sc, opt, few);
     std::printf("five images 1 km off: refused %u, dropped %u, %u/%d registered\n",
                 r7.st.gps_refused, r7.st.gps_latched, r7.registered, M);
-    check(r7.st.gps_latched == 0 && r7.registered == (uint32_t)M - 5,
-          "latch: under ten standing refusals the frame stays and refuses them");
+    check(r7.st.gps_latched == 0 && r7.st.gps_refused == 5 && r7.registered == (uint32_t)M,
+          "latch: under ten refusals the frame stays; each image is refused once, then taken");
 
     testAssembly(sc, full, opt);
     testFinalCap(sc, full, opt);
