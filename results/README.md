@@ -249,3 +249,34 @@ workspace and the env change. All four placed 676 of 678 images.
   the same error as 0.9, for 1.7x the stage time (349 s). Of the band runs,
   0.95 gives the most points for its error.
 - Stage time stays under 6 min at every ratio, well inside the 10 min limit.
+
+## Build 5 (581b8fcd): band matching with mutual neighbours
+
+Build 5 passes the five sfm tests and `preset_roundtrip_test`. Same command
+and seeding as build 4 (A's LoMa matches, `--reuse-matches keep`). All four
+runs placed 676 of 678 images.
+
+| run | env | SIFT kept / restored | points | observations | mean px | median px | inliers | `[hybrid] … kept X of Y` | stage s |
+|---|---|---|---|---|---|---|---|---|---|
+| hybrid_b5_band | MATCH=band | 676 / 0 | 1,244,335 | 2,718,251 | 2.049 | 1.782 | 5,584,415 | band 6,091,328 of 20,926,750 | 151 |
+| hybrid_b5_band_px2 | band, EPIPOLAR_PX=2 | 676 / 0 | 1,454,903 | 3,089,931 | 1.333 | 1.175 | 6,808,491 | band 6,877,032 of 23,436,832 | 163 |
+| hybrid_b5_band_r08_px2 | band, RATIO=0.8, PX=2 | 676 / 0 | 891,486 | 1,999,329 | 1.323 | 1.168 | 3,094,842 | band 3,111,580 of 10,633,255 | 78 |
+| hybrid_b5_gate_px2 | EPIPOLAR_PX=2 | 674 / 2 | 422,666 | 1,107,172 | 1.364 | 1.159 | 1,547,132 | gate 1,582,450 of 34,922,098 | 50 |
+
+Exit codes: hybrid_b5_band exits 3 (mean over 2 px). The three 2 px runs exit 0.
+
+- **A 2 px band is the best setting so far.** It gives 1.45M points at
+  1.33 px: more points than any build 4 band run except 0.95, at the lowest
+  error of any high-quality run. It is below SIFT alone (1.45 px, 273k) with
+  5.3x the points, and close to the extreme run's 1.23 px. Of its matches,
+  99% verify.
+- **Mutual neighbours at 4.5 px** cut points 26% against build 4's band
+  (1.24M against 1.67M) for only 0.08 px. The band width matters more than
+  the mutual check: at 4.5 px, borderline matches are what raise the error.
+- **Ratio at 2 px**: 0.8 gives the same error as 0.9 (1.32 against 1.33 px)
+  with 39% fewer points. Keep 0.9.
+- **The control** (gate at 2 px, no band) shows that 2 px alone tightens the
+  error (1.36 px against 1.74 at 4.5 px) but costs points (423k against
+  494k). It also lets SIFT lose 2 images. The band is what brings the density.
+- Recommended default from this capture: band matching, mutual on, ratio
+  0.9, band at 2 px.
