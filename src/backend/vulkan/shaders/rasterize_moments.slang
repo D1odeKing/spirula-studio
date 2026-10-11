@@ -6,9 +6,8 @@
 // back into occupancy at an arbitrary depth (see MeshingRaster's
 // occ_from_moment) -- plus the optional full-ray DC color image.
 //
-// Only 3DGUT with the three supported camera models is instantiated, matching
-// the CUDA side; the camera model and distortion tier are specialization
-// constants (kDistortion declared last -- see dist_spec.slang).
+// 3DGUT camera model and distortion tier are specialization constants
+// (kDistortion declared last -- see dist_spec.slang).
 
 #define CudaDeviceExport ForceInline
 #include "aabb16.slang"
