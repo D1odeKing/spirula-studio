@@ -298,10 +298,11 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         sc.match.batch_pairs = cfg.match.batch_pairs;
         sc.match.descriptor_budget_bytes = cfg.match.descriptor_budget_bytes;
         sc.match.max_num_matches = cfg.match.max_num_matches;
-        // Under the epipolar gate the ratio test only has to reject the
-        // ambiguous, not the wrong: repeated texture is what the gate is for.
-        sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", guided ? 0.9 : 0.8);
-        sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", 1) != 0;
+        // The gate does the rejecting the ratio test and the cross-check would.
+        // Measured on a 678-image interior (a7iii_inside), 0.95 and no cross-check
+        // gave 29% more points than 0.9 with it, +0.12 px, 95% still verifying.
+        sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", guided ? 0.95 : 0.8);
+        sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", guided ? 0 : 1) != 0;
         sc.sift.peak_threshold *= envNumber("SFM_HYBRID_PEAK_SCALE", 1.0);
         sc.sift.max_num_features =
             (int)envNumber("SFM_HYBRID_FEATURES", cfg.sift.max_num_features);

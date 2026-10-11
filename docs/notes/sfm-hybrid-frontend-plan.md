@@ -1,8 +1,51 @@
 # Hybrid frontend — plan
 
-Not started. An experimental, opt-in stage after progressive alignment: a
-learned frontend (LoMa) decides where the cameras are, then SIFT is matched
-under that geometry and gives the model its precision and point density.
+Status: steps 0 and 1 are in as `spirula sfm auto --hybrid-sift` (`sfm/Hybrid.cpp`),
+with a first form of step 2: putative SIFT matches are gated by the learned
+model's epipolar geometry, so the ratio test can relax and the cross-check go.
+An experimental, opt-in stage after mapping: a learned frontend (LoMa) decides
+where the cameras are, then SIFT is matched under that geometry and gives the
+model its precision.
+
+## What runs
+
+After the learned run's mapping and finishing passes: SIFT at the quality's own
+size on every registered image (`features.sift/`); pairs the learned frontend
+verified, plus each image's 20 best partners by shared points; putatives kept
+within 1.5 x `--max-error` of the epipolar plane (angles on bearings, so an
+equirectangular image is gated like a pinhole one), ratio 0.95, no
+cross-check; verification; triangulation against the learned poses and a free
+bundle adjustment (`Mapper::retriangulate`), then the finishing passes again.
+Any image SIFT cannot hold is put back at its learned pose, carried into the
+SIFT frame by a Sim3, with no points. A failure keeps the learned model.
+`hybrid.txt` records the stage. Experiment knobs, all `SS_SFM_HYBRID_*`:
+`GUIDED`, `RATIO`, `CROSS_CHECK`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`,
+`EPIPOLAR_PX`, and `LEARNED_POINTS=1`, which also triangulates the learned
+tracks against the final poses (no BA) for a denser seed.
+
+## Measured: a7iii_inside
+
+678 images (37 equirectangular 11904x5952, 641 A7iii pinhole), RTX 4060 8 GB.
+Errors in source pixels.
+
+| run | images | points | mean px |
+|---|---|---|---|
+| LoMa `--progressive`, high | 676 | 606,874 | 3.015 |
+| SIFT `--progressive`, high | 645 | 273,451 | 1.454 |
+| hybrid, high, ratio 0.9 + cross-check | 676 | 382,112 | 1.616 |
+| hybrid, high, ratio 0.95, no cross-check (default) | 676 | 494,144 | 1.739 |
+| hybrid, high, + `LEARNED_POINTS` | 676 | 1,051,321 | 2.104 |
+| hybrid, extreme, ratio 0.9 + cross-check | 676 | 558,674 | 1.234 |
+
+The stage itself is about a minute at high. LoMa leaves out 2 images where SIFT
+leaves out 33, so step 0's question is answered: the learned frontend places
+images SIFT cannot, and SIFT keeps all but a few of them with points. Without
+the gate (ratio 0.8, cross-check) there are 22% fewer points and verification
+takes twice as long.
+
+Open: true guided matching (searching the epipolar band rather than gating the
+global nearest neighbour), more SIFT features at high, the GUI and
+`DatasetPlan`'s `model_fields`.
 
 ## Why
 
