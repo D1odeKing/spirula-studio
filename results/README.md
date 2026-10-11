@@ -198,3 +198,17 @@ gate makes it safe.
 Still open: step 2 of the plan (guided matching for the pairs SIFT still
 loses), `SS_SFM_HYBRID_FEATURES` above 8,192 at high, and cross-check off at
 extreme.
+
+## Build 3 (2a588d37): the new defaults
+
+`hybrid_b3` has A's flags over A's LoMa matches, with no `SS_SFM_HYBRID_*`
+set. The build passes the same five sfm tests.
+
+| run | SIFT kept / restored | points | observations | mean px | median px | inliers |
+|---|---|---|---|---|---|---|
+| hybrid_nocc (build 2, env) | 676 / 0 | 494,144 | 1,264,779 | 1.739 | 1.424 | 1,949,571 |
+| hybrid_b3 (build 3, defaults) | 676 / 0 | 494,055 | 1,264,384 | 1.745 | 1.429 | 1,949,508 |
+
+It reproduces hybrid_nocc to within 0.02% of points. The leftover difference
+is the LoMa ladder's own run-to-run noise: its input model held 606,561
+points against 606,875.
