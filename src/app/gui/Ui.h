@@ -514,9 +514,9 @@ inline bool BeginCombo(const Msg& m, const char* preview, ImGuiComboFlags flags 
     const char* l = detail::label(m);
     return detail::named_combo(l, [&] { return ImGui::BeginCombo(l, preview, flags); });
 }
-inline bool BeginComboRaw(const char* id, const char* preview) {
+inline bool BeginComboRaw(const char* id, const char* preview, ImGuiComboFlags flags = 0) {
     const ImGuiID iid = ImGui::GetID(id);
-    const bool r = ImGui::BeginCombo(id, preview);
+    const bool r = ImGui::BeginCombo(id, preview, flags);
     detail::view_locked_combo(iid);
     return r;
 }

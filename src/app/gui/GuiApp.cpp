@@ -21,7 +21,9 @@
 #include "data/Json.h"
 #include "app/AppPaths.h"
 #include "app/CrashLog.h"
+#include "app/CubeLut.h"
 #include "app/DeviceIssue.h"
+#include "app/LogLuts.h"
 #include "app/gui/DatasetPrep.h"
 #include "app/gui/MaskPrompt.h"
 #include "app/gui/Subprocess.h"
@@ -716,6 +718,10 @@ void GuiApp::write_run_settings(std::ofstream& f) {
         if (s.is_video && s.fps != 0.0f)
             line("video_fps:" + (s.subdir.empty() ? s.path : s.subdir),
                  cfg_str(std::max(s.fps, 0.0f)));
+    for (size_t i = 0; i < _sources.size(); i++)
+        if (const std::string lut = input_lut(_sources, i); _sources[i].is_video && !lut.empty())
+            line("video_lut:" + (_sources[i].subdir.empty() ? _sources[i].path : _sources[i].subdir),
+                 lut);
     line("sharp_window", std::to_string(j.prep.sharp_window));
     line("sync_tracks", cfg_str(j.prep.sync_tracks));
     line("max_frames", std::to_string(j.prep.max_frames));
@@ -2469,6 +2475,7 @@ void GuiApp::refresh_sources() {
     }
     normalize_source_lenses(_sources, _sfm_job.camera_model);
     normalize_source_fps(_sources, _sfm_job.prep.video_fps);
+    normalize_source_luts(_sources);
 
     // The output folder follows the input until the user takes it over --
     // and stays put while the inputs still name it: a run filling it does not
@@ -2495,7 +2502,7 @@ void GuiApp::mark_source_metadata_dirty() {
 void GuiApp::pump_source_probes() {
     if (native_work_busy()) return;
     bool pending = false;
-    bool pano_changed = false;
+    bool pano_changed = false, lut_changed = false;
     for (size_t i = 0; i < _sources.size(); i++) {
         PrepInput& s = _sources[i];
         if (!s.is_video || s.path.empty()) continue;
@@ -2522,6 +2529,14 @@ void GuiApp::pump_source_probes() {
         const int packed = s.packed_lenses;
         set_packed_lenses(s, info.width, info.height);
         pano_changed = pano_changed || packed != s.packed_lenses;
+        if (s.lut_detected != info.lut) {
+            s.lut_detected = info.lut;
+            lut_changed = true;
+        }
+    }
+    if (lut_changed) {
+        normalize_source_luts(_sources);
+        close_native_previews();
     }
     if (native_work_busy()) return;
     _source_probes_ready = !pending;
@@ -2759,6 +2774,7 @@ const char* GuiApp::dir_key(PickAction a, FileDialog::Mode m) {
         case PickAction::RenderAddModel:
         case PickAction::MeshSource:        return "model";
         case PickAction::StencilFile:       return "stencil";
+        case PickAction::SourceLut:         return "lut";
         case PickAction::SeedPointcloud:    return "seed_pointcloud";
         case PickAction::LidarSource:       return "lidar";
         case PickAction::ResumeRun:         return "train.resume";   // shared with the field's own picker
@@ -2890,6 +2906,14 @@ void GuiApp::handle_dialog_result(const std::vector<std::string>& paths) {
             if (!parse_settings_equal(before, _cfg)) _parse_dirty = true;
             break;
         }
+        case PickAction::SourceLut:
+            if (!path.empty() && _pick_lut >= 0 && _pick_lut < (int)_sources.size()) {
+                _sources[(size_t)_pick_lut].lut = path;
+                close_native_previews();
+                refresh_sources();
+            }
+            _pick_lut = -1;
+            break;
         case PickAction::StencilFile:
             if (_segment.is_open() && _mask_preview_input < (int)_sources.size())
                 _segment.load_file(_sources[(size_t)_mask_preview_input].stencil, path);
@@ -4448,6 +4472,51 @@ size_t first_video_row(const std::vector<PrepInput>& sources) {
 
 }  // namespace
 
+// The LUT box of a video row. Automatic is what the file says it was shot
+// for, else the row above's choice; the rest are choices of its own.
+bool GuiApp::draw_source_lut(size_t i) {
+    PrepInput& s = _sources[i];
+    const std::string resolved = input_lut(_sources, i);
+    const std::string shown = !s.lut.empty()          ? (s.lut == kLutNone
+                                                             ? dmsg::video_lut_none.get()
+                                                             : app::lut_display_name(s.lut))
+                              : !s.lut_detected.empty() ? app::lut_display_name(s.lut_detected)
+                              : !resolved.empty()       ? dmsg::lens_same_as_above.get()
+                                                        : dmsg::video_lut_none.get();
+    const std::string before = s.lut;
+    ImGui::SetNextItemWidth(px(150.0f));
+    if (ui::BeginComboRaw("##lut", shown.c_str(), ImGuiComboFlags_HeightLarge)) {
+        if (ui::Selectable(dmsg::video_lut_auto, s.lut.empty())) s.lut.clear();
+        ui::help_on_hover(dmsg::video_lut_auto_help);
+        ImGui::Separator();
+        for (const app::BuiltinLut& b : app::builtin_luts()) {
+            const std::string spec = app::builtin_lut_spec(b.id);
+            if (ui::SelectableRaw(b.name, s.lut == spec)) s.lut = spec;
+        }
+        ImGui::Separator();
+        if (!s.lut.empty() && s.lut != kLutNone && !app::is_builtin_lut(s.lut))
+            ui::SelectableRaw(app::lut_display_name(s.lut).c_str(), true);
+        if (ui::Selectable(dmsg::video_lut_choose, false)) {
+            _pick_lut = (int)i;
+            open_pick(PickAction::SourceLut, dmsg::video_lut_pick_title.get(),
+                      FileDialog::Mode::File, {".cube"},
+                      resolved.empty() || app::is_builtin_lut(resolved)
+                          ? std::string()
+                          : fs::path(resolved).parent_path().string());
+        }
+        if (ui::Selectable(dmsg::video_lut_none, s.lut == kLutNone)) s.lut = kLutNone;
+        ImGui::EndCombo();
+    }
+    ui::help_on_hover(dmsg::video_lut_help,
+                      {resolved.empty() ? std::string(dmsg::video_lut_none.get())
+                                        : app::is_builtin_lut(resolved)
+                                              ? app::lut_display_name(resolved)
+                                              : resolved});
+    if (s.lut == before) return false;
+    close_native_previews();
+    return true;
+}
+
 void GuiApp::draw_dataset_source() {
     // One row per input. Several videos reconstruct as one scene -- each gets
     // its own folder of frames under images/, and so its own camera.
@@ -4542,6 +4611,10 @@ void GuiApp::draw_dataset_source() {
                                               ? dmsg::frames_per_second_help_adaptive
                                               : dmsg::frames_per_second_help)
                                        : dmsg::video_fps_this_one_help);
+                if (_ds_advanced) {
+                    ImGui::SameLine();
+                    edited |= draw_source_lut(i);
+                }
                 ImGui::EndDisabled();
             } else {
                 ui::Checkbox(dmsg::frames_in_order, &s.sequential);
@@ -4577,6 +4650,15 @@ void GuiApp::draw_dataset_source() {
             ui::help_on_hover(dmsg::pano360_unsupported_help);
         }
         draw_sensor_badge(s);
+        // Folded away under Advanced, a LUT still changes every frame.
+        if (const std::string lut = s.is_video && !_ds_advanced ? input_lut(_sources, i) : "";
+            !lut.empty()) {
+            ImGui::SameLine();
+            ui::TextDisabledRaw(app::lut_display_name(lut));
+            ui::help_on_hover(dmsg::video_lut_help, {app::is_builtin_lut(lut)
+                                                         ? app::lut_display_name(lut)
+                                                         : lut});
+        }
         row_info = std::max(row_info, ImGui::GetItemRectMax().x - info_left);
         ImGui::PopID();
     }
@@ -4857,29 +4939,31 @@ void GuiApp::draw_dataset_basics() {
         draw_source_cameras();
     }
 
+    int matcher_idx = _colmap_job.matcher - 1;
+    if (!builtin && (matcher_idx < 0 || matcher_idx > 2)) {
+        matcher_idx = (!_sources.empty() && _sources[0].is_video) ? 1 : 0;
+        _colmap_job.matcher = matcher_idx + 1;
+    }
+
     ImGui::SetNextItemWidth(px(220.0f));
     ui::Combo(dmsg::camera_sharing,
-              builtin ? &_sfm_job.camera_mode : &_colmap_job.camera_mode,
-              {&dmsg::camera_sharing_one, &dmsg::camera_sharing_folder,
-               &dmsg::camera_sharing_image});
+                builtin ? &_sfm_job.camera_mode : &_colmap_job.camera_mode,
+                {&dmsg::camera_sharing_one, &dmsg::camera_sharing_folder,
+                &dmsg::camera_sharing_image});
     ui::help_on_hover(dmsg::camera_sharing_help);
 
+    ImGui::SetNextItemWidth(px(220.0f));
     if (builtin) {
-        ImGui::SetNextItemWidth(px(220.0f));
         ui::Combo(dmsg::image_matching, &_sfm_job.pairs,
-                  {&dmsg::matching_automatic, &dmsg::matching_every_pair,
-                   &dmsg::matching_neighbours, &dmsg::matching_gpu_preselect});
+                    {&dmsg::matching_automatic, &dmsg::matching_every_pair,
+                    &dmsg::matching_neighbours, &dmsg::matching_gpu_preselect});
         ui::help_on_hover(dmsg::matching_help_builtin);
         draw_progressive_options();
     } else {
-        int matcher_idx = _colmap_job.matcher - 1;
-        if (matcher_idx < 0 || matcher_idx > 2)
-            matcher_idx = (!_sources.empty() && _sources[0].is_video) ? 1 : 0;
-        ImGui::SetNextItemWidth(px(220.0f));
-        ui::Combo(dmsg::image_matching, &matcher_idx,
-                  {&dmsg::matching_exhaustive, &dmsg::matching_sequential,
-                   &dmsg::matching_vocab_tree});
-        _colmap_job.matcher = matcher_idx + 1;
+        if (ui::Combo(dmsg::image_matching, &matcher_idx,
+                        {&dmsg::matching_exhaustive, &dmsg::matching_sequential,
+                        &dmsg::matching_vocab_tree}))
+            _colmap_job.matcher = matcher_idx + 1;
         ui::help_on_hover(dmsg::matching_help_colmap);
         if (_colmap_job.matcher == 2) {
             ImGui::Indent();
@@ -4902,7 +4986,7 @@ void GuiApp::draw_dataset_basics() {
         if (_sfm_job.prep.adaptive_fps &&
             all_videos_every_frame(_sources, _sfm_job.prep.video_fps))
             ui::TextColoredWrapped(kWarn, dmsg::adaptive_fps_every_frame);
-        if (_sfm_job.prep.adaptive_fps) {
+        if (_sfm_job.prep.adaptive_fps && _ds_advanced) {
             ImGui::Indent();
             ImGui::SetNextItemWidth(px(220.0f));
             ui::SliderFloat(dmsg::adaptive_range, &_sfm_job.prep.adaptive_range,
@@ -4910,13 +4994,15 @@ void GuiApp::draw_dataset_basics() {
             ui::help_on_hover(dmsg::adaptive_range_help);
             ImGui::Unindent();
         }
-        ImGui::SetNextItemWidth(px(220.0f));
-        ui::SliderInt(dmsg::sharpness_window, &_sfm_job.prep.sharp_window, 1, 8);
-        ui::help_on_hover(dmsg::sharpness_window_help);
+        if (_ds_advanced) {
+            ImGui::SetNextItemWidth(px(220.0f));
+            ui::SliderInt(dmsg::sharpness_window, &_sfm_job.prep.sharp_window, 1, 8);
+            ui::help_on_hover(dmsg::sharpness_window_help);
+        }
         bool any_multi = false;
         for (const PrepInput& s : _sources)
             any_multi = any_multi || (s.is_video && !s.pano360.valid() && s.video_tracks >= 2);
-        if (any_multi) {
+        if (any_multi && _ds_advanced) {
             ui::Checkbox(dmsg::sync_lenses, &_sfm_job.prep.sync_tracks);
             ui::help_on_hover(dmsg::sync_lenses_help);
         }
@@ -5046,19 +5132,21 @@ void GuiApp::draw_source_cameras() {
             if (models[i] == kSfmCameraModels[m]) shown = m;
         lens_tooltip(*helps[(size_t)shown],
                      idx < 0 ? labels[(size_t)shown] : nullptr);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(px(90.0f));
-        ui::InputFloat(dmsg::focal_x_width, &group_focal(_sources, g), 0, 0,
-                       "%.4g");
-        ui::help_on_hover(dmsg::focal_x_width_help);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(px(150.0f));
+        // "This input's lenses" only means something for an input with
+        // several: a lone photo folder or a one-lens video has none to rig.
+        const bool multi = g.sub >= 0 || !lens_dirs(_sfm_job.prep, in).empty();
+        int& rig = group_rig(_sources, g);
+        if (!multi && rig == kRigOwn) rig = kRigNone;
+        if (_ds_advanced) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(px(90.0f));
+            ui::InputFloat(dmsg::focal_x_width, &group_focal(_sources, g), 0, 0,
+                           "%.4g");
+            ui::help_on_hover(dmsg::focal_x_width_help);
+        }
         {
-            // "This input's lenses" only means something for an input with
-            // several: a lone photo folder or a one-lens video has none to rig.
-            const bool multi = g.sub >= 0 || !lens_dirs(_sfm_job.prep, in).empty();
-            int& rig = group_rig(_sources, g);
-            if (!multi && rig == kRigOwn) rig = kRigNone;
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(px(150.0f));
             std::vector<const char*> items = {ui::detail::label(dmsg::rig_none)};
             std::vector<int> ids = {kRigNone};
             if (multi) {
@@ -5194,6 +5282,7 @@ PreviewSource GuiApp::preview_source(size_t input) const {
         !_sfm_job.prep.force_external_decode && backends().builtin_video;
     src.tracks = std::max(in.video_tracks, 1);
     src.look.packed_lenses = in.packed_lenses;
+    if (in.is_video) src.look.lut = input_lut(_sources, input);
     // The one frozen choice, so a preview decodes and segments on the GPU the
     // run will use; empty leaves the panel's own precedence in charge.
     src.device = _native_device_uuid;
@@ -7811,7 +7900,8 @@ void GuiApp::draw_progressive_options() {
 }
 
 void GuiApp::draw_sfm_advanced() {
-    if (!ui::CollapsingHeader(dmsg::section_advanced)) return;
+    _ds_advanced = ui::CollapsingHeader(dmsg::section_advanced);
+    if (!_ds_advanced) return;
 
     ImGui::SetNextItemWidth(px(260.0f));
     ui::Combo(dmsg::capture_type, &_sfm_job.data_type,
@@ -7953,7 +8043,8 @@ void GuiApp::draw_sfm_advanced() {
 // ---------------------------------------------------------------------------
 
 void GuiApp::draw_colmap_options() {
-    if (ui::CollapsingHeader(dmsg::section_advanced)) {
+    _ds_advanced = ui::CollapsingHeader(dmsg::section_advanced);
+    if (_ds_advanced) {
         bool fisheye = _colmap_job.camera_model.find("FISHEYE") != std::string::npos;
         ImGui::SetNextItemWidth(px(180.0f));
         ui::InputFloat(dmsg::colmap_initial_focal,

@@ -790,6 +790,37 @@ differs -- a different rate, a different unwrap, another clip in the list --
 asks before it goes back to the video, and drops the features and matches that
 describe the old frames.
 
+### Colour LUTs
+
+Log footage is flat; a video row can name a 3D LUT that is baked into its
+frames as they are extracted, so SfM, masking, depth and the trained model all
+see the maker's intended Rec.709 colours. The GUI shows the column only under
+Advanced (the row says which LUT is in effect either way); `spirula sam
+extract --lut <file.cube | name | auto>` is the same thing on the command line.
+
+- **Automatic** is the row's default. A camera original whose own metadata
+  says it was shot in a log profile Spirula knows gets that maker's LUT --
+  DJI D-Log and D-Log M (Osmo 360, Osmo Action 5 Pro, Avata 360), GoPro
+  GP-Log on a MAX 2, Sony S-Log3/S-Gamut3.Cine, Panasonic V-Log
+  (`sfm::video_log_profile`, in builds with the built-in SfM). The colour tags are never evidence: log clips
+  are tagged BT.709 or BT.2020 like any other. Otherwise a row takes the
+  choice made on a row above it, as the rate column does; a detected LUT
+  stays with its own file.
+- **The built-in LUTs** are formulas: each maker's published log curve and
+  gamut, then a look fitted to what the maker's own LUT does to natural
+  photographs -- 0.1 to 1.6 of an 8-bit level off it on average there -- or,
+  for GoPro, GoPro's own exact formulas (docs/notes/log-luts.md). Nothing of
+  a maker's LUT ships, and nothing is downloaded at run time.
+- **A .cube file** is read as is; one with a 1D shaper in front is refused.
+
+The built-in decoder maps the LUT in the YCbCr-to-RGB shader, before the
+8-bit rounding, so a 10-bit log clip keeps its precision through the
+expansion. The GUI's ffmpeg route uses ffmpeg's own `lut3d` (a built-in is
+written to a `.cube` in the temp directory for it); frame extraction decoding
+through ffmpeg maps the 8-bit frames it keeps, after the window has been
+scored, so the LUT cannot change which frames are chosen. The LUT is part of
+what the frames were extracted with, so changing it re-extracts.
+
 ### Adaptive spacing
 
 `--adaptive` (the GUI: "Adapt the rate to the motion") spaces the kept frames

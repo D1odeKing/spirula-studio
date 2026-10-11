@@ -17,6 +17,8 @@ static const uint kF_SubX     = 1u << 1;   // chroma is half-width
 static const uint kF_SubY     = 1u << 2;   // chroma is half-height
 static const uint kF_Planar   = 1u << 3;   // Cb and Cr in separate planes
 static const uint kF_RotShift = 4u;        // 2 bits: 0/90/180/270 clockwise
+static const uint kF_ShiftAt  = 8u;        // yuv_to_rgb: 8 bits of sample shift
+static const uint kF_Lut      = 1u << 16;  // yuv_to_rgb: map through p.lut
 
 // One luma/chroma sample. `stride` and `idx` are in texels, not bytes.
 float load_sample(uint* buf, uint idx, uint flags, uint shift) {
@@ -50,12 +52,40 @@ struct YuvParams {
     uint   src_h;
     uint   luma_stride;    // texels per row
     uint   chroma_stride;  // texels per row (2 components per texel if !planar)
-    uint   flags;
-    uint   shift;
+    uint   flags;          // with the sample shift at kF_ShiftAt: 128 bytes is the limit
     float  inv_sx;         // source texels per scaled texel
     float  inv_sy;
     uint   groups_per_row;
+    float* lut;            // size, min[3], (size-1)/(max-min)[3], pad; then size^3 RGB
 };
+
+// A 3D LUT, tetrahedrally, as app::apply_cube_lut does it on the host. `c` is
+// in [0, 1]; red varies fastest in the table.
+float3 map_lut(float* L, float3 c) {
+    uint n = uint(L[0]);
+    float3 x = clamp((c - float3(L[1], L[2], L[3])) * float3(L[4], L[5], L[6]),
+                     float3(0.0f), float3(float(n - 1u)));
+    uint3 i = min(uint3(x), uint3(n - 2u));
+    float3 f = x - float3(i);
+    uint sr = 3u, sg = n * 3u, sb = n * n * 3u;
+    uint c000 = 8u + i.x * sr + i.y * sg + i.z * sb;
+    uint c111 = c000 + sr + sg + sb;
+    uint c1, c2;
+    float4 w;
+    if (f.x > f.y) {
+        if (f.y > f.z)      { c1 = c000 + sr; c2 = c000 + sr + sg; w = float4(1.0f - f.x, f.x - f.y, f.y - f.z, f.z); }
+        else if (f.x > f.z) { c1 = c000 + sr; c2 = c000 + sr + sb; w = float4(1.0f - f.x, f.x - f.z, f.z - f.y, f.y); }
+        else                { c1 = c000 + sb; c2 = c000 + sr + sb; w = float4(1.0f - f.z, f.z - f.x, f.x - f.y, f.y); }
+    } else {
+        if (f.z > f.y)      { c1 = c000 + sb; c2 = c000 + sg + sb; w = float4(1.0f - f.z, f.z - f.y, f.y - f.x, f.x); }
+        else if (f.z > f.x) { c1 = c000 + sg; c2 = c000 + sg + sb; w = float4(1.0f - f.y, f.y - f.z, f.z - f.x, f.x); }
+        else                { c1 = c000 + sg; c2 = c000 + sr + sg; w = float4(1.0f - f.y, f.y - f.x, f.x - f.z, f.z); }
+    }
+    float3 o;
+    for (uint k = 0; k < 3u; ++k)
+        o[k] = w.x * L[c000 + k] + w.y * L[c1 + k] + w.z * L[c2 + k] + w.w * L[c111 + k];
+    return o;
+}
 
 // Four consecutive output pixels per thread: 12 bytes is exactly three words,
 // so every store is a whole word (byte stores would need 8-bit storage).
@@ -74,6 +104,7 @@ void yuv_to_rgb(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
     uint sub_x = (p.flags & kF_SubX) != 0u ? 1u : 0u;
     uint sub_y = (p.flags & kF_SubY) != 0u ? 1u : 0u;
     bool planar = (p.flags & kF_Planar) != 0u;
+    uint shift = (p.flags >> kF_ShiftAt) & 0xFFu;
 
     uint words[3] = {0u, 0u, 0u};
     for (uint b = 0; b < 4u; ++b) {
@@ -102,7 +133,7 @@ void yuv_to_rgb(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
         float y_sum = 0.0f;
         for (uint yy = y0; yy < y1; ++yy)
             for (uint xx = x0; xx < x1; ++xx)
-                y_sum += load_sample(p.luma, yy * p.luma_stride + xx, p.flags, p.shift);
+                y_sum += load_sample(p.luma, yy * p.luma_stride + xx, p.flags, shift);
         float y_val = y_sum / float((x1 - x0) * (y1 - y0));
 
         uint cx0 = x0 >> sub_x, cy0 = y0 >> sub_y;
@@ -112,21 +143,25 @@ void yuv_to_rgb(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID,
         for (uint yy = cy0; yy < cy1; ++yy) {
             for (uint xx = cx0; xx < cx1; ++xx) {
                 if (planar) {
-                    cb_sum += load_sample(p.cb, yy * p.chroma_stride + xx, p.flags, p.shift);
-                    cr_sum += load_sample(p.cr, yy * p.chroma_stride + xx, p.flags, p.shift);
+                    cb_sum += load_sample(p.cb, yy * p.chroma_stride + xx, p.flags, shift);
+                    cr_sum += load_sample(p.cr, yy * p.chroma_stride + xx, p.flags, shift);
                 } else {
                     uint o = (yy * p.chroma_stride + xx) * 2u;
-                    cb_sum += load_sample(p.cb, o, p.flags, p.shift);
-                    cr_sum += load_sample(p.cb, o + 1u, p.flags, p.shift);
+                    cb_sum += load_sample(p.cb, o, p.flags, shift);
+                    cr_sum += load_sample(p.cb, o + 1u, p.flags, shift);
                 }
             }
         }
         float inv_c = 1.0f / float((cx1 - cx0) * (cy1 - cy0));
         float4 v = float4(y_val, cb_sum * inv_c, cr_sum * inv_c, 1.0f);
 
-        uint r = uint(clamp(dot(p.m0, v), 0.0f, 255.0f) + 0.5f);
-        uint g = uint(clamp(dot(p.m1, v), 0.0f, 255.0f) + 0.5f);
-        uint bl = uint(clamp(dot(p.m2, v), 0.0f, 255.0f) + 0.5f);
+        float3 rgb = clamp(float3(dot(p.m0, v), dot(p.m1, v), dot(p.m2, v)),
+                           float3(0.0f), float3(255.0f));
+        if ((p.flags & kF_Lut) != 0u)
+            rgb = clamp(map_lut(p.lut, rgb * (1.0f / 255.0f)), float3(0.0f), float3(1.0f)) * 255.0f;
+        uint r = uint(rgb.x + 0.5f);
+        uint g = uint(rgb.y + 0.5f);
+        uint bl = uint(rgb.z + 0.5f);
 
         uint byte0 = b * 3u;
         words[byte0 >> 2u] |= r << ((byte0 & 3u) * 8u);

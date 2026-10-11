@@ -3121,6 +3121,121 @@ SS_MSG(frames_per_second_help_adaptive,
        "video kendininkini kullanır. "
        "0 her kareyi tutar; o zaman harekete göre aralanacak bir şey kalmaz."));
 
+SS_MSG(video_lut_none,
+    EN("No LUT"), JA("LUT なし"), ZH_HANS("无 LUT"), ZH_HANT("無 LUT"),
+    KO("LUT 없음"), DE("Keine LUT"), FR("Aucune LUT"), ES("Sin LUT"),
+    PT("Sem LUT"), IT("Nessuna LUT"), NL("Geen LUT"), RU("Без LUT"),
+    TR("LUT yok"));
+
+SS_MSG(video_lut_choose,
+    EN("Choose a .cube file..."), JA(".cube ファイルを選択..."),
+    ZH_HANS("选择 .cube 文件…"), ZH_HANT("選擇 .cube 檔案…"),
+    KO(".cube 파일 선택..."), DE(".cube-Datei wählen..."),
+    FR("Choisir un fichier .cube..."), ES("Elegir un archivo .cube..."),
+    PT("Escolher um arquivo .cube..."), IT("Scegli un file .cube..."),
+    NL("Een .cube-bestand kiezen..."), RU("Выбрать файл .cube..."),
+    TR(".cube dosyası seç..."));
+
+SS_MSG(video_lut_pick_title,
+    EN("Choose a colour LUT (.cube)"), JA("カラー LUT（.cube）を選択"),
+    ZH_HANS("选择颜色 LUT（.cube）"), ZH_HANT("選擇色彩 LUT（.cube）"),
+    KO("색상 LUT(.cube) 선택"), DE("Farb-LUT (.cube) wählen"),
+    FR("Choisir une LUT couleur (.cube)"), ES("Elegir una LUT de color (.cube)"),
+    PT("Escolher uma LUT de cor (.cube)"), IT("Scegli una LUT colore (.cube)"),
+    NL("Een kleur-LUT (.cube) kiezen"), RU("Выбрать цветовую LUT (.cube)"),
+    TR("Renk LUT'u seç (.cube)"));
+
+SS_MSG(video_lut_auto,
+    EN("Automatic"), JA("自動"), ZH_HANS("自动"), ZH_HANT("自動"), KO("자동"),
+    DE("Automatisch"), FR("Automatique"), ES("Automático"), PT("Automático"),
+    IT("Automatico"), NL("Automatisch"), RU("Автоматически"), TR("Otomatik"));
+
+SS_MSG(video_lut_auto_help,
+    EN("The LUT the clip's own metadata names, when it was shot in a log profile "
+       "Spirula knows; otherwise the choice made on a row above, or none."),
+    JA("Spirula が知っているログプロファイルで撮影されたクリップなら、そのメタデータが"
+       "示す LUT。そうでなければ上の行での選択、それもなければ LUT なし。"),
+    ZH_HANS("片段若以 Spirula 认识的 Log 配置拍摄，就用其元数据所指的 LUT；否则沿用"
+            "上面某一行的选择，都没有则不套用。"),
+    ZH_HANT("片段若以 Spirula 認得的 Log 設定檔拍攝，就用其中繼資料所指的 LUT；否則"
+            "沿用上面某一行的選擇，都沒有則不套用。"),
+    KO("Spirula가 아는 로그 프로필로 촬영된 클립이면 메타데이터가 가리키는 LUT, "
+       "아니면 위 행에서 고른 것, 그것도 없으면 LUT 없음."),
+    DE("Die LUT, die die Metadaten des Clips nennen, wenn er in einem Log-Profil "
+       "gedreht wurde, das Spirula kennt; sonst die Wahl einer Zeile darüber, oder keine."),
+    FR("La LUT que nomment les métadonnées du clip, s'il a été tourné dans un profil "
+       "log que Spirula connaît ; sinon le choix fait sur une ligne au-dessus, ou aucune."),
+    ES("La LUT que indican los metadatos del clip, si se grabó en un perfil log que "
+       "Spirula conoce; si no, la elegida en una fila de arriba, o ninguna."),
+    PT("A LUT indicada pelos metadados do clipe, se foi gravado num perfil log que o "
+       "Spirula conhece; senão, a escolhida numa linha acima, ou nenhuma."),
+    IT("La LUT indicata dai metadati del clip, se è stato girato in un profilo log "
+       "che Spirula conosce; altrimenti la scelta fatta in una riga sopra, o nessuna."),
+    NL("De LUT die de metadata van de clip noemt, als die is opgenomen in een "
+       "log-profiel dat Spirula kent; anders de keuze van een rij erboven, of geen."),
+    RU("LUT, указанная в метаданных клипа, если он снят в известном Spirula "
+       "лог-профиле; иначе выбор из строки выше или никакой."),
+    TR("Klip Spirula'nın bildiği bir log profiliyle çekildiyse meta verisinin "
+       "belirttiği LUT; değilse yukarıdaki bir satırda yapılan seçim, o da yoksa hiçbiri."));
+
+SS_MSG(video_lut_help,
+    EN("A 3D colour LUT baked into this video's frames as they are extracted -- "
+       "the camera maker's log-to-Rec.709 LUT turns flat log footage into the "
+       "colours the reconstruction and the model should see. The built-in ones "
+       "approximate each maker's LUT with formulas; any other is a .cube file.\nNow: {0}"),
+    JA("抽出時にこの動画のフレームへ焼き込む 3D カラー LUT です。メーカー提供の"
+       "ログ→Rec.709 LUT を使うと、眠いログ映像が再構成とモデルに渡すべき色になります。"
+       "内蔵のものは各メーカーの LUT を数式で近似したもので、それ以外は .cube "
+       "ファイルを選びます。\n現在：{0}"),
+    ZH_HANS("抽帧时烘焙进这个视频每一帧的 3D 颜色 LUT。用相机厂商提供的 Log 转 "
+            "Rec.709 LUT，可以把灰平的 Log 素材还原成重建和模型应该看到的颜色。"
+            "内置的是用公式近似各厂商 LUT 的版本；其他的请选 .cube 文件。\n当前：{0}"),
+    ZH_HANT("抽幀時烘焙進這個影片每一幀的 3D 色彩 LUT。用相機廠商提供的 Log 轉 "
+            "Rec.709 LUT，可以把灰平的 Log 素材還原成重建和模型應該看到的顏色。"
+            "內建的是用公式近似各廠商 LUT 的版本；其他的請選 .cube 檔案。\n目前：{0}"),
+    KO("추출할 때 이 영상의 프레임에 구워 넣는 3D 색상 LUT입니다. 제조사의 로그→"
+       "Rec.709 LUT를 쓰면 밋밋한 로그 영상이 재구성과 모델이 봐야 할 색이 됩니다. "
+       "내장 LUT는 각 제조사의 LUT를 수식으로 근사한 것이고, 그 밖의 것은 .cube "
+       "파일을 고르면 됩니다.\n현재: {0}"),
+    DE("Eine 3D-Farb-LUT, die beim Extrahieren in die Einzelbilder dieses Videos "
+       "eingerechnet wird -- die Log-zu-Rec.709-LUT des Herstellers macht aus "
+       "flachem Log-Material die Farben, die Rekonstruktion und Modell sehen "
+       "sollen. Die eingebauten bilden die LUT des jeweiligen "
+       "Herstellers mit Formeln nach; jede andere ist eine .cube-Datei.\nJetzt: {0}"),
+    FR("Une LUT couleur 3D appliquée aux images de cette vidéo à l'extraction -- "
+       "la LUT log vers Rec.709 du fabricant rend aux images log les couleurs "
+       "que la reconstruction et le modèle doivent voir. Les LUT intégrées "
+       "approchent par des formules celle de chaque fabricant ; toute autre est un "
+       "fichier .cube.\nActuelle : {0}"),
+    ES("Una LUT de color 3D aplicada a los fotogramas de este vídeo al "
+       "extraerlos: la LUT log a Rec.709 del fabricante devuelve al material log "
+       "los colores que deben ver la reconstrucción y el modelo. Las integradas "
+       "aproximan con fórmulas la LUT de cada fabricante; cualquier otra es un "
+       "archivo .cube.\nAhora: {0}"),
+    PT("Uma LUT de cor 3D aplicada aos fotogramas deste vídeo na extração -- a "
+       "LUT log para Rec.709 do fabricante devolve ao material log as cores que "
+       "a reconstrução e o modelo devem ver. As integradas aproximam com fórmulas "
+       "a LUT de cada fabricante; qualquer outra é um arquivo .cube.\nAgora: {0}"),
+    IT("Una LUT colore 3D applicata ai fotogrammi di questo video durante "
+       "l'estrazione: la LUT log-Rec.709 del produttore restituisce al materiale "
+       "log i colori che ricostruzione e modello devono vedere. Quelle integrate "
+       "approssimano con formule la LUT di ciascun produttore; ogni altra è un "
+       "file .cube.\nOra: {0}"),
+    NL("Een 3D-kleur-LUT die bij het extraheren in de beelden van deze video "
+       "wordt ingebakken -- de log-naar-Rec.709-LUT van de fabrikant geeft "
+       "vlakke log-opnamen de kleuren die reconstructie en model moeten zien. "
+       "De ingebouwde benaderen de LUT van elke fabrikant met formules; elke "
+       "andere is een .cube-bestand.\nNu: {0}"),
+    RU("3D-LUT цвета, запекаемая в кадры этого видео при извлечении: LUT "
+       "производителя «лог → Rec.709» возвращает плоскому лог-материалу цвета, "
+       "которые должны видеть реконструкция и модель. Встроенные приближают "
+       "LUT каждого производителя формулами; любая другая — файл .cube.\nСейчас: {0}"),
+    TR("Kareler çıkarılırken bu videonun karelerine işlenen 3D renk LUT'u -- "
+       "üreticinin log'dan Rec.709'a LUT'u düz log görüntüye, yeniden "
+       "oluşturmanın ve modelin görmesi gereken renkleri verir. Yerleşik olanlar "
+       "her üreticinin LUT'una formüllerle yaklaşır; diğerleri bir .cube "
+       "dosyasıdır.\nŞu an: {0}"));
+
 SS_MSG(video_fps_this_one_help,
     EN("Frames per second for this video alone. \"^\" is following the video "
        "above it; type that rate back in to go back to following. "

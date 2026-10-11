@@ -160,6 +160,9 @@ src/
 │   ├── FrameExtract.{h,cpp}  video -> sharp frames (`spirula sam extract` also
 │   │                         masks them in the same pass; the GUI masks after),
 │   │                         decoded by Vulkan Video or ffmpeg (FrameDecode.h)
+│   ├── CubeLut.{h,cpp}     the colour LUT a log clip's frames are baked through;
+│   │                         LogLuts.{h,cpp} the built-in ones, formulas
+│   │                         fitted by tools/fit_log_luts.py -- docs/notes/log-luts.md
 │   ├── E57Dataset.{h,cpp}  an E57 scan written out as a Nerfstudio dataset
 │   │                         with no SfM (`spirula e57`) -- docs/datasets.md
 │   ├── LidarAlign.{h,cpp}  a reconstruction fitted onto a laser scan (Sim3:

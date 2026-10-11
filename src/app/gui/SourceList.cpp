@@ -1,6 +1,7 @@
 // SourceList.cpp -- see SourceList.h.
 
 #include "app/gui/SourceList.h"
+#include "app/LogLuts.h"
 #include "app/gui/RigGuess.h"
 
 #include <algorithm>
@@ -150,6 +151,9 @@ void probe_sources(std::vector<PrepInput>& sources,
             source_pixel_size(s, ffmpeg_exe, w, h))
             set_packed_lenses(s, w, h);
     }
+    for (PrepInput& s : sources)
+        if (s.is_video) s.lut_detected = app::detect_log_lut(s.path);
+    normalize_source_luts(sources);
 }
 
 
@@ -400,6 +404,18 @@ void normalize_source_fps(std::vector<PrepInput>& sources, float& video_fps) {
         } else if (s.fps != 0.0f) {
             above = rate;
         }
+    }
+}
+
+
+void normalize_source_luts(std::vector<PrepInput>& sources) {
+    for (size_t i = 0; i < sources.size(); i++) {
+        PrepInput& s = sources[i];
+        if (!s.is_video || s.lut.empty()) continue;
+        const std::string chosen = s.lut;
+        s.lut.clear();
+        if (input_lut(sources, i) != (chosen == kLutNone ? std::string() : chosen))
+            s.lut = chosen;
     }
 }
 

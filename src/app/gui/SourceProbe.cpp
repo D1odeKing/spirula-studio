@@ -3,6 +3,7 @@
 #ifdef SS_HAVE_VIDEO
 #include "app/FrameExtract.h"
 #endif
+#include "app/LogLuts.h"
 #include "app/gui/DatasetPrep.h"
 
 namespace gui {
@@ -41,6 +42,7 @@ SourceProbeInfo probe(const std::string& path, const std::string& ffmpeg_exe,
         out.pano360 = p.layout;
         out.pano360_unsupported = p.unsupported;
     }
+    if (!cancel.load()) out.lut = app::detect_log_lut(path);
     out.done = true;
     return out;
 }

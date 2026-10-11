@@ -89,6 +89,9 @@ inline std::string rig_letter(int letter) {
 // else, a rate of 0 is every frame.
 inline constexpr float kFpsEveryFrame = -1.0f;
 
+// PrepInput::lut for "no LUT", where empty would find one (input_lut).
+inline constexpr const char* kLutNone = "none";
+
 // One thing the user picked: a video file, or a folder of photos. A job holds
 // a list of them, because a capture is often shot as several clips, or on a rig
 // whose lenses each write their own file -- and those only reconstruct together
@@ -126,6 +129,12 @@ struct PrepInput {
     // as several clips is rarely shot at one pace, and a clip walked through
     // slowly wants fewer frames than the one that ran past the same wall.
     float fps = 0.0f;
+    // The colour LUT baked into this video's frames as they are extracted: a
+    // spec (app/CubeLut.h), kLutNone, or empty for automatic (input_lut).
+    std::string lut;
+    // The built-in the file's own metadata asks for (app::detect_log_lut).
+    // Probed, never saved.
+    std::string lut_detected;
     // The photos were taken one after another and named in that order, so the
     // reconstruction may trust neighbouring files first (a video's frames
     // always are; SfmRunner::build_sequences).
@@ -363,6 +372,23 @@ inline size_t input_index(const PrepJob& job, const PrepInput& in) {
 
 inline float input_fps(const PrepJob& job, const PrepInput& in) {
     return input_fps(job.inputs, job.video_fps, input_index(job, in));
+}
+
+// The LUT a row's frames go through, "" for none. Automatic is the file's own
+// detected LUT, else the nearest choice above; a detected one never carries
+// down -- a phone clip below a D-Log M one is not D-Log M.
+inline std::string input_lut(const std::vector<PrepInput>& inputs, size_t at) {
+    if (at >= inputs.size()) return {};
+    if (inputs[at].lut.empty() && !inputs[at].lut_detected.empty())
+        return inputs[at].lut_detected;
+    for (size_t k = at + 1; k-- > 0;)
+        if (!inputs[k].lut.empty())
+            return inputs[k].lut == kLutNone ? std::string() : inputs[k].lut;
+    return {};
+}
+
+inline std::string input_lut(const PrepJob& job, const PrepInput& in) {
+    return input_lut(job.inputs, input_index(job, in));
 }
 
 // No selection happens at all: no sharpness window, no motion plan.
@@ -692,6 +718,10 @@ private:
     bool extract_video_builtin(const PrepJob& job, const PrepInput& in,
                                const std::string& images,
                                PrepResult& out, std::string& error);
+    // The row's LUT appended to an ffmpeg filter chain, once the file has been
+    // read as one; false with `error` set when it cannot be.
+    bool append_lut_filter(const PrepJob& job, const PrepInput& in,
+                           std::string& chain, std::string& error);
     bool extract_video_ffmpeg(const PrepJob& job, const PrepInput& in,
                               const std::string& images, PrepResult& out,
                               std::string& error);

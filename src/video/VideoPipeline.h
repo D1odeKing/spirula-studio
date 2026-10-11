@@ -38,6 +38,14 @@ struct ConvertOpts {
     // bitstream's VUI (HEIF's colr); -1 keeps the stream's.
     int   matrix_coefficients = -1;
     int   full_range = -1;
+    // A 3D colour LUT over the RGB result, mapped before it is rounded to 8
+    // bits (tetrahedral, as app::apply_cube_lut); null = none. A new
+    // `lut_serial` is what makes the pipeline upload the table again.
+    const float* lut = nullptr;   // lut_size^3 RGB triples, red varying fastest
+    int      lut_size = 0;
+    float    lut_min[3] = {0, 0, 0};
+    float    lut_max[3] = {1, 1, 1};
+    uint64_t lut_serial = 0;
 };
 
 class VideoPipeline {

@@ -110,6 +110,15 @@ bool telemetry_read(uint64_t size, const TelemetryRead& read, Telemetry& out, st
 // container's own boxes carry it. Empty when the file names none.
 VideoProjection video_projection(const std::string& path);
 
+// The log profile a camera original was recorded in, from the maker's own
+// metadata -- never the colour tags, which say BT.709 or BT.2020 on log too.
+// `log`: "dji-d-log", "dji-d-log-m", "gp-log", "s-log3-cine", "v-log" or "".
+struct VideoLogProfile {
+    std::string log;
+    std::string camera;   // DJI: the dvtm proto; GoPro: the 360 projection
+};
+VideoLogProfile video_log_profile(const std::string& path);
+
 // A lens's factory calibration (Avata 360 StreamMeta.5): theta_d = theta (1 +
 // k1 theta^2 + ... + k5 theta^10), p1 p2 as THIN_PRISM_FISHEYE's, pixel i
 // centred at i. Measured: docs/notes/imu-gps-for-sfm.md §2.3.

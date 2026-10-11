@@ -194,6 +194,9 @@ struct Movie {
     uint64_t creation_1904 = 0;
     VideoProjection projection;
     std::vector<Track> tracks;
+    // Where makers put their settings as text or KLV: udta, moov/meta, and a
+    // top-level meta (Sony's XML). Copies, for video_log_profile.
+    std::vector<uint8_t> udta, moov_meta, file_meta;
     double durationSec() const { return timescale ? (double)duration / timescale : 0.0; }
     // 1904-01-01 to 1970-01-01.
     double unixStart() const { return creation_1904 ? (double)creation_1904 - 2082844800.0 : 0.0; }
@@ -343,6 +346,8 @@ bool read_movie(const Source& src, Movie& mv, bool& is_mp4, std::string& error) 
         }
         if (size < h || off + size > src.size()) break;
         if (type == fourcc("ftyp")) is_mp4 = true;
+        if (type == fourcc("meta") && size - h < (4u << 20))
+            src.readVec(off + h, (size_t)(size - h), mv.file_meta);
         if (type == fourcc("moov")) {
             if (size - h > (1ull << 30)) { error = "moov box over 1 GiB"; return false; }
             if (!src.readVec(off + h, (size_t)(size - h), moov)) { error = "truncated moov"; return false; }
@@ -367,9 +372,12 @@ bool read_movie(const Source& src, Movie& mv, bool& is_mp4, std::string& error) 
             Track tk;
             if (parse_trak(b.payload, b.payload_size, tk)) mv.tracks.push_back(std::move(tk));
         } else if (b.type == fourcc("udta")) {
+            mv.udta.assign(b.payload, b.payload + b.payload_size);
             Box g;
             if (find_box(b.payload, b.payload_size, fourcc("GPMF"), g))
                 gpmf_projection(g.payload, g.payload_size, 0, mv.projection);
+        } else if (b.type == fourcc("meta")) {
+            mv.moov_meta.assign(b.payload, b.payload + b.payload_size);
         }
     });
     return true;
@@ -1458,6 +1466,108 @@ VideoProjection video_projection(const std::string& path) {
     std::string error;
     if (!read_movie(src, mv, is_mp4, error)) return VideoProjection();
     return mv.projection;
+}
+
+namespace {
+
+// DVID 1 is the "Global Settings" device; its PTCL is the colour profile.
+// FLAT is a log curve too, but not GP-Log's, so it is not one of these.
+std::string gpmf_protune_color(const uint8_t* p, size_t n) {
+    for (size_t off = 0; off + 8 <= n;) {
+        Klv k;
+        if (!klv_read(p + off, n - off, k)) break;
+        if (k.type == 0 && k.key == fourcc("DEVC")) {
+            bool global = false;
+            std::string ptcl;
+            for (size_t o = 0; o + 8 <= k.len();) {
+                Klv c;
+                if (!klv_read(k.data + o, k.len() - o, c)) break;
+                if (c.key == fourcc("DVID") && c.type == 'L' && c.len() >= 4)
+                    global = be32(c.data) == 1;
+                else if (c.key == fourcc("PTCL") && c.type == 'c')
+                    ptcl.assign((const char*)c.data, strnlen((const char*)c.data, c.len()));
+                o += 8 + c.padded();
+            }
+            if (global && !ptcl.empty()) return ptcl;
+        }
+        off += 8 + k.padded();
+    }
+    return {};
+}
+
+// `<Item name="NAME" value="VALUE"/>` in Sony's NonRealTimeMeta XML.
+std::string xml_item(const std::string& xml, const char* name) {
+    const std::string key = std::string("name=\"") + name + "\" value=\"";
+    const size_t a = xml.find(key);
+    if (a == std::string::npos) return {};
+    const size_t b = xml.find('"', a + key.size());
+    return b == std::string::npos ? std::string() : xml.substr(a + key.size(), b - a - key.size());
+}
+
+// ColorMode.color_mode, where each dvtm proto keeps it; 0 is Default and is
+// omitted, as proto3 does. -1 for a proto whose path was not read off a clip.
+int dji_color_mode(const uint8_t* sample, size_t n, std::string& proto) {
+    const auto top = pb_fields(sample, n);
+    proto = pb_string(pb_find(pb_sub(pb_find(pb_sub(pb_find(top, 1)), 1)), 1));
+    const auto stream = pb_sub(pb_find(top, 2));
+    std::vector<PbField> color;
+    if (proto == "dvtm_ac204.proto" || proto == "dvtm_oq101.proto")
+        color = pb_sub(pb_find(stream, 4));
+    else if (proto == "dvtm_AVATA360.proto" || proto == "dvtm_eagle4_wa530.proto")
+        color = pb_sub(pb_find(pb_sub(pb_find(stream, 2)), 4));
+    else
+        return -1;
+    const PbField* f = pb_find(color, 1);
+    return f && f->wire == 0 ? (int)f->varint : 0;
+}
+
+}  // namespace
+
+VideoLogProfile video_log_profile(const std::string& path) {
+    VideoLogProfile out;
+    FileSource src;
+    Movie mv;
+    bool is_mp4 = false;
+    std::string error;
+    if (!src.open(path) || !read_movie(src, mv, is_mp4, error)) return out;
+
+    const std::string xml(mv.file_meta.begin(), mv.file_meta.end());
+    const std::string gamma = xml_item(xml, "CaptureGammaEquation");
+    if (gamma == "s-log3-cine" ||
+        (gamma == "s-log3" && xml_item(xml, "CaptureColorPrimaries") == "S-Gamut3-Cine")) {
+        out.log = "s-log3-cine";
+        return out;
+    }
+
+    std::vector<uint8_t> buf;
+    for (const Track& tk : mv.tracks) {
+        if (tk.sample_type != fourcc("djmd") || tk.samples.empty()) continue;
+        const Sample& sm = tk.samples[0];
+        if (sm.size < 2 || sm.size > (16u << 20) || !src.readVec(sm.offset, sm.size, buf)) continue;
+        // dvtm_library.proto's ColorMode: 2 D-Log, 19 D-Log M (22 D-Log2, 9 HLG).
+        const int mode = dji_color_mode(buf.data(), buf.size(), out.camera);
+        out.log = mode == 2 ? "dji-d-log" : mode == 19 ? "dji-d-log-m" : "";
+        return out;
+    }
+
+    Box gpmf;
+    if (find_box(mv.udta.data(), mv.udta.size(), fourcc("GPMF"), gpmf)) {
+        // The one GP-Log LUT GoPro publishes as a technical transform is the
+        // MAX 2's, so only a 360 capture is matched to it.
+        if (gpmf_protune_color(gpmf.payload, gpmf.payload_size) == "LOG" &&
+            !mv.projection.name.empty()) {
+            out.log = "gp-log";
+            out.camera = mv.projection.name;
+        }
+        return out;
+    }
+
+    // Panasonic's Semi-Pro XML, the value of a QuickTime key of that name.
+    const std::string keys(mv.moov_meta.begin(), mv.moov_meta.end());
+    if (keys.find("com.panasonic.Semi-Pro.metadata.xml") != std::string::npos &&
+        keys.find("<CaptureGamma>V-Log</CaptureGamma>") != std::string::npos)
+        out.log = "v-log";
+    return out;
 }
 
 // PanoDewarpParams entries 3 and 4 (native_refine_far slave, master); the

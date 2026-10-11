@@ -4,4 +4,7 @@ src/external/** linguist-vendored
 # Auto-generated code (generate_headers.py, generate_kernel_instantiation.py)
 src/generated/** linguist-vendored linguist-generated
 src/instantiations/** linguist-vendored linguist-generated
+# tools/fit_log_luts.py
+src/app/LogLutTable.h linguist-generated
+src/app/tests/log_lut_checks.h linguist-generated
 LICENSES/* text eol=lf

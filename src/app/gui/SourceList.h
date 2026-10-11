@@ -82,6 +82,10 @@ void normalize_source_lenses(std::vector<PrepInput>& sources,
 // because that is what a preset saves and what every batch item starts from.
 void normalize_source_fps(std::vector<PrepInput>& sources, float& video_fps);
 
+// And the LUT: a row choosing what automatic would give it anyway goes back to
+// automatic, so it keeps following the rows above it.
+void normalize_source_luts(std::vector<PrepInput>& sources);
+
 // One lens for the whole capture, written to every input rather than only the
 // first -- the single "Camera / lens" control speaks for all of them.
 void apply_lens_to_sources(std::vector<PrepInput>& sources, SfmJob& sfm,

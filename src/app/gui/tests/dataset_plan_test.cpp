@@ -113,6 +113,30 @@ int main() {
     const fs::path ws = fs::temp_directory_path() / "spirula_dataset_plan_test";
     const SfmJob made = video_job(ws);
 
+    // ---- which LUT a row's frames go through ---------------------------------
+    {
+        std::vector<PrepInput> rows(5);
+        for (PrepInput& r : rows) r.is_video = true;
+        rows[0].lut_detected = "builtin:dji-dlog-m";
+        expect(input_lut(rows, 0) == "builtin:dji-dlog-m" && input_lut(rows, 1).empty(),
+               "a detected LUT stays with its own file");
+        rows[0].lut = "a.cube";
+        rows[2].lut_detected = "builtin:gopro-gplog";
+        rows[3].lut = kLutNone;
+        expect(input_lut(rows, 0) == "a.cube" && input_lut(rows, 1) == "a.cube" &&
+                   input_lut(rows, 2) == "builtin:gopro-gplog" && input_lut(rows, 3).empty() &&
+                   input_lut(rows, 4).empty(),
+               "a choice carries down until a file says otherwise or a row says none");
+        SfmJob a = made, b = made;
+        b.prep.inputs[0].lut_detected = "builtin:dji-dlog-m";
+        const StepFields fb = frames_fields(b.prep);
+        bool verbatim = false;
+        for (const StepField& f : fb)
+            verbatim = verbatim || (f.key == "lut" && f.value == "builtin:dji-dlog-m");
+        expect(!(frames_fields(a.prep) == fb) && verbatim,
+               "a detected LUT is part of the frames, named as it is");
+    }
+
     // ---- the fields --------------------------------------------------------
     {
         SfmJob a = made, b = made;

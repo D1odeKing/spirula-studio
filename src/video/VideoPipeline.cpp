@@ -198,14 +198,21 @@ void color_matrix(int matrix_coefficients, bool full_range, int bit_depth, int h
 }
 
 // Shader parameter blocks (must mirror src/video/shaders/video.slang).
+// YuvParams is at the 128 bytes every device can push, hence `shift` inside
+// `flags` there.
 struct YuvParams {
     float m0[4], m1[4], m2[4];
     vk::DevicePtr out, luma, cb, cr;
     uint32_t out_w, out_h, src_w, src_h;
-    uint32_t luma_stride, chroma_stride, flags, shift;
+    uint32_t luma_stride, chroma_stride, flags;
     float inv_sx, inv_sy;
     uint32_t groups_per_row;
+    vk::DevicePtr lut;   // kLutHeader floats, then the table
 };
+static_assert(sizeof(YuvParams) <= 128, "YuvParams must fit the minimum push block");
+constexpr uint32_t kYuvShiftAt = 8;
+constexpr uint32_t kYuvLut = 1u << 16;
+constexpr int kLutHeader = 8;   // size, min[3], (size-1)/(max-min)[3], pad
 struct ThumbParams {
     vk::DevicePtr out, luma;
     uint32_t src_w, src_h, luma_stride, out_w, out_h, flags, shift, groups_per_row;
@@ -295,6 +302,9 @@ struct VideoPipeline::Impl {
     vk::DevicePtr thumb_buf = 0, metric_buf = 0, rgb_buf = 0, gray_buf = 0;
     VkDeviceSize gray_capacity = 0;
     VkDeviceSize  rgb_capacity = 0;
+    vk::DevicePtr lut_buf = 0;
+    VkDeviceSize  lut_capacity = 0;
+    uint64_t      lut_serial = 0;
     std::vector<float> metrics;
     std::vector<int>   metric_pending;
 
@@ -313,6 +323,7 @@ struct VideoPipeline::Impl {
     void releasePool(int idx);
     void copyPlanes(int idx);
     bool ensureRgb(VkDeviceSize bytes);
+    bool ensureLut(const ConvertOpts& opts);
     uint32_t planeFlags() const;
 };
 
@@ -382,7 +393,7 @@ VideoPipeline::Impl::~Impl() {
     if (vtimeline) vkDestroySemaphore(dev, vtimeline, nullptr);
     if (vpool) vkDestroyCommandPool(dev, vpool, nullptr);
     for (vk::DevicePtr p : {luma_buf, chroma_buf, chroma2_buf, thumb_buf, metric_buf,
-                            rgb_buf, gray_buf})
+                            rgb_buf, gray_buf, lut_buf})
         if (p) vk::device_free(p);
 }
 
@@ -1368,6 +1379,28 @@ void VideoPipeline::outputSize(const ConvertOpts& opts, int& w, int& h) const {
     h = sh;
 }
 
+bool VideoPipeline::Impl::ensureLut(const ConvertOpts& opts) {
+    if (lut_buf && lut_serial == opts.lut_serial) return true;
+    const size_t n = (size_t)opts.lut_size;
+    std::vector<float> block(kLutHeader + n * n * n * 3, 0.0f);
+    block[0] = (float)n;
+    for (int c = 0; c < 3; c++) {
+        block[1 + c] = opts.lut_min[c];
+        block[4 + c] = (float)(n - 1) / (opts.lut_max[c] - opts.lut_min[c]);
+    }
+    std::memcpy(block.data() + kLutHeader, opts.lut, n * n * n * 3 * sizeof(float));
+    const VkDeviceSize bytes = block.size() * sizeof(float);
+    if (lut_capacity < bytes) {
+        if (lut_buf) vk::device_free(lut_buf);
+        lut_buf = vk::device_alloc(bytes, "video.lut");
+        lut_capacity = lut_buf ? bytes : 0;
+        if (!lut_buf) return false;
+    }
+    vk::Stream::get().upload(lut_buf, block.data(), bytes);
+    lut_serial = opts.lut_serial;
+    return true;
+}
+
 bool VideoPipeline::Impl::ensureRgb(VkDeviceSize bytes) {
     if (rgb_buf && rgb_capacity >= bytes) return true;
     if (rgb_buf) vk::device_free(rgb_buf);
@@ -1431,6 +1464,11 @@ bool VideoPipeline::toImage(const FrameHandle& h, const ConvertOpts& opts, nn::I
         error = "out of device memory for the RGB frame buffer";
         return false;
     }
+    const bool lut = opts.lut && opts.lut_size >= 2;
+    if (lut && !s.ensureLut(opts)) {
+        error = "out of device memory for the colour LUT";
+        return false;
+    }
 
     s.copyPlanes(h.slot);
 
@@ -1460,10 +1498,11 @@ bool VideoPipeline::toImage(const FrameHandle& h, const ConvertOpts& opts, nn::I
     p.src_h = (uint32_t)s.fmt.height;
     p.luma_stride = s.coded.width;
     p.chroma_stride = s.planes.sub_x ? s.coded.width / (uint32_t)s.planes.sub_x : 0;
-    p.flags = s.planeFlags() | ((uint32_t)(rot / 90) << 4);
-    p.shift = (uint32_t)s.planes.shift;
+    p.flags = s.planeFlags() | ((uint32_t)(rot / 90) << 4) |
+              ((uint32_t)s.planes.shift << kYuvShiftAt) | (lut ? kYuvLut : 0u);
     p.inv_sx = (float)s.fmt.width / (float)sw;
     p.inv_sy = (float)s.fmt.height / (float)sh;
+    p.lut = vk::or_fallback(lut ? s.lut_buf : 0);
     vk::Stream::get().dispatchFlat("video.yuv_to_rgb", {}, (int64_t)quads, 256, &p, sizeof(p),
                                    &p.groups_per_row);
 

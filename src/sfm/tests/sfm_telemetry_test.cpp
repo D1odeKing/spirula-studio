@@ -15,6 +15,7 @@
 #include "sfm/tests/TestMain.h"
 
 using namespace sfm;
+namespace fs = std::filesystem;
 
 static int fails = 0;
 
@@ -849,6 +850,90 @@ static void print_head(const Telemetry& tm, int n) {
     }
 }
 
+// ================
+// Log profiles
+// ================
+
+// ftyp, then whatever the file wants at the top level, then a moov holding an
+// mvhd and `moov_extra`.
+static Bytes movie(const Bytes& top_extra, const Bytes& moov_extra) {
+    Bytes ftyp_p;
+    put_str(ftyp_p, "isom"); put_be32(ftyp_p, 0); put_str(ftyp_p, "isom");
+    Bytes mvhd_p(96, 0);
+    Bytes out = box("ftyp", ftyp_p);
+    put_raw(out, top_extra);
+    put_raw(out, box("moov", cat({full("mvhd", mvhd_p), moov_extra})));
+    return out;
+}
+
+static VideoLogProfile log_profile_of(const Bytes& file) {
+    const fs::path p = fs::temp_directory_path() / "sfm_telemetry_test_log.mp4";
+    std::ofstream(p, std::ios::binary).write((const char*)file.data(), (std::streamsize)file.size());
+    return video_log_profile(p.string());
+}
+
+// Each maker's marker on a file that carries nothing else, and the near misses
+// that must not read as log: a log LUT on normal footage ruins every frame.
+static void test_log_profile() {
+    auto dji = [](const char* proto, bool nested, int mode) {
+        const Bytes color = mode ? pb_v(1, (uint64_t)mode) : Bytes{};
+        const Bytes stream = nested ? pb_bytes(2, pb_bytes(4, color)) : pb_bytes(4, color);
+        const Bytes sample = cat({pb_bytes(1, pb_bytes(1, pb_str(1, proto))), pb_bytes(2, stream)});
+        return build_mp4({TrackSpec{"djmd", "meta", "CAM meta", 1000, 33, {sample}}}, 1000, 33, 0);
+    };
+    VideoLogProfile p = log_profile_of(dji("dvtm_ac204.proto", false, 19));
+    check(p.log == "dji-d-log-m" && p.camera == "dvtm_ac204.proto", "log: Osmo Action 5 Pro D-Log M");
+    check(log_profile_of(dji("dvtm_ac204.proto", false, 0)).log.empty(), "log: DJI Default");
+    check(log_profile_of(dji("dvtm_oq101.proto", false, 1)).log.empty(), "log: D-Cinelike is not log");
+    check(log_profile_of(dji("dvtm_oq101.proto", false, 2)).log == "dji-d-log", "log: D-Log");
+    check(log_profile_of(dji("dvtm_AVATA360.proto", true, 19)).log == "dji-d-log-m",
+          "log: Avata 360 keeps it one level deeper");
+    check(log_profile_of(dji("dvtm_AVATA360.proto", false, 19)).log.empty(),
+          "log: and only there");
+    check(log_profile_of(dji("dvtm_wm265e.proto", false, 19)).log.empty(),
+          "log: a proto whose layout was never read is not guessed");
+
+    auto gopro = [](const char* ptcl, bool pano) {
+        Bytes dvid;
+        put_be32(dvid, 1);
+        Bytes prjt;
+        put_str(prjt, "EACO");
+        const Bytes gpmf = cat({klv_nest("DEVC", cat({klv("DVID", 'L', 4, 1, dvid), klv_str("PTCL", ptcl)})),
+                                pano ? klv("PRJT", 'F', 4, 1, prjt) : Bytes{}});
+        return movie({}, box("udta", box("GPMF", gpmf)));
+    };
+    p = log_profile_of(gopro("LOG", true));
+    check(p.log == "gp-log" && p.camera == "EACO", "log: GP-Log on a MAX");
+    check(log_profile_of(gopro("FLAT", true)).log.empty(), "log: FLAT is not GP-Log");
+    check(log_profile_of(gopro("LOG", false)).log.empty(), "log: GP-Log on a HERO has no technical LUT");
+
+    auto sony = [](const char* gamma, const char* primaries) {
+        Bytes xml;
+        put_str(xml, "<NonRealTimeMeta><AcquisitionRecord><Group name=\"CameraUnitMetadataSet\">"
+                     "<Item name=\"CaptureGammaEquation\" value=\"");
+        put_str(xml, gamma);
+        put_str(xml, "\"/><Item name=\"CaptureColorPrimaries\" value=\"");
+        put_str(xml, primaries);
+        put_str(xml, "\"/></Group></AcquisitionRecord></NonRealTimeMeta>");
+        return movie(full("meta", box("xml ", xml)), {});
+    };
+    check(log_profile_of(sony("s-log3-cine", "S-Gamut3-Cine")).log == "s-log3-cine", "log: S-Log3.Cine");
+    check(log_profile_of(sony("s-log3", "S-Gamut3-Cine")).log == "s-log3-cine", "log: S-Log3 in S-Gamut3.Cine");
+    check(log_profile_of(sony("s-log3", "S-Gamut3")).log.empty(), "log: S-Gamut3 is another LUT");
+    check(log_profile_of(sony("rec709", "S-Gamut3-Cine")).log.empty(), "log: Cine2 primaries are not log");
+
+    auto panasonic = [](const char* gamma) {
+        Bytes keys, xml;
+        put_str(keys, "com.panasonic.Semi-Pro.metadata.xml");
+        put_str(xml, "<CameraUnitMetadata><Gamma><CaptureGamma>");
+        put_str(xml, gamma);
+        put_str(xml, "</CaptureGamma></Gamma></CameraUnitMetadata>");
+        return movie({}, full("meta", cat({box("keys", keys), box("ilst", xml)})));
+    };
+    check(log_profile_of(panasonic("V-Log")).log == "v-log", "log: V-Log");
+    check(log_profile_of(panasonic("V-LogL")).log.empty(), "log: V-Log L is another curve");
+}
+
 static int cmdTelemetryTest(int argc, char** argv) {
     if (argc > 1) {
         int rc = 0, head = 0;
@@ -867,6 +952,9 @@ static int cmdTelemetryTest(int argc, char** argv) {
                 std::printf("lens track %d (%s): %dx%d fx %.4f fy %.4f cx %.4f cy %.4f k %.7g %.7g %.7g %.7g %.7g "
                             "p %.7g %.7g\n", l.track, l.lens.c_str(), l.width, l.height, l.fx, l.fy, l.cx, l.cy,
                             l.k[0], l.k[1], l.k[2], l.k[3], l.k[4], l.p1, l.p2);
+            const VideoLogProfile lp = video_log_profile(std::string(argv[i]));
+            std::printf("log profile: %s (%s)\n", lp.log.empty() ? "none" : lp.log.c_str(),
+                        lp.camera.c_str());
             if (head > 0) print_head(tm, head);
             if (tm.carrier == TelemetryCarrier::None) rc = 1;
         }
@@ -882,6 +970,7 @@ static int cmdTelemetryTest(int argc, char** argv) {
     test_dji_avata();
     test_dji_osmo_ignores_avata_fields();
     test_dji_unknown_proto();
+    test_log_profile();
     test_avata_flight();
     test_avata_hover();
     test_dji_lenses();
