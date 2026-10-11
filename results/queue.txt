@@ -15,3 +15,4 @@ hybrid_b3 exit=0 seconds=1489
 b4 queue start Sun Oct 11 12:09:02 EDT 2026
 hybrid_b4_gate exit=0 seconds=1410
 hybrid_band exit=3 seconds=1705
+hybrid_band_r08 exit=3 seconds=1525
