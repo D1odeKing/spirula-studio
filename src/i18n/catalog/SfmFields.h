@@ -1781,21 +1781,28 @@ SS_MSG(progressive_feature_steps_help,
     TR("Çalıştırmanın ayarlarından sınırlara kadar öznitelik geçişi sayısı"));
 
 SS_MSG(progressive_patience_help,
-    EN("Stop the feature passes after this many in a row that align no new image"),
-    JA("新しい画像を 1 枚も位置合わせできないパスがこの回数続いたら特徴点パスを止めます"),
-    ZH_HANS("连续这么多遍都没有对齐新图像时，停止特征检测"),
-    ZH_HANT("連續這麼多遍都沒有對齊新影像時，停止特徵偵測"),
-    KO("새 이미지를 하나도 정렬하지 못한 패스가 이만큼 이어지면 특징점 패스를 멈춥니다"),
-    DE("Merkmalsdurchgänge beenden, wenn so viele nacheinander kein neues Bild "
-       "ausrichten"),
-    FR("Arrêter les passes après autant de passes de suite sans nouvelle image alignée"),
-    ES("Detener las pasadas tras tantas seguidas que no alinean ninguna imagen nueva"),
-    PT("Parar as passagens após tantas seguidas que não alinham nenhuma imagem nova"),
-    IT("Fermare i passaggi dopo questi tanti di fila che non allineano immagini nuove"),
-    NL("Stop de rondes na zoveel achter elkaar die geen nieuw beeld uitlijnen"),
-    RU("Остановить проходы после стольких подряд без новых выровненных снимков"),
-    TR("Arka arkaya bu kadar geçiş yeni görüntü hizalamazsa öznitelik geçişlerini "
-       "durdurur"));
+    EN("Tries in a row that align no new image before a stage gives up: the pixel error "
+       "steps skip to the final error, and the feature passes stop"),
+    JA("新しい画像が位置合わせできない試行がこの回数続くと打ち切ります。ピクセル誤差の段階は最終誤差に飛び、特徴点パスは止まります"),
+    ZH_HANS("连续这么多次都没有对齐新图像时结束该阶段：像素误差各级直接跳到最终误差，特征检测停止后续各遍"),
+    ZH_HANT("連續這麼多次都沒有對齊新影像時結束該階段：像素誤差各級直接跳到最終誤差，特徵偵測停止後續各遍"),
+    KO("새 이미지를 정렬하지 못한 시도가 이만큼 이어지면 끝냅니다. 픽셀 오차 단계는 최종 오차로 건너뛰고 특징점 패스는 멈춥니다"),
+    DE("So viele Versuche in Folge ohne neues Bild, bis aufgegeben wird: die "
+       "Pixelfehler-Stufen springen zum Endfehler, die Merkmalsdurchgänge enden"),
+    FR("Essais d'affilée sans nouvelle image alignée avant d'abandonner : les paliers "
+       "d'erreur sautent à l'erreur finale, les passes de détection s'arrêtent"),
+    ES("Intentos seguidos sin alinear ninguna imagen nueva antes de rendirse: los pasos de "
+       "error saltan al error final y las pasadas de detección se detienen"),
+    PT("Tentativas seguidas sem alinhar nenhuma imagem nova antes de desistir: os passos de "
+       "erro pulam para o erro final e as passagens de detecção param"),
+    IT("Tentativi di fila senza nuove immagini allineate prima di arrendersi: i passi di "
+       "errore saltano all'errore finale e i passaggi di rilevamento si fermano"),
+    NL("Pogingen op rij zonder nieuw beeld voordat wordt opgegeven: de pixelfoutstappen "
+       "springen naar de eindfout en de detectierondes stoppen"),
+    RU("Сколько попыток подряд без новых снимков до отказа: шаги ошибки переходят к "
+       "конечной, проходы обнаружения прекращаются"),
+    TR("Vazgeçmeden önce yeni görüntü hizalamayan ardışık deneme sayısı: piksel hatası "
+       "adımları son hataya atlar, algılama geçişleri durur"));
 
 SS_MSG(progressive_min_matches_help,
     EN("Verified matches an unaligned image needs to be worked on; below it, the "

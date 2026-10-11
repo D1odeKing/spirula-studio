@@ -2472,19 +2472,19 @@ SS_MSG(match_prefilter_params,
     TR("çift seçimi -- en iyi öznitelik: {0}, komşu: {1}"));
 
 SS_MSG(progressive_attempt,
-    EN("progressive attempt {0}/{1}: {2} px over {3} verified pairs"),
-    JA("段階的な試行 {0}/{1}: {2} px、検証済みペア {3}"),
-    ZH_HANS("渐进尝试 {0}/{1}：{2} px，已验证像对 {3} 个"),
-    ZH_HANT("漸進嘗試 {0}/{1}：{2} px，已驗證影像對 {3} 個"),
-    KO("단계적 시도 {0}/{1}: {2} px, 검증된 쌍 {3}"),
-    DE("schrittweiser Versuch {0}/{1}: {2} px über {3} geprüfte Paare"),
-    FR("essai progressif {0}/{1} : {2} px sur {3} paires vérifiées"),
-    ES("intento progresivo {0}/{1}: {2} px sobre {3} pares verificados"),
-    PT("tentativa progressiva {0}/{1}: {2} px sobre {3} pares verificados"),
-    IT("tentativo progressivo {0}/{1}: {2} px su {3} coppie verificate"),
-    NL("stapsgewijze poging {0}/{1}: {2} px over {3} gecontroleerde paren"),
-    RU("постепенная попытка {0}/{1}: {2} px, проверенных пар: {3}"),
-    TR("kademeli deneme {0}/{1}: {3} doğrulanmış çift üzerinde {2} px"));
+    EN("progressive attempt {0}/{1}: {2} px, verified pairs: {3}"),
+    JA("段階的な試行 {0}/{1}: {2} px、検証済みペア: {3}"),
+    ZH_HANS("渐进尝试 {0}/{1}：{2} px，通过验证的像对：{3}"),
+    ZH_HANT("漸進嘗試 {0}/{1}：{2} px，通過驗證的影像對：{3}"),
+    KO("단계적 시도 {0}/{1}: {2} px, 검증된 쌍: {3}"),
+    DE("Ausrichtungsversuch {0}/{1}: {2} px, geprüfte Paare: {3}"),
+    FR("tentative progressive {0}/{1} : {2} px, paires vérifiées : {3}"),
+    ES("intento progresivo {0}/{1}: {2} px, pares verificados: {3}"),
+    PT("tentativa progressiva {0}/{1}: {2} px, pares verificados: {3}"),
+    IT("tentativo progressivo {0}/{1}: {2} px, coppie verificate: {3}"),
+    NL("stapsgewijze poging {0}/{1}: {2} px, geverifieerde paren: {3}"),
+    RU("попытка выравнивания {0}/{1}: {2} px, проверенных пар: {3}"),
+    TR("kademeli deneme {0}/{1}: {2} px, doğrulanmış çift: {3}"));
 
 SS_MSG(progressive_attempt_done,
     EN("progressive attempt {0}/{1} done -- largest model: {2}, aligned: {3}, "
@@ -2512,102 +2512,134 @@ SS_MSG(progressive_attempt_done,
        "model: {4}, {5}"));
 
 SS_MSG(progressive_feature_pass,
-    EN("feature pass {0}/{1}: {2} unaligned image(s) detected again at {3} px, {4} features"),
-    JA("特徴点パス {0}/{1}: 位置合わせされていない画像 {2} 枚を {3} px、特徴点 {4} で再検出"),
-    ZH_HANS("特征检测第 {0}/{1} 遍：以 {3} px、{4} 个特征重新检测 {2} 张未对齐图像"),
-    ZH_HANT("特徵偵測第 {0}/{1} 遍：以 {3} px、{4} 個特徵重新偵測 {2} 張未對齊影像"),
-    KO("특징점 패스 {0}/{1}: 정렬되지 않은 이미지 {2} 장을 {3} px, 특징점 {4} 로 재검출"),
-    DE("Merkmalsdurchgang {0}/{1}: {2} nicht ausgerichtete(s) Bild(er) neu erkannt "
-       "bei {3} px, {4} Merkmale"),
-    FR("passe de détection {0}/{1} : {2} image(s) non alignée(s) redétectée(s) à "
-       "{3} px, {4} points"),
-    ES("pasada de detección {0}/{1}: {2} imagen(es) sin alinear detectada(s) de "
-       "nuevo a {3} px, {4} rasgos"),
-    PT("passagem de detecção {0}/{1}: {2} imagem(ns) não alinhada(s) detectada(s) de "
-       "novo a {3} px, {4} traços"),
-    IT("passaggio di rilevamento {0}/{1}: {2} immagine/i non allineata/e rilevata/e "
-       "di nuovo a {3} px, {4} punti"),
-    NL("detectieronde {0}/{1}: {2} niet-uitgelijnd(e) beeld(en) opnieuw gedetecteerd "
-       "op {3} px, {4} kenmerken"),
-    RU("проход поиска признаков {0}/{1}: невыровненных снимков заново: {2}, "
-       "{3} px, признаков: {4}"),
-    TR("öznitelik geçişi {0}/{1}: hizalanmamış {2} görüntü {3} px'te, {4} "
-       "öznitelikle yeniden bulundu"));
+    EN("feature pass {0}/{1}: detecting the unaligned images again at {3} px -- images: "
+       "{2}, features: {4}"),
+    JA("特徴点パス {0}/{1}: 位置合わせされていない画像を {3} px で再検出 -- 画像: {2}、特徴点: {4}"),
+    ZH_HANS("特征检测第 {0}/{1} 遍：以 {3} px 重新检测未对齐的图像 —— 图像：{2}，特征：{4}"),
+    ZH_HANT("特徵偵測第 {0}/{1} 遍：以 {3} px 重新偵測未對齊的影像 —— 影像：{2}，特徵：{4}"),
+    KO("특징점 패스 {0}/{1}: 정렬되지 않은 이미지를 {3} px로 재검출 -- 이미지: {2}, 특징점: {4}"),
+    DE("Merkmalsdurchgang {0}/{1}: nicht ausgerichtete Bilder werden bei {3} px neu erkannt "
+       "-- Bilder: {2}, Merkmale: {4}"),
+    FR("passe de détection {0}/{1} : redétection des images non alignées à {3} px -- images "
+       ": {2}, points : {4}"),
+    ES("pasada de detección {0}/{1}: se vuelven a detectar las imágenes sin alinear a {3} "
+       "px -- imágenes: {2}, rasgos: {4}"),
+    PT("passagem de detecção {0}/{1}: detectando de novo as imagens não alinhadas a {3} px "
+       "-- imagens: {2}, traços: {4}"),
+    IT("passaggio di rilevamento {0}/{1}: nuovo rilevamento delle immagini non allineate a "
+       "{3} px -- immagini: {2}, punti: {4}"),
+    NL("detectieronde {0}/{1}: niet-uitgelijnde beelden opnieuw gedetecteerd op {3} px -- "
+       "beelden: {2}, kenmerken: {4}"),
+    RU("проход обнаружения {0}/{1}: повторное обнаружение невыровненных снимков при {3} px "
+       "— снимков: {2}, признаков: {4}"),
+    TR("algılama geçişi {0}/{1}: hizalanmamış görüntüler {3} px'te yeniden algılanıyor -- "
+       "görüntü: {2}, öznitelik: {4}"));
 
 SS_MSG(progressive_feature_kept,
-    EN("feature pass {0}/{1} kept -- pairs: {3}/{2} verified, largest model {4} -> {5} "
-       "images, mean error {6} -> {7} px, {8}"),
-    JA("特徴点パス {0}/{1} を採用 -- ペア: {3}/{2} 検証済み、最大モデル {4} -> {5} 枚、"
-       "平均誤差 {6} -> {7} px、{8}"),
-    ZH_HANS("保留特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型 {4} -> {5} 张，"
-            "平均误差 {6} -> {7} px，{8}"),
-    ZH_HANT("保留特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型 {4} -> {5} 張，"
-            "平均誤差 {6} -> {7} px，{8}"),
-    KO("특징점 패스 {0}/{1} 유지 -- 쌍: {3}/{2} 검증됨, 최대 모델 {4} -> {5} 장, "
-       "평균 오차 {6} -> {7} px, {8}"),
-    DE("Merkmalsdurchgang {0}/{1} behalten -- Paare: {3}/{2} geprüft, größtes Modell "
-       "{4} -> {5} Bilder, mittlerer Fehler {6} -> {7} px, {8}"),
-    FR("passe de détection {0}/{1} gardée -- paires : {3}/{2} vérifiées, plus grand "
-       "modèle {4} -> {5} images, erreur moyenne {6} -> {7} px, {8}"),
-    ES("pasada de detección {0}/{1} conservada: pares: {3}/{2} verificados, modelo "
-       "mayor {4} -> {5} imágenes, error medio {6} -> {7} px, {8}"),
-    PT("passagem de detecção {0}/{1} mantida -- pares: {3}/{2} verificados, maior "
-       "modelo {4} -> {5} imagens, erro médio {6} -> {7} px, {8}"),
-    IT("passaggio di rilevamento {0}/{1} tenuto -- coppie: {3}/{2} verificate, modello "
-       "più grande {4} -> {5} immagini, errore medio {6} -> {7} px, {8}"),
-    NL("detectieronde {0}/{1} behouden -- paren: {3}/{2} gecontroleerd, grootste model "
-       "{4} -> {5} beelden, gemiddelde fout {6} -> {7} px, {8}"),
-    RU("проход поиска признаков {0}/{1} сохранён -- пары: {3}/{2} проверено, "
-       "крупнейшая модель {4} -> {5} снимков, средняя ошибка {6} -> {7} px, {8}"),
-    TR("öznitelik geçişi {0}/{1} tutuldu -- çiftler: {3}/{2} doğrulandı, en büyük "
-       "model {4} -> {5} görüntü, ortalama hata {6} -> {7} px, {8}"));
+    EN("feature pass {0}/{1} kept -- pairs: {3}/{2} verified, largest model (images): {4} "
+       "-> {5}, mean error {6} -> {7} px, {8}"),
+    JA("特徴点パス {0}/{1} を採用 -- ペア: {3}/{2} 検証済み、最大モデルの画像: {4} -> {5}、平均誤差 {6} -> {7} px、{8}"),
+    ZH_HANS("保留特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型的图像：{4} -> {5}，平均误差 {6} -> {7} px，{8}"),
+    ZH_HANT("保留特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型的影像：{4} -> {5}，平均誤差 {6} -> {7} px，{8}"),
+    KO("특징점 패스 {0}/{1} 유지 -- 쌍: {3}/{2} 검증됨, 최대 모델의 이미지: {4} -> {5}, 평균 오차 {6} -> {7} px, "
+       "{8}"),
+    DE("Merkmalsdurchgang {0}/{1} behalten -- Paare: {3}/{2} geprüft, Bilder im größten "
+       "Modell: {4} -> {5}, mittlerer Fehler {6} -> {7} px, {8}"),
+    FR("passe de détection {0}/{1} gardée -- paires : {3}/{2} vérifiées, images du plus "
+       "grand modèle : {4} -> {5}, erreur moyenne {6} -> {7} px, {8}"),
+    ES("pasada de detección {0}/{1} conservada -- pares: {3}/{2} verificados, imágenes del "
+       "modelo mayor: {4} -> {5}, error medio {6} -> {7} px, {8}"),
+    PT("passagem de detecção {0}/{1} mantida -- pares: {3}/{2} verificados, imagens do "
+       "maior modelo: {4} -> {5}, erro médio {6} -> {7} px, {8}"),
+    IT("passaggio di rilevamento {0}/{1} mantenuto -- coppie: {3}/{2} verificate, immagini "
+       "del modello più grande: {4} -> {5}, errore medio {6} -> {7} px, {8}"),
+    NL("detectieronde {0}/{1} behouden -- paren: {3}/{2} geverifieerd, beelden in het "
+       "grootste model: {4} -> {5}, gemiddelde fout {6} -> {7} px, {8}"),
+    RU("проход обнаружения {0}/{1} сохранён — пары: {3}/{2} проверено, снимков в крупнейшей "
+       "модели: {4} -> {5}, средняя ошибка {6} -> {7} px, {8}"),
+    TR("algılama geçişi {0}/{1} tutuldu -- çiftler: {3}/{2} doğrulandı, en büyük modeldeki "
+       "görüntü: {4} -> {5}, ortalama hata {6} -> {7} px, {8}"));
 
 SS_MSG(progressive_feature_undone,
-    EN("feature pass {0}/{1} undone -- pairs: {3}/{2} verified, largest model {4} -> {5} "
-       "images, mean error {6} -> {7} px, {8}"),
-    JA("特徴点パス {0}/{1} を取り消し -- ペア: {3}/{2} 検証済み、最大モデル {4} -> {5} 枚、"
-       "平均誤差 {6} -> {7} px、{8}"),
-    ZH_HANS("撤销特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型 {4} -> {5} 张，"
-            "平均误差 {6} -> {7} px，{8}"),
-    ZH_HANT("撤銷特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型 {4} -> {5} 張，"
-            "平均誤差 {6} -> {7} px，{8}"),
-    KO("특징점 패스 {0}/{1} 취소 -- 쌍: {3}/{2} 검증됨, 최대 모델 {4} -> {5} 장, "
-       "평균 오차 {6} -> {7} px, {8}"),
-    DE("Merkmalsdurchgang {0}/{1} verworfen -- Paare: {3}/{2} geprüft, größtes Modell "
-       "{4} -> {5} Bilder, mittlerer Fehler {6} -> {7} px, {8}"),
-    FR("passe de détection {0}/{1} annulée -- paires : {3}/{2} vérifiées, plus grand "
-       "modèle {4} -> {5} images, erreur moyenne {6} -> {7} px, {8}"),
-    ES("pasada de detección {0}/{1} deshecha: pares: {3}/{2} verificados, modelo "
-       "mayor {4} -> {5} imágenes, error medio {6} -> {7} px, {8}"),
-    PT("passagem de detecção {0}/{1} desfeita -- pares: {3}/{2} verificados, maior "
-       "modelo {4} -> {5} imagens, erro médio {6} -> {7} px, {8}"),
-    IT("passaggio di rilevamento {0}/{1} annullato -- coppie: {3}/{2} verificate, "
-       "modello più grande {4} -> {5} immagini, errore medio {6} -> {7} px, {8}"),
-    NL("detectieronde {0}/{1} ongedaan -- paren: {3}/{2} gecontroleerd, grootste model "
-       "{4} -> {5} beelden, gemiddelde fout {6} -> {7} px, {8}"),
-    RU("проход поиска признаков {0}/{1} отменён -- пары: {3}/{2} проверено, "
-       "крупнейшая модель {4} -> {5} снимков, средняя ошибка {6} -> {7} px, {8}"),
-    TR("öznitelik geçişi {0}/{1} geri alındı -- çiftler: {3}/{2} doğrulandı, en büyük "
-       "model {4} -> {5} görüntü, ortalama hata {6} -> {7} px, {8}"));
+    EN("feature pass {0}/{1} undone -- pairs: {3}/{2} verified, largest model (images): {4} "
+       "-> {5}, mean error {6} -> {7} px, {8}"),
+    JA("特徴点パス {0}/{1} を取り消し -- ペア: {3}/{2} 検証済み、最大モデルの画像: {4} -> {5}、平均誤差 {6} -> {7} px、{8}"),
+    ZH_HANS("撤销特征检测第 {0}/{1} 遍 —— 像对：{3}/{2} 通过验证，最大模型的图像：{4} -> {5}，平均误差 {6} -> {7} px，{8}"),
+    ZH_HANT("撤銷特徵偵測第 {0}/{1} 遍 —— 影像對：{3}/{2} 通過驗證，最大模型的影像：{4} -> {5}，平均誤差 {6} -> {7} px，{8}"),
+    KO("특징점 패스 {0}/{1} 취소 -- 쌍: {3}/{2} 검증됨, 최대 모델의 이미지: {4} -> {5}, 평균 오차 {6} -> {7} px, "
+       "{8}"),
+    DE("Merkmalsdurchgang {0}/{1} verworfen -- Paare: {3}/{2} geprüft, Bilder im größten "
+       "Modell: {4} -> {5}, mittlerer Fehler {6} -> {7} px, {8}"),
+    FR("passe de détection {0}/{1} annulée -- paires : {3}/{2} vérifiées, images du plus "
+       "grand modèle : {4} -> {5}, erreur moyenne {6} -> {7} px, {8}"),
+    ES("pasada de detección {0}/{1} deshecha -- pares: {3}/{2} verificados, imágenes del "
+       "modelo mayor: {4} -> {5}, error medio {6} -> {7} px, {8}"),
+    PT("passagem de detecção {0}/{1} desfeita -- pares: {3}/{2} verificados, imagens do "
+       "maior modelo: {4} -> {5}, erro médio {6} -> {7} px, {8}"),
+    IT("passaggio di rilevamento {0}/{1} annullato -- coppie: {3}/{2} verificate, immagini "
+       "del modello più grande: {4} -> {5}, errore medio {6} -> {7} px, {8}"),
+    NL("detectieronde {0}/{1} teruggedraaid -- paren: {3}/{2} geverifieerd, beelden in het "
+       "grootste model: {4} -> {5}, gemiddelde fout {6} -> {7} px, {8}"),
+    RU("проход обнаружения {0}/{1} отменён — пары: {3}/{2} проверено, снимков в крупнейшей "
+       "модели: {4} -> {5}, средняя ошибка {6} -> {7} px, {8}"),
+    TR("algılama geçişi {0}/{1} geri alındı -- çiftler: {3}/{2} doğrulandı, en büyük "
+       "modeldeki görüntü: {4} -> {5}, ortalama hata {6} -> {7} px, {8}"));
 
 SS_MSG(progressive_time_up,
-    EN("progressive alignment: the {0} minute limit is up after {1} feature pass(es)"),
-    JA("段階的な位置合わせ: {1} 回の特徴点パスで {0} 分の上限に達しました"),
-    ZH_HANS("渐进对齐：{1} 遍特征检测后已到 {0} 分钟的上限"),
-    ZH_HANT("漸進對齊：{1} 遍特徵偵測後已到 {0} 分鐘的上限"),
-    KO("단계적 정렬: 특징점 패스 {1} 회 후 {0} 분 한도에 도달했습니다"),
-    DE("schrittweise Ausrichtung: die Grenze von {0} Minuten ist nach {1} "
-       "Merkmalsdurchgang/-gängen erreicht"),
-    FR("alignement progressif : la limite de {0} minutes est atteinte après {1} "
-       "passe(s)"),
-    ES("alineación progresiva: se alcanzó el límite de {0} minutos tras {1} pasada(s)"),
-    PT("alinhamento progressivo: o limite de {0} minutos foi atingido após {1} "
-       "passagem(ns)"),
-    IT("allineamento progressivo: raggiunto il limite di {0} minuti dopo {1} "
-       "passaggio/i"),
-    NL("stapsgewijze uitlijning: de grens van {0} minuten is bereikt na {1} ronde(s)"),
-    RU("постепенное выравнивание: предел {0} мин достигнут после проходов: {1}"),
-    TR("kademeli hizalama: {1} geçişten sonra {0} dakikalık sınıra ulaşıldı"));
+    EN("progressive alignment: the time limit of {0} min is up; feature passes run: {1}"),
+    JA("段階的な位置合わせ: {0} 分の上限に達しました。実行した特徴点パス: {1}"),
+    ZH_HANS("渐进对齐：已到 {0} 分钟的上限；已运行的特征检测遍数：{1}"),
+    ZH_HANT("漸進對齊：已到 {0} 分鐘的上限；已執行的特徵偵測遍數：{1}"),
+    KO("단계적 정렬: {0}분 한도에 도달했습니다. 실행한 특징점 패스: {1}"),
+    DE("schrittweise Ausrichtung: das Zeitlimit von {0} min ist erreicht; gelaufene "
+       "Merkmalsdurchgänge: {1}"),
+    FR("alignement progressif : la limite de {0} min est atteinte ; passes effectuées : {1}"),
+    ES("alineación progresiva: se alcanzó el límite de {0} min; pasadas realizadas: {1}"),
+    PT("alinhamento progressivo: o limite de {0} min foi atingido; passagens feitas: {1}"),
+    IT("allineamento progressivo: raggiunto il limite di {0} min; passaggi eseguiti: {1}"),
+    NL("stapsgewijze uitlijning: de tijdslimiet van {0} min is bereikt; uitgevoerde "
+       "detectierondes: {1}"),
+    RU("постепенное выравнивание: достигнут предел {0} мин; выполнено проходов: {1}"),
+    TR("kademeli hizalama: {0} dk sınırına ulaşıldı; yapılan algılama geçişi: {1}"));
+
+SS_MSG(progressive_ladder_skip,
+    EN("Attempts in a row with no new image: {0}. Going straight to the final {2} px; "
+       "attempts skipped: {1}"),
+    JA("新しい画像が入らなかった連続試行: {0}。最終の {2} px に進みます。飛ばした試行: {1}"),
+    ZH_HANS("连续没有新图像的尝试：{0}。直接进行最终的 {2} px；跳过的尝试：{1}"),
+    ZH_HANT("連續沒有新影像的嘗試：{0}。直接進行最終的 {2} px；略過的嘗試：{1}"),
+    KO("새 이미지가 없던 연속 시도: {0}. 바로 마지막 {2} px로 갑니다. 건너뛴 시도: {1}"),
+    DE("Versuche in Folge ohne neues Bild: {0}. Weiter direkt mit den abschließenden {2} "
+       "px; übersprungene Versuche: {1}"),
+    FR("Tentatives d'affilée sans nouvelle image : {0}. Passage direct aux {2} px finaux ; "
+       "tentatives sautées : {1}"),
+    ES("Intentos seguidos sin imagen nueva: {0}. Se pasa directamente a los {2} px finales; "
+       "intentos saltados: {1}"),
+    PT("Tentativas seguidas sem imagem nova: {0}. Indo direto aos {2} px finais; tentativas "
+       "puladas: {1}"),
+    IT("Tentativi di fila senza nuove immagini: {0}. Si passa subito ai {2} px finali; "
+       "tentativi saltati: {1}"),
+    NL("Pogingen op rij zonder nieuw beeld: {0}. Meteen door naar de laatste {2} px; "
+       "overgeslagen pogingen: {1}"),
+    RU("Попыток подряд без новых снимков: {0}. Сразу к конечным {2} px; пропущено попыток: "
+       "{1}"),
+    TR("Yeni görüntüsüz ardışık deneme: {0}. Doğrudan son {2} px'e geçiliyor; atlanan "
+       "deneme: {1}"));
+
+SS_MSG(progressive_detect_stopped,
+    EN("feature detection stopped; the [extract] line above says why"),
+    JA("特徴点の検出が止まりました。理由は上の [extract] の行にあります"),
+    ZH_HANS("特征检测已停止，原因见上方的 [extract] 行"),
+    ZH_HANT("特徵偵測已停止，原因見上方的 [extract] 行"),
+    KO("특징점 검출이 멈췄습니다. 이유는 위의 [extract] 줄에 있습니다"),
+    DE("die Merkmalserkennung wurde abgebrochen; die [extract]-Zeile darüber nennt den Grund"),
+    FR("la détection des points clés s'est arrêtée ; la ligne [extract] ci-dessus en donne la raison"),
+    ES("la detección de puntos clave se detuvo; la línea [extract] de arriba indica el motivo"),
+    PT("a detecção de pontos-chave parou; a linha [extract] acima diz o motivo"),
+    IT("il rilevamento dei punti chiave si è fermato; la riga [extract] sopra ne dice il motivo"),
+    NL("de kenmerkdetectie is gestopt; de [extract]-regel hierboven zegt waarom"),
+    RU("обнаружение признаков остановлено; причина в строке [extract] выше"),
+    TR("öznitelik algılama durdu; nedeni yukarıdaki [extract] satırında"));
 
 SS_MSG(progressive_feature_failed,
     EN("feature pass {0}/{1} failed and was undone; the model from before it is kept: {2}"),

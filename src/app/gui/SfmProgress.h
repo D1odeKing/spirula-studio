@@ -99,7 +99,10 @@ float mapping_fraction(int64_t done, int64_t total);
 // file is absent, unfinished or not newer than `mtime` -- which the caller
 // keeps, so a poll that finds nothing new costs one stat.
 bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out,
-                     uint64_t point_memory_budget = 0);
+                     uint64_t point_memory_budget = 0, const std::string& file = "model.bin");
+// Images placed in each model the run wrote: model.bin, then model_1.bin and on
+// (sfm/core/Progress.h `models`). Reads only their headers.
+std::vector<uint32_t> live_model_sizes(const std::string& dir);
 
 // One image of the model in a snapshot (images.bin beside model.bin).
 struct ImageStat {
