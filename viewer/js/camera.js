@@ -92,12 +92,16 @@ export class Nav {
   }
   look(dx, dy) {
     const s = 0.003;
-    const qa = quat.fromAxisAngle(this.cam.up(), -dx * s);
-    const qb = quat.fromAxisAngle(this.cam.right(), -dy * s);
     if (this.mode === 'fps') {
-      this.cam.rot = quat.norm(quat.mul(this.cam.rot, quat.fromAxisAngle([0,1,0], -dx*s)));
-      this.cam.rot = quat.norm(quat.mul(qb, this.cam.rot));
+      // Yaw about world up, pitch about the camera's own right: neither tilts
+      // the right axis, so circling the mouse cannot build up roll. Upside
+      // down, the yaw flips so the view still turns the way the drag goes.
+      const sign = v3.dot(this.cam.up(), [0,0,1]) < 0 ? -1 : 1;
+      this.cam.rot = quat.mul(quat.fromAxisAngle([0,0,1], -dx * s * sign), this.cam.rot);
+      this.cam.rot = quat.norm(quat.mul(this.cam.rot, quat.fromAxisAngle([1,0,0], -dy * s)));
     } else {
+      const qa = quat.fromAxisAngle(this.cam.up(), -dx * s);
+      const qb = quat.fromAxisAngle(this.cam.right(), -dy * s);
       this.cam.rot = quat.norm(quat.mul(quat.mul(qa, qb), this.cam.rot));
     }
     this.onChange();
@@ -140,13 +144,13 @@ export class Nav {
     const sr = dt * 1.0;
     const K = this._keys;
     const fwd = this.cam.forward(), right = this.cam.right();
-    const up = (this.mode === 'turntable' || this.mode === 'fps') ? [0,0,1] : this.cam.up();
+    const up = [0,0,1];
     let move = [0,0,0], rotate = 0.0;
     if (K.has('w')||K.has('arrowup')) move = v3.add(move, v3.scale(fwd, s));
     if (K.has('s')||K.has('arrowdown')) move = v3.add(move, v3.scale(fwd, -s));
     if (K.has('a')||K.has('arrowleft')) move = v3.add(move, v3.scale(right, -s));
     if (K.has('d')||K.has('arrowright')) move = v3.add(move, v3.scale(right, s));
-    if (this.mode === 'fly') {
+    if (this.mode === 'fly' || this.mode === 'trackball') {
       if (K.has('e')) rotate -= sr;
       if (K.has('q')) rotate += sr;
     } else {

@@ -4,7 +4,7 @@
 // feature_masks/ for a camera, and COLMAP's one mask tree is the two ANDed.
 // Real DatasetPrep::run, no model: the re-mask is the frame stencil, which is
 // also checked per camera folder. Built without SS_BUILD_SAM, so it also
-// checks that asking for a model fails.
+// checks that asking for a model fails. And `sparse/0` is not a dataset.
 
 #include "app/FrameMask.h"
 #include "app/gui/DatasetPrep.h"
@@ -304,7 +304,33 @@ void test_heif_folder() {
           "no half-written JPEG is left for a resumed run to keep");
 }
 
+// A COLMAP model with nothing beside it is a reconstruction to view, not a
+// dataset, so a dropped `sparse/0` does not land on the trainer.
+void test_bare_model_is_not_a_dataset() {
+    const fs::path root = scratch("bare_model");
+    auto model = [](const fs::path& d) {
+        std::error_code ec;
+        fs::create_directories(d, ec);
+        for (const char* f : {"cameras.bin", "images.bin", "points3D.bin"})
+            std::ofstream(d / f, std::ios::binary) << "";
+    };
+    model(root / "sparse" / "0");
+    write_jpg(root / "images" / "a.jpg", 16, 12, 0);
+    check(gui::folder_looks_like_dataset(root.string()), "a folder with sparse/ is a dataset");
+    check(!gui::folder_looks_like_dataset((root / "sparse" / "0").string()),
+          "sparse/0 alone is not a dataset");
+    model(root / "flat");
+    write_jpg(root / "flat" / "images" / "a.jpg", 16, 12, 0);
+    check(gui::folder_looks_like_dataset((root / "flat").string()),
+          "a model beside images/ is a dataset");
+    model(root / "loose");
+    write_jpg(root / "loose" / "a.jpg", 16, 12, 0);
+    check(gui::folder_looks_like_dataset((root / "loose").string()),
+          "a model beside its photos is a dataset");
+}
+
 int main() {
+    test_bare_model_is_not_a_dataset();
     test_rerun_reapplies_corrections();
     test_camera_scan_skips_mask_edits();
     test_per_camera_stencil();

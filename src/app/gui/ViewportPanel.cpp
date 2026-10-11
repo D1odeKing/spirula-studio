@@ -1457,6 +1457,7 @@ void ViewportPanel::draw_controls(bool engine) {
     if (_has_cameras) {
         place(check_w(msg::viewport_cameras));
         if (ui::Checkbox(msg::viewport_cameras, &_show_cams)) _dirty = true;
+        ui::help_on_hover(msg::viewport_cameras_help);
         if (_show_cams) {
             place(px(110.0f));
             ImGui::SetNextItemWidth(px(110.0f));
@@ -1466,9 +1467,18 @@ void ViewportPanel::draw_controls(bool engine) {
             ui::help_on_hover(msg::viewport_frustum_size_help);
         }
     }
+    if (!engine && !_preview.has_mesh() && _preview.num_points() > 0) {
+        place(px(110.0f));
+        ImGui::SetNextItemWidth(px(110.0f));
+        const std::string fmt = spirula::i18n::format(msg::viewport_point_size, {"%.1f"});
+        if (ui::SliderFloatRaw("##psize", &_point_px, 1.0f, 5.0f, fmt.c_str(),
+                               ImGuiSliderFlags_AlwaysClamp))
+            _dirty = true;
+        ui::help_on_hover(msg::viewport_point_size_help);
+    }
     place(check_w(msg::viewport_grid));
     if (ui::Checkbox(msg::viewport_grid, &_show_grid)) _dirty = true;
-    ui::help_on_hover(msg::viewport_cameras_help);
+    ui::help_on_hover(msg::viewport_grid_help);
     if (_mode == Mode::Engine ? _roi_engine != nullptr : (_roi_preview || _roi_points_inside)) {
         place(check_w(msg::viewport_region));
         if (ui::Checkbox(msg::viewport_region, &_show_roi)) _dirty = true;
@@ -1766,13 +1776,15 @@ void ViewportPanel::draw_preview(const ImVec2& avail) {
     model_point(_cam.target, target);
     _preview.set_overlay(_roi_preview, _show_roi);
     _preview.dim_points_outside(_roi_points_inside, _show_roi);
+    PreviewStyle style;
+    style.point_px = _point_px;
     unsigned tex = _preview.render(W, H, view,
                                    (PreviewProjection)_cam_model,
                                    fx / (0.5f * W), fy / (0.5f * H),
                                    _home_dist, nav_dist() / _m2s_scale, target,
                                    _show_cams, _frustum_scale,
                                    _show_grid && !external_grid(),
-                                   ortho_pullback(false));
+                                   ortho_pullback(false), &style);
     if (!tex) {
         ui::TextDisabled(msg::viewport_render_failed);
         return;

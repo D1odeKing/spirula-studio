@@ -23,8 +23,9 @@ struct NavCamera {
     float rot[4] = {0, 0, 0, 1};   // (x,y,z,w), camera-to-world rotation
     float target[3] = {0, 0, 0};   // orbit / turntable pivot
     Mode mode = Turntable;
-    // What Turntable orbits about and E/Q move along: +Z, as in the browser,
-    // unless the scene's own up is known to be another axis. Unit length.
+    // What Turntable orbits about, First Person turns about and E/Q move
+    // along: +Z, as in the browser, unless the scene's own up is known to be
+    // another axis. Unit length.
     float world_up[3] = {0, 0, 1};
     float speed_exp = 0.0f;        // Move Speed slider; speed = 10^exp
 

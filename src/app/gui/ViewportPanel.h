@@ -459,6 +459,7 @@ private:
     float _frustum_scale = 1.0f;     // camera-frustum size multiplier
     std::function<void()> _trail;
     float _trail_w = 0.0f;
+    float _point_px = 2.0f;          // preview cloud's point size, pixels across
     // 0 = auto (see render_scale), 1 = 50%, 2 = 75%, 3 = 100%
     int _scale_idx = 0;
     float _last_pose[13] = {};       // pos + rot + target + ortho + lens, to spot motion

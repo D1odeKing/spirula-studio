@@ -1011,7 +1011,7 @@ private:
     void draw_dense_advanced();
     void draw_train_mask_mode(float width);
     void draw_seed_cloud(TrainRunner::Phase ph);
-    void draw_dataset_geometry();
+    void draw_dataset_aux(float width);
     bool dense_cloud_present();
     std::string _dense_probe_data;     // dense_cloud_present()'s cache
     double _dense_probe_time = -1.0;

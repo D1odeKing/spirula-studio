@@ -136,10 +136,12 @@ taken for it. Every case above was exercised on the FJD workspace
   a mesh's is a scan; alone anywhere else it opens in the viewer.
 - **XGRIDS** (LCC Studio `developer_data/`): `raw/` (the original fisheye and
   OpenCV lenses) and `perspective/` (pinhole crops) are COLMAP datasets in the
-  LAS's frame. "Add dataset..." on the export, `developer_data/` or `raw/`
-  takes `raw/` in place, adds the LAS, ticks "already in the scan's frame"
-  (`--mode keep`) and reads its masks flipped: they are white where the
-  operator is.
+  LAS's frame. `nCore_data/` holds the same two under `colmap/`, with the LAS
+  under `lidar/`. Both are found by layout, so a renamed copy works too.
+  "Add dataset..." or a drop of the export, either of the two, or a folder
+  inside one takes `raw/` in place, adds the LAS, ticks "already in the
+  scan's frame" (`--mode keep`) and reads its masks flipped: they are white
+  where the operator is.
 
 ## Measurements (2026-10-04, RTX 5070)
 

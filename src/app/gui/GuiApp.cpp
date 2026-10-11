@@ -2166,6 +2166,26 @@ static std::vector<std::string> recent_models(const RecentList& r) {
     return out;
 }
 
+// The folder that several dropped files all come from, when they are a
+// reconstruction's files rather than photos or videos and it reads as one.
+static std::string model_files_folder(const std::vector<std::string>& paths) {
+    if (paths.size() < 2) return {};
+    std::error_code ec;
+    const fs::path dir = fs::path(paths[0]).parent_path();
+    bool model_file = false;
+    for (const std::string& s : paths) {
+        const fs::path p(s);
+        if (!fs::is_regular_file(p, ec) || p.parent_path() != dir || is_image_ext(p) ||
+            is_video_path(s))
+            return {};
+        const std::string ext = lower_ext(p);
+        model_file = model_file || p.filename() == "transforms.json" || ext == ".bin" ||
+                     ext == ".txt" || ext == ".db" || ext == ".xml" || ext == ".psx";
+    }
+    if (!model_file || spirula::resolve_sparse_dir(dir.string()).empty()) return {};
+    return dir.string();
+}
+
 // Videos and folders of photos out of a drop; the rest is logged.
 std::vector<std::string> GuiApp::raw_inputs(const std::vector<std::string>& paths) {
     std::error_code ec;
@@ -2249,10 +2269,13 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
                 _mesh_job.data_dir = paths[0];
             return;
         }
-        if (is_dir && folder_looks_like_dataset(paths[0])) {
+        // `sparse/0` stands for the dataset it sits in.
+        std::string data = paths[0];
+        if (is_dir && !folder_looks_like_dataset(data)) data = spirula::resolve_sparse_dir(data);
+        if (is_dir && !data.empty() && folder_looks_like_dataset(data)) {
             close_mesh_preview();
             _mesh_job.use_data = true;
-            _mesh_job.data_dir = paths[0];
+            _mesh_job.data_dir = data;
             return;
         }
     }
@@ -2407,6 +2430,13 @@ void GuiApp::handle_drop(const std::vector<std::string>& paths) {
                 request_open_dataset(dir);
             return;
         }
+    }
+    // Several files picked out of one model folder (cameras.bin, images.bin,
+    // points3D.bin, ...) stand for the folder.
+    if (const std::string dir = model_files_folder(paths); !dir.empty()) {
+        if (folder_looks_like_dataset(dir)) request_open_dataset(dir);
+        else request_open_splat(dir);
+        return;
     }
 
     // Everything else is raw input: videos, and folders of photos.
@@ -11298,9 +11328,10 @@ void GuiApp::draw_seed_cloud(TrainRunner::Phase ph) {
         ui::TextColoredWrapped(kWarn, msg::seed_cloud_unused);
 }
 
-// Ticking sets the preset's weight back (or a fallback where the preset has
-// none); unticking zeroes it, which is also what keeps the maps unloaded.
-void GuiApp::draw_dataset_geometry() {
+// Masks, depths and normals, each offered only once the parse has found it.
+// Ticking a map sets the preset's weight back (or a fallback where the preset
+// has none); unticking zeroes it, which is also what keeps the maps unloaded.
+void GuiApp::draw_dataset_aux(float width) {
     // Unmeasured: the Pearson term is per image and stays well under 1, so it
     // gets five times the per-pixel normal default.
     constexpr float kDatasetDepthWeight = 0.05f;
@@ -11309,6 +11340,9 @@ void GuiApp::draw_dataset_geometry() {
     if (!s || ph == TrainRunner::Phase::Loading || ph == TrainRunner::Phase::LoadError ||
         s->cfg.data != _cfg.data)
         return;
+    ImGui::Spacing();
+    if (!s->ds.mask_filenames.empty() || !s->alpha_images.empty())
+        draw_train_mask_mode(width);
     if (!s->ds.depth_filenames.empty()) {
         bool on = _cfg.load_depths && _cfg.depth_supervision_weight > 0.0f;
         if (ui::Checkbox(msg::opt_dataset_depths, &on)) {
@@ -11471,8 +11505,6 @@ void GuiApp::draw_basic_options() {
     }
 #endif
 
-    draw_train_mask_mode(w);
-
     ImGui::SetNextItemWidth(w);
     if (ui::SliderInt(msg::opt_sh_degree, &_cfg.sh_degree, 0, 4))
         _cfg_ui.touched.insert("sh_degree");
@@ -11500,7 +11532,7 @@ void GuiApp::draw_basic_options() {
     if (_cfg.distraction_robustness != "off")
         ui::TextColoredWrapped(kWarn, msg::opt_distraction_warn);
 
-    draw_dataset_geometry();
+    draw_dataset_aux(w);
 }
 
 void GuiApp::draw_train_controls() {

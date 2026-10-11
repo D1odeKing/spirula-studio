@@ -3202,11 +3202,78 @@ SS_MSG(viewport_frustum_size_help,
     RU("Размер отображения пирамид видимости камер."),
     TR("Kamera görüş piramitlerinin görüntülenme boyutu."));
 
+SS_MSG(viewport_point_size,
+    EN("Points: {0} px"),
+    JA("点: {0} px"),
+    ZH_HANS("点：{0} px"),
+    ZH_HANT("點：{0} px"),
+    KO("점: {0} px"),
+    DE("Punkte: {0} px"),
+    FR("Points : {0} px"),
+    ES("Puntos: {0} px"),
+    PT("Pontos: {0} px"),
+    IT("Punti: {0} px"),
+    NL("Punten: {0} px"),
+    RU("Точки: {0} px"),
+    TR("Noktalar: {0} px"));
+
+SS_MSG(viewport_point_size_help,
+    EN("How many pixels across each point of the reconstruction is drawn."),
+    JA("再構成の点を何ピクセルの幅で描くかです。"),
+    ZH_HANS("重建中每个点绘制的像素宽度。"),
+    ZH_HANT("重建中每個點繪製的像素寬度。"),
+    KO("재구성의 각 점을 몇 픽셀 폭으로 그릴지입니다."),
+    DE("Wie viele Pixel breit jeder Punkt der Rekonstruktion gezeichnet wird."),
+    FR("Largeur en pixels de chaque point de la reconstruction à l'écran."),
+    ES("Cuántos píxeles de ancho mide cada punto de la reconstrucción en pantalla."),
+    PT("Quantos pixels de largura tem cada ponto da reconstrução na tela."),
+    IT("Quanti pixel di larghezza ha ogni punto della ricostruzione a schermo."),
+    NL("Hoeveel pixels breed elk punt van de reconstructie getekend wordt."),
+    RU("Ширина каждой точки реконструкции на экране в пикселях."),
+    TR("Rekonstrüksiyonun her noktasının kaç piksel genişliğinde çizileceği."));
+
 SS_MSG(viewport_grid,
     EN("grid"),          JA("グリッド"),      ZH_HANS("网格"),     ZH_HANT("格線"),
     KO("격자"),           DE("Raster"),       FR("grille"),       ES("rejilla"),
     PT("grade"),         IT("griglia"),      NL("raster"),       RU("сетка"),
     TR("ızgara"));
+
+SS_MSG(viewport_grid_help,
+    EN("Overlay a ground-plane grid and the X, Y and Z axes. Its cells are a "
+       "power of ten that follows the zoom; the corner of the view shows one "
+       "cell's size."),
+    JA("地面のグリッドと X・Y・Z 軸を重ねて表示します。マス目は 10 のべき乗の"
+       "大きさでズームに合わせて変わり、1 マスの大きさはビューの隅に表示されます。"),
+    ZH_HANS("叠加显示地面网格和 X、Y、Z 轴。格子大小是 10 的幂，随缩放变化；"
+            "视图角落显示一格的大小。"),
+    ZH_HANT("疊加顯示地面格線和 X、Y、Z 軸。格子大小是 10 的冪，隨縮放變化；"
+            "視圖角落顯示一格的大小。"),
+    KO("지면 격자와 X·Y·Z 축을 겹쳐 보여줍니다. 칸 크기는 확대·축소에 따라 "
+       "바뀌는 10의 거듭제곱이며, 한 칸의 크기는 뷰 모서리에 표시됩니다."),
+    DE("Ein Bodenraster und die X-, Y- und Z-Achsen einblenden. Die Zellen sind "
+       "eine Zehnerpotenz, die dem Zoom folgt; die Ecke der Ansicht zeigt die "
+       "Größe einer Zelle."),
+    FR("Superposer une grille au sol et les axes X, Y et Z. Ses cellules sont "
+       "une puissance de dix qui suit le zoom ; le coin de la vue indique la "
+       "taille d'une cellule."),
+    ES("Superponer una rejilla en el suelo y los ejes X, Y y Z. Sus celdas son "
+       "una potencia de diez que sigue al zoom; la esquina de la vista indica "
+       "el tamaño de una celda."),
+    PT("Sobrepor uma grade no chão e os eixos X, Y e Z. As células são uma "
+       "potência de dez que acompanha o zoom; o canto da vista mostra o "
+       "tamanho de uma célula."),
+    IT("Sovrapporre una griglia a terra e gli assi X, Y e Z. Le celle sono una "
+       "potenza di dieci che segue lo zoom; l'angolo della vista mostra la "
+       "dimensione di una cella."),
+    NL("Een grondraster en de X-, Y- en Z-as tonen. De cellen zijn een macht "
+       "van tien die de zoom volgt; de hoek van het beeld toont de grootte van "
+       "één cel."),
+    RU("Показывать поверх сетку на плоскости земли и оси X, Y и Z. Размер "
+       "клетки — степень десяти, меняется вместе с масштабом; размер одной "
+       "клетки указан в углу вида."),
+    TR("Zemin ızgarasını ve X, Y, Z eksenlerini üstüne bindirir. Hücreler "
+       "yakınlaştırmaya göre değişen bir on kuvvetidir; bir hücrenin boyutu "
+       "görünümün köşesinde yazar."));
 
 SS_MSG(viewport_region,
     EN("region"),        JA("領域"),          ZH_HANS("区域"),     ZH_HANT("區域"),
@@ -3546,85 +3613,88 @@ SS_MSG(cam_equirectangular,
 
 SS_MSG(viewport_nav_help,
     EN("Navigation mode (identical to the web viewer):\n"
-       "{0} / {1} -- LMB orbit, RMB/MMB/Shift pan, wheel zoom\n"
+       "{0} / {1} -- LMB orbit, RMB/MMB/Shift pan, wheel zoom "
+       "({1}: E/Q roll)\n"
        "{2} / {3} -- LMB look, WASD/arrows move, E/Q up-down "
        "({3}: E/Q roll)\nGamepad: left stick move, right stick look, "
        "triggers up-down/roll."),
     JA("操作モードです（ウェブビューアと同じ）:\n"
        "{0} / {1} -- 左ドラッグで回転、右・中ドラッグや Shift で"
-       "平行移動、ホイールでズーム\n"
+       "平行移動、ホイールでズーム（{1}では E/Q はロール）\n"
        "{2} / {3} -- 左ドラッグで視線、WASD／矢印で移動、E/Q で"
        "上下（{3}では E/Q はロール）\n"
        "ゲームパッド: 左スティックで移動、右スティックで視線、トリガーで"
        "上下・ロール。"),
     ZH_HANS("导航模式（与网页查看器一致）：\n"
-            "{0} / {1} —— 左键环绕，右键／中键／Shift 平移，滚轮缩放\n"
+            "{0} / {1} —— 左键环绕，右键／中键／Shift 平移，滚轮缩放"
+            "（{1}下 E/Q 为滚转）\n"
             "{2} / {3} —— 左键转视角，WASD／方向键移动，E/Q 升降"
             "（{3}下 E/Q 为滚转）\n"
             "手柄：左摇杆移动，右摇杆转视角，扳机升降／滚转。"),
     ZH_HANT("導覽模式（與網頁檢視器一致）：\n"
-            "{0} / {1} —— 左鍵環繞，右鍵／中鍵／Shift 平移，滾輪縮放\n"
+            "{0} / {1} —— 左鍵環繞，右鍵／中鍵／Shift 平移，滾輪縮放"
+            "（{1}下 E/Q 為滾轉）\n"
             "{2} / {3} —— 左鍵轉視角，WASD／方向鍵移動，E/Q 升降"
             "（{3}下 E/Q 為滾轉）\n"
             "手把：左搖桿移動，右搖桿轉視角，扳機升降／滾轉。"),
     KO("이동 방식입니다(웹 뷰어와 동일):\n"
        "{0} / {1} -- 왼쪽 드래그로 궤도 회전, 오른쪽·가운데·Shift로 "
-       "이동, 휠로 확대·축소\n"
+       "이동, 휠로 확대·축소({1}에서는 E/Q가 롤)\n"
        "{2} / {3} -- 왼쪽 드래그로 시선, WASD·화살표로 이동, "
        "E/Q로 상하({3}에서는 E/Q가 롤)\n"
        "게임패드: 왼쪽 스틱 이동, 오른쪽 스틱 시선, 트리거 상하·롤."),
     DE("Navigationsmodus (wie im Web-Betrachter):\n"
        "{0} / {1} -- linke Maustaste umkreisen, rechte/mittlere "
-       "Taste oder Umschalt schwenken, Rad zoomen\n"
+       "Taste oder Umschalt schwenken, Rad zoomen ({1}: E/Q rollen)\n"
        "{2} / {3} -- linke Maustaste umsehen, WASD/Pfeile "
        "bewegen, E/Q hoch-runter ({3}: E/Q rollen)\n"
        "Gamepad: linker Stick bewegen, rechter Stick umsehen, Trigger "
        "hoch-runter/rollen."),
     FR("Mode de navigation (identique à la visionneuse web) :\n"
        "{0} / {1} -- clic gauche pour orbiter, clic droit/milieu "
-       "ou Maj pour translater, molette pour zoomer\n"
+       "ou Maj pour translater, molette pour zoomer ({1} : E/Q roulis)\n"
        "{2} / {3} -- clic gauche pour regarder, WASD/flèches "
        "pour se déplacer, E/Q pour monter-descendre ({3} : E/Q roulis)\n"
        "Manette : stick gauche déplacement, stick droit regard, gâchettes "
        "montée-descente/roulis."),
     ES("Modo de navegación (igual que en el visor web):\n"
        "{0} / {1}: botón izquierdo para orbitar, derecho/central "
-       "o Mayús para desplazar, rueda para acercar\n"
+       "o Mayús para desplazar, rueda para acercar (en {1}, E/Q alabean)\n"
        "{2} / {3}: botón izquierdo para mirar, WASD/flechas "
        "para moverse, E/Q para subir y bajar (en {3}, E/Q alabean)\n"
        "Mando: stick izquierdo mover, stick derecho mirar, gatillos "
        "subir-bajar/alabear."),
     PT("Modo de navegação (igual ao visualizador web):\n"
        "{0} / {1} -- botão esquerdo orbita, direito/meio ou Shift "
-       "desloca, roda aproxima\n"
+       "desloca, roda aproxima (em {1}, E/Q rolam)\n"
        "{2} / {3} -- botão esquerdo olha, WASD/setas movem, E/Q "
        "sobem e descem (em {3}, E/Q rolam)\n"
        "Controle: analógico esquerdo move, direito olha, gatilhos "
        "sobem-descem/rolam."),
     IT("Modalità di navigazione (uguale al visualizzatore web):\n"
        "{0} / {1} -- tasto sinistro per orbitare, destro/centrale "
-       "o Maiusc per traslare, rotellina per lo zoom\n"
+       "o Maiusc per traslare, rotellina per lo zoom (in {1} E/Q rollano)\n"
        "{2} / {3} -- tasto sinistro per guardare, WASD/frecce "
        "per muoversi, E/Q su-giù (in {3} E/Q rollano)\n"
        "Gamepad: levetta sinistra movimento, destra sguardo, grilletti "
        "su-giù/rollio."),
     NL("Navigatiemodus (gelijk aan de webviewer):\n"
        "{0} / {1} -- linkermuisknop draaien, rechter/midden of "
-       "Shift verschuiven, wiel zoomen\n"
+       "Shift verschuiven, wiel zoomen ({1}: E/Q rollen)\n"
        "{2} / {3} -- linkermuisknop kijken, WASD/pijlen "
        "bewegen, E/Q omhoog-omlaag ({3}: E/Q rollen)\n"
        "Gamepad: linkerstick bewegen, rechterstick kijken, triggers "
        "omhoog-omlaag/rollen."),
     RU("Режим навигации (как в веб-просмотрщике):\n"
        "{0} / {1} — левая кнопка вращает, правая/средняя или Shift "
-       "сдвигают, колесо приближает\n"
+       "сдвигают, колесо приближает (в режиме «{1}» E/Q — крен)\n"
        "{2} / {3} — левая кнопка поворачивает взгляд, WASD и "
        "стрелки перемещают, E/Q вверх-вниз (в режиме «{3}» E/Q — крен)\n"
        "Геймпад: левый стик — движение, правый — взгляд, триггеры — "
        "вверх-вниз и крен."),
     TR("Gezinme kipi (web görüntüleyicisiyle aynı):\n"
        "{0} / {1} -- sol tuş yörünge, sağ/orta tuş veya Shift "
-       "kaydırma, tekerlek yakınlaştırma\n"
+       "kaydırma, tekerlek yakınlaştırma ({1} kipinde E/Q yalpalama)\n"
        "{2} / {3} -- sol tuş bakış, WASD/oklar hareket, E/Q "
        "yukarı-aşağı ({3} kipinde E/Q yalpalama)\n"
        "Oyun kolu: sol çubuk hareket, sağ çubuk bakış, tetikler "

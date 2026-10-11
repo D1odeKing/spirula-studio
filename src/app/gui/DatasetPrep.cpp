@@ -918,13 +918,22 @@ static bool colmap_model_here(const fs::path& p) {
     return true;
 }
 
+// No photograph and no folder to hold one: `sparse/0`, or a model exported on
+// its own. A reconstruction to look at, not a dataset to train on.
+static bool nothing_beside_model(const fs::path& p) {
+    std::error_code ec;
+    for (fs::directory_iterator it(p, kWalk, ec), end; !ec && it != end; it.increment(ec))
+        if (it->is_directory(ec) || is_image_file(it->path())) return false;
+    return true;
+}
+
 bool folder_looks_like_dataset(const std::string& dir) {
     std::error_code ec;
     const fs::path p(dir);
     if (fs::exists(p / "transforms.json", ec) ||
         fs::is_directory(p / "sparse", ec) || fs::is_directory(p / "colmap", ec))
         return true;
-    return colmap_model_here(p) || metashape_export_here(p);
+    return (colmap_model_here(p) && !nothing_beside_model(p)) || metashape_export_here(p);
 }
 
 // A folder is the run's leftover only if the run would write it. When images/

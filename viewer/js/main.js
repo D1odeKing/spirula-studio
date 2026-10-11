@@ -991,7 +991,7 @@ function updateNavLegend() {
   const m = $('nav-mode').value;
   const L = {
     turntable: 'LMB Orbit · MMB/Shift Pan · Wheel Zoom · DblClick Center',
-    trackball: 'LMB Rotate · MMB/Shift Pan · Wheel Zoom · DblClick Center',
+    trackball: 'LMB Rotate · MMB/Shift Pan · Wheel Zoom · E/Q Roll · DblClick Center',
     fps: 'WASD Move · E/Q Up/Down · LMB Look · DblClick Center',
     fly: 'WASD Move · E/Q Roll · LMB Look · DblClick Center',
   };

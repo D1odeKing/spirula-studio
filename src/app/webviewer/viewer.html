@@ -761,14 +761,16 @@ const Nav = {
   look(dx, dy) {
     if (this.disabled) return;
     const s = 0.003;
-    const qa = quat.fromAxisAngle(cam.up(), -dx * s);
-    const qb = quat.fromAxisAngle(cam.right(), -dy * s);
     if (this.mode === "fps") {
-      // Constrain roll: yaw around world-y, pitch around local-x
-      // cam.rot = quat.norm(quat.mul(qa, cam.rot));
-      cam.rot = quat.norm(quat.mul(cam.rot, quat.fromAxisAngle([0,1,0], -dx*s)));
-      cam.rot = quat.norm(quat.mul(qb, cam.rot));
+      // Yaw about world up, pitch about the camera's own right: neither tilts
+      // the right axis, so circling the mouse cannot build up roll. Upside
+      // down, the yaw flips so the view still turns the way the drag goes.
+      const sign = v3.dot(cam.up(), [0,0,1]) < 0 ? -1 : 1;
+      cam.rot = quat.mul(quat.fromAxisAngle([0,0,1], -dx * s * sign), cam.rot);
+      cam.rot = quat.norm(quat.mul(cam.rot, quat.fromAxisAngle([1,0,0], -dy * s)));
     } else {
+      const qa = quat.fromAxisAngle(cam.up(), -dx * s);
+      const qb = quat.fromAxisAngle(cam.right(), -dy * s);
       cam.rot = quat.norm(quat.mul(quat.mul(qa, qb), cam.rot));
     }
   },
@@ -813,14 +815,14 @@ const Nav = {
     const k = this._keys;
     const fwd = cam.forward();
     const right = cam.right();
-    const up = this.mode === "turntable" || this.mode === "fps" ? [0,0,1] : cam.up();
+    const up = [0,0,1];
     let move = [0,0,0];
     let rotate = 0.0;
     if (k["w"]||k["arrowup"]) move = v3.add(move, v3.scale(fwd, s));
     if (k["s"]||k["arrowdown"]) move = v3.add(move, v3.scale(fwd, -s));
     if (k["a"]||k["arrowleft"]) move = v3.add(move, v3.scale(right, -s));
     if (k["d"]||k["arrowright"]) move = v3.add(move, v3.scale(right, s));
-    if (this.mode == "fly") {
+    if (this.mode === "fly" || this.mode === "trackball") {
       if (k["e"]) rotate -= sr;
       if (k["q"]) rotate += sr;
     }
@@ -902,9 +904,9 @@ function mat3ToQuat(m) {
 // ═══════════════════════════════════════════════════════
 const HINTS = {
   turntable: "LMB Drag: Orbit  |  MMB Drag: Pan  |  Scroll: Zoom",
-  trackball: "LMB Drag: Rotate  |  RMB/MMB Drag: Pan  |  Scroll: Zoom",
+  trackball: "LMB Drag: Rotate  |  RMB/MMB Drag: Pan  |  Scroll: Zoom  |  E/Q: Roll",
   fps: "WASD/Arrows: Move  |  E/Q: Up/Down  |  LMB Drag: Look",
-  fly: "WASD/Arrows: Move  |  E/Q: Up/Down  |  LMB Drag: Look (free roll)",
+  fly: "WASD/Arrows: Move  |  E/Q: Roll  |  LMB Drag: Look (free roll)",
 };
 function hintFor(m) { return HINTS[m] || ""; }
 let _hintTimer = null;

@@ -31,6 +31,45 @@ std::string lower_ext(const std::string& path) {
     return ext;
 }
 
+std::vector<std::string> las_files_in(const fs::path& dir) {
+    std::vector<std::string> out;
+    std::error_code ec;
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec))
+        if (it->is_regular_file(ec) && lower_ext(it->path().string()) == ".las")
+            out.push_back(it->path().string());
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+// LCC Studio's developer_data/ (raw/ and perspective/ COLMAP datasets beside the
+// LiDAR map) or nCore_data/ (both under colmap/, the map under lidar/), matched by
+// layout since either may be renamed; `dir` is one of them, inside one, or above.
+bool find_xgrids_export(const fs::path& dir, fs::path& raw, std::vector<std::string>& clouds) {
+    std::error_code ec;
+    fs::path at = dir;
+    if (at.filename() == "raw" || at.filename() == "perspective") at = at.parent_path();
+    std::vector<fs::path> roots{at, at / "colmap"};
+    std::vector<fs::path> subs;
+    for (fs::directory_iterator it(at, ec), end; !ec && it != end; it.increment(ec))
+        if (it->is_directory(ec)) subs.push_back(it->path());
+    std::sort(subs.begin(), subs.end());
+    for (const fs::path& s : subs) {
+        roots.push_back(s);
+        roots.push_back(s / "colmap");
+    }
+    for (const fs::path& root : roots) {
+        if (!fs::is_directory(root / "raw" / "sparse", ec) ||
+            !fs::is_directory(root / "raw" / "images", ec))
+            continue;
+        clouds = las_files_in(root);
+        if (clouds.empty()) clouds = las_files_in(root.parent_path() / "lidar");
+        if (clouds.empty()) continue;
+        raw = root / "raw";
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool GuiApp::is_lidar_drop(const std::string& path) {
@@ -91,22 +130,10 @@ void GuiApp::clear_lidar_sources() {
 }
 
 bool GuiApp::add_xgrids_export(const std::string& dir) {
-    // LCC Studio's developer_data/: raw/ (the original lenses) and perspective/
-    // (pinhole crops of them), each a COLMAP dataset, beside the LiDAR map.
-    fs::path root(dir);
-    std::error_code ec;
-    if (fs::is_directory(root / "developer_data", ec)) root /= "developer_data";
-    if (root.filename() == "raw" || root.filename() == "perspective") root = root.parent_path();
-    if (!fs::is_directory(root / "raw" / "sparse", ec) ||
-        !fs::is_directory(root / "raw" / "images", ec))
-        return false;
+    fs::path raw;
     std::vector<std::string> clouds;
-    for (const auto& e : fs::directory_iterator(root, ec)) {
-        if (e.is_regular_file(ec) && lower_ext(e.path().string()) == ".las")
-            clouds.push_back(e.path().string());
-    }
-    if (clouds.empty()) return false;
-    add_dataset_folder((root / "raw").string());
+    if (!find_xgrids_export(fs::path(dir), raw, clouds)) return false;
+    add_dataset_folder(raw.string());
     add_lidar_sources(clouds);
     _lidar_in_frame = true;
     _use_found_masks = true;

@@ -218,19 +218,21 @@ void NavCamera::look(float dx, float dy) {
     float up[3], right[3], qa[4], qb[4];
     axis_up(up);
     axis_right(right);
-    q_from_axis_angle(up, -dx * s, qa);
-    q_from_axis_angle(right, -dy * s, qb);
     if (mode == Fps) {
-        // Constrain roll: yaw around local-y, pitch around (old) local-x.
-        const float local_y[3] = {0, 1, 0};
-        float qy[4];
-        q_from_axis_angle(local_y, -dx * s, qy);
-        q_mul(rot, qy, rot);
-        q_norm(rot);
-        q_mul(qb, rot, rot);
+        // Yaw about world_up, pitch about the camera's own right: neither tilts
+        // the right axis, so circling the mouse cannot build up roll. Upside
+        // down, the yaw flips so the view still turns the way the drag goes.
+        const float local_x[3] = {1, 0, 0};
+        const float sign = v_dot(up, world_up) < 0.0f ? -1.0f : 1.0f;
+        q_from_axis_angle(world_up, -dx * s * sign, qa);
+        q_from_axis_angle(local_x, -dy * s, qb);
+        q_mul(qa, rot, rot);
+        q_mul(rot, qb, rot);
         q_norm(rot);
     } else {
         float qab[4];
+        q_from_axis_angle(up, -dx * s, qa);
+        q_from_axis_angle(right, -dy * s, qb);
         q_mul(qa, qb, qab);
         q_mul(qab, rot, rot);
         q_norm(rot);
@@ -278,26 +280,21 @@ void NavCamera::roll(float delta) {
 bool NavCamera::keyboard_tick(float dt, const Keys& k) {
     const float s = speed() * dt * 1.0f;   // translate speed
     const float sr = dt * 1.0f;            // rotate speed
-    float fwd[3], right[3], up[3];
+    float fwd[3], right[3];
     axis_forward(fwd);
     axis_right(right);
-    if (mode == Turntable || mode == Fps) {
-        up[0] = world_up[0]; up[1] = world_up[1]; up[2] = world_up[2];
-    } else {
-        axis_up(up);
-    }
     float move[3] = {0, 0, 0}, step[3];
     float rotate = 0.0f;
     if (k.w || k.up)    { v_scale(fwd, s, step);    v_add(move, step, move); }
     if (k.s || k.down)  { v_scale(fwd, -s, step);   v_add(move, step, move); }
     if (k.a || k.left)  { v_scale(right, -s, step); v_add(move, step, move); }
     if (k.d || k.right) { v_scale(right, s, step);  v_add(move, step, move); }
-    if (mode == Fly) {
+    if (mode == Fly || mode == Trackball) {
         if (k.e) rotate -= sr;
         if (k.q) rotate += sr;
     } else {
-        if (k.e) { v_scale(up, s, step);  v_add(move, step, move); }
-        if (k.q) { v_scale(up, -s, step); v_add(move, step, move); }
+        if (k.e) { v_scale(world_up, s, step);  v_add(move, step, move); }
+        if (k.q) { v_scale(world_up, -s, step); v_add(move, step, move); }
     }
     bool moved = false;
     if (v_len(move) > 1e-12f) {
