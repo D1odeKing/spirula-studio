@@ -153,3 +153,48 @@ In every run, the baseline included, LoMa's third feature pass ran out of GPU
 memory (10 GB asked of an 8 GB card) and was undone. The metric frame was not
 applied either: only the 37 equirect images carry GPS, and they do not spread
 out. Neither comes from the hybrid.
+
+## Extreme quality (hybrid_extreme, build 2, defaults)
+
+A fresh workspace with `--quality extreme`: LoMa at 2400 px and 8,192
+features, SIFT at 3200 px and 16,384, with the default ratio 0.9 and
+cross-check on.
+
+| | images | points | observations | mean px | median px |
+|---|---|---|---|---|---|
+| LoMa at extreme, before the hybrid stage | 676 | 1,096,876 | — | 2.09 | — |
+| hybrid_extreme | 676 (669 SIFT, 7 restored) | 558,674 | 1,443,999 | 1.234 | 1.005 |
+
+- The lowest error of every run, below SIFT alone (1.45 px), with twice its
+  points and 31 more images.
+- Time: 2:37:05 in all. Extraction took 10 min, LoMa matching of 9,607 pairs
+  2:08:47, and mapping 18 min. The hybrid stage was 107 s of that: 11,567
+  pairs, 9,187 verified, 1,956,766 inliers, and the gate kept 2.01M of 12.09M.
+- LoMa's feature pass 1 ran out of GPU memory (7.97 GiB asked) and was undone.
+  LoMa had placed 676 images at the first attempt anyway.
+
+## Summary
+
+| run | images | points | mean px |
+|---|---|---|---|
+| LoMa alone, high | 676 | 606,874 | 3.015 |
+| SIFT alone, high | 645 | 273,451 | 1.454 |
+| hybrid A, high | 676 | 382,112 | 1.616 |
+| hybrid, high, ratio 0.95, no cross-check | 676 | 494,144 | 1.739 |
+| hybrid, high, ratio 0.95, + LoMa tracks | 676 | 1,051,321 | 2.104 |
+| hybrid, extreme, defaults | 676 | 558,674 | 1.234 |
+
+On this capture the stage does what the plan set out. It keeps every camera
+LoMa placed, 31 more than SIFT alone, and halves LoMa's error. For points the
+choice is a trade:
+
+- Use the SIFT points for precision. At `extreme` they beat SIFT alone on
+  every count.
+- Add LoMa's tracks for the densest seed (1.05M points at high).
+
+On density, cross-check off is the best single knob (+29%), and the epipolar
+gate makes it safe.
+
+Still open: step 2 of the plan (guided matching for the pairs SIFT still
+loses), `SS_SFM_HYBRID_FEATURES` above 8,192 at high, and cross-check off at
+extreme.
