@@ -1,12 +1,15 @@
 #include "sfm/Hybrid.h"
 
 #include <algorithm>
+#include <atomic>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <thread>
 #include <unordered_map>
 
 #include "core/Env.h"
@@ -117,66 +120,187 @@ std::vector<std::pair<uint32_t, uint32_t>> hybridPairs(const std::vector<Reconst
     return out;
 }
 
-// Guided matching: a putative match is kept when it lies within `tol` of the
-// epipolar plane the model's two poses give it, measured as an angle on each
-// image's own bearings so an equirectangular image is gated like a pinhole one.
-class EpipolarGate {
-public:
-    EpipolarGate(const std::vector<Reconstruction>& models, const std::vector<FeatureSet>& feats,
-                 double tol_px)
-        : models_(models), feats_(feats), tol_px_(tol_px) {}
+// Runs `worker` on `threads` threads (0: one per core), no more than `jobs`.
+template <class F>
+void runWorkers(F& worker, int threads, size_t jobs) {
+    const unsigned hc = std::thread::hardware_concurrency();
+    size_t nt = threads > 0 ? (size_t)threads : (size_t)std::max(1u, hc);
+    nt = std::max<size_t>(1, std::min(nt, jobs));
+    if (nt == 1) return worker();
+    std::vector<std::thread> pool;
+    for (size_t t = 0; t < nt; t++) pool.emplace_back([&] { worker(); });
+    for (std::thread& t : pool) t.join();
+}
 
-    void filter(int k, uint32_t i, uint32_t j, std::vector<FeatureMatch>& m) {
-        const Reconstruction& rec = models_[k];
-        const Image& a = rec.images.at(i);
-        const Image& b = rec.images.at(j);
-        const Camera& ca = rec.cameras.at(a.camera_id);
-        const Camera& cb = rec.cameras.at(b.camera_id);
-        const std::vector<Vec3>& ba = bearings(k, i, ca);
-        const std::vector<Vec3>& bb = bearings(k, j, cb);
-        const Mat3 R = mul(b.pose.R, transpose(a.pose.R));
-        const Vec3 t = b.pose.t - mul(R, a.pose.t);
-        const double ta = tol_px_ * feats_[i].pixelScale() / std::max(1e-6, ca.focal());
-        const double tb = tol_px_ * feats_[j].pixelScale() / std::max(1e-6, cb.focal());
-        const double tol = std::sin(std::min(0.5, std::max(ta, tb)));
-        const double tn = t.norm();
-        const double cam_dist = std::max(cameraCenter(a.pose).norm(), cameraCenter(b.pose).norm());
-        const bool rotation_only = !(tn > 1e-9 * std::max(1.0, cam_dist));
-        size_t w = 0;
-        for (const FeatureMatch& fm : m) {
-            const Vec3 ra = mul(R, ba[fm.idx1]);
-            const Vec3& rb = bb[fm.idx2];
-            double e;
-            if (rotation_only) {
-                e = (ra - rb).norm();
-            } else {
-                const Vec3 nrm = t.cross(ra);
-                const double nn = nrm.norm();
-                e = nn > 1e-12 ? std::fabs(nrm.dot(rb)) / nn : 0.0;
+// Every keypoint's bearing under the camera model k gives image i, for each
+// (k, i) in `keys`.
+using BearingMap = std::map<std::pair<int, uint32_t>, std::vector<Vec3>>;
+
+BearingMap modelBearings(const std::vector<Reconstruction>& models,
+                         const std::vector<FeatureSet>& feats,
+                         const std::set<std::pair<int, uint32_t>>& keys, int threads) {
+    BearingMap out;
+    std::vector<BearingMap::iterator> slots;
+    for (const auto& key : keys) slots.push_back(out.emplace(key, std::vector<Vec3>()).first);
+    std::atomic<size_t> next{0};
+    auto worker = [&] {
+        for (size_t s = next++; s < slots.size(); s = next++) {
+            const int k = slots[s]->first.first;
+            const uint32_t img = slots[s]->first.second;
+            const Reconstruction& rec = models[k];
+            const Camera& cam = rec.cameras.at(rec.images.at(img).camera_id);
+            std::vector<Vec3>& v = slots[s]->second;
+            v.resize(feats[img].count());
+            for (uint32_t f = 0; f < feats[img].count(); f++) {
+                const Keypoint& kp = feats[img].keypoints[f];
+                v[f] = cam.bearing({kp.x, kp.y}).normalized();
             }
-            if (e <= tol) m[w++] = fm;
         }
-        m.resize(w);
-    }
+    };
+    runWorkers(worker, threads, slots.size());
+    return out;
+}
 
-private:
-    const std::vector<Vec3>& bearings(int k, uint32_t img, const Camera& cam) {
-        auto key = std::make_pair(k, img);
-        auto it = cache_.find(key);
-        if (it != cache_.end()) return it->second;
-        std::vector<Vec3> v(feats_[img].count());
-        for (uint32_t f = 0; f < feats_[img].count(); f++) {
-            const Keypoint& kp = feats_[img].keypoints[f];
-            v[f] = cam.bearing({kp.x, kp.y}).normalized();
-        }
-        return cache_.emplace(key, std::move(v)).first->second;
-    }
-
-    const std::vector<Reconstruction>& models_;
-    const std::vector<FeatureSet>& feats_;
-    double tol_px_;
-    std::map<std::pair<int, uint32_t>, std::vector<Vec3>> cache_;
+// The pose of j relative to i in model k (x_j = R x_i + t), and the epipolar
+// tolerance as a sine, from the coarser of the two images' pixels.
+struct PairGeometry {
+    Mat3 R;
+    Vec3 t;
+    double tol = 0;
+    bool rotation_only = false;
 };
+
+PairGeometry pairGeometry(const Reconstruction& rec, const std::vector<FeatureSet>& feats,
+                          uint32_t i, uint32_t j, double tol_px) {
+    const Image& a = rec.images.at(i);
+    const Image& b = rec.images.at(j);
+    const double fa = std::max(1e-6, rec.cameras.at(a.camera_id).focal());
+    const double fb = std::max(1e-6, rec.cameras.at(b.camera_id).focal());
+    PairGeometry g;
+    g.R = mul(b.pose.R, transpose(a.pose.R));
+    g.t = b.pose.t - mul(g.R, a.pose.t);
+    const double ta = tol_px * feats[i].pixelScale() / fa;
+    const double tb = tol_px * feats[j].pixelScale() / fb;
+    g.tol = std::sin(std::min(0.5, std::max(ta, tb)));
+    const double cam_dist = std::max(cameraCenter(a.pose).norm(), cameraCenter(b.pose).norm());
+    g.rotation_only = !(g.t.norm() > 1e-9 * std::max(1.0, cam_dist));
+    return g;
+}
+
+// Keeps the putative matches within the tolerance of their epipolar plane,
+// measured on bearings so an equirectangular image is gated like a pinhole one.
+void epipolarGate(const PairGeometry& g, const std::vector<Vec3>& ba,
+                  const std::vector<Vec3>& bb, std::vector<FeatureMatch>& m) {
+    size_t w = 0;
+    for (const FeatureMatch& fm : m) {
+        const Vec3 ra = mul(g.R, ba[fm.idx1]);
+        const Vec3& rb = bb[fm.idx2];
+        double e;
+        if (g.rotation_only) {
+            e = (ra - rb).norm();
+        } else {
+            const Vec3 nrm = g.t.cross(ra);
+            const double nn = nrm.norm();
+            e = nn > 1e-12 ? std::fabs(nrm.dot(rb)) / nn : 0.0;
+        }
+        if (e <= g.tol) m[w++] = fm;
+    }
+    m.resize(w);
+}
+
+int distanceU8(const uint8_t* a, const uint8_t* b, uint32_t dim) {
+    int d = 0;
+    for (uint32_t k = 0; k < dim; k++) {
+        const int x = (int)a[k] - (int)b[k];
+        d += x * x;
+    }
+    return d;
+}
+
+// Guided search: each keypoint of i is compared only with the keypoints of j on
+// the arc its ray sweeps in j, epipole to vanishing point, widened by the
+// tolerance; the ratio test runs over those alone, then one match per j keypoint.
+void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::vector<Vec3>& bb,
+               const FeatureSet& fa, const FeatureSet& fb, double ratio, size_t cap,
+               std::vector<FeatureMatch>& out, uint64_t& putative) {
+    out.clear();
+    if (g.rotation_only || fa.dim != fb.dim || fa.dtype != DType::U8 || fb.dtype != DType::U8)
+        return;
+    const Vec3 e = g.t.normalized();
+    const Vec3 u = (std::fabs(e.x) < 0.9 ? Vec3{1, 0, 0} : Vec3{0, 1, 0}).cross(e).normalized();
+    const Vec3 v = e.cross(u);
+    // j's keypoints by azimuth about the baseline, in rings of distance from the
+    // epipole: the farther the ring, the narrower the azimuth window a band needs.
+    static const double kRing[] = {0.5, 0.2, 0.08, 0.03, 0.0};
+    constexpr int kRings = 5;
+    std::vector<std::pair<float, uint32_t>> ring[kRings];
+    for (uint32_t q = 0; q < (uint32_t)bb.size(); q++) {
+        const Vec3& b = bb[q];
+        const double s = (b - e * b.dot(e)).norm();
+        int r = 0;
+        while (s < kRing[r]) r++;
+        ring[r].emplace_back((float)std::atan2(b.dot(v), b.dot(u)), q);
+    }
+    for (auto& r : ring) std::sort(r.begin(), r.end());
+    const uint32_t dim = fa.dim;
+    const uint8_t* da = fa.descData();
+    const uint8_t* db = fb.descData();
+    const double ratio2 = ratio * ratio;
+    const double slack = std::asin(std::min(1.0, g.tol));
+    std::vector<std::pair<int, uint32_t>> best(bb.size(), {INT_MAX, 0});
+    for (uint32_t p = 0; p < (uint32_t)ba.size(); p++) {
+        const Vec3 r = mul(g.R, ba[p]);
+        const Vec3 rp = r - e * r.dot(e);
+        const double sr = rp.norm();
+        if (sr < 0.02) continue;
+        const Vec3 rh = rp * (1.0 / sr);
+        const Vec3 nrm = e.cross(r) * (1.0 / sr);
+        const double phi = std::atan2(r.dot(v), r.dot(u));
+        const double max_angle = std::acos(std::max(-1.0, std::min(1.0, r.dot(e)))) + slack;
+        const double min_cos = max_angle >= M_PI ? -2.0 : std::cos(max_angle);
+        const uint8_t* dp = da + (size_t)p * dim;
+        int d1 = INT_MAX, d2 = INT_MAX;
+        uint32_t q1 = 0;
+        auto test = [&](uint32_t q) {
+            const Vec3& b = bb[q];
+            if (std::fabs(nrm.dot(b)) > g.tol || b.dot(e) < min_cos || b.dot(rh) < -g.tol) return;
+            const int d = distanceU8(dp, db + (size_t)q * dim, dim);
+            if (d < d1) {
+                d2 = d1;
+                d1 = d;
+                q1 = q;
+            } else if (d < d2) {
+                d2 = d;
+            }
+        };
+        for (int k = 0; k < kRings; k++) {
+            const auto& rg = ring[k];
+            if (rg.empty()) continue;
+            const double w = kRing[k] > 0 ? std::asin(std::min(1.0, g.tol / kRing[k])) : M_PI;
+            if (w >= 0.5 * M_PI) {
+                for (const auto& x : rg) test(x.second);
+                continue;
+            }
+            auto scan = [&](double lo, double hi) {
+                auto it = std::lower_bound(rg.begin(), rg.end(), std::make_pair((float)lo, 0u));
+                for (; it != rg.end() && it->first <= hi; ++it) test(it->second);
+            };
+            scan(std::max(-M_PI, phi - w), std::min(M_PI, phi + w));
+            if (phi - w < -M_PI) scan(phi - w + 2 * M_PI, M_PI);
+            if (phi + w > M_PI) scan(-M_PI, phi + w - 2 * M_PI);
+        }
+        if (d1 == INT_MAX || (d2 != INT_MAX && (double)d1 >= ratio2 * d2)) continue;
+        putative++;
+        if (d1 < best[q1].first) best[q1] = {d1, p};
+    }
+    std::vector<float> dist;
+    for (uint32_t q = 0; q < (uint32_t)best.size(); q++)
+        if (best[q].first != INT_MAX) {
+            out.push_back({best[q].second, q});
+            dist.push_back((float)best[q].first);
+        }
+    keepClosest(out, dist, cap);
+}
 
 // `src`'s registered images that `dst` lost, put back at their `src` pose carried
 // into `dst`'s frame, with no observations. Returns how many.
@@ -291,17 +415,25 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         sc.features = "sift";
         sc.matcher = "bruteforce";
         sc.max_image_size = (int)envNumber("SFM_HYBRID_IMAGE_SIZE", siftImageSize(cfg.quality));
-        const bool guided = !spirula::env("SFM_HYBRID_GUIDED") || spirula::env_on("SFM_HYBRID_GUIDED");
+        // gate: the global nearest neighbour, kept near its epipolar plane;
+        // band: the nearest neighbour within that band; none: unguided.
+        const char* mv = spirula::env("SFM_HYBRID_MATCH");
+        std::string mode = mv && mv[0] ? mv : "gate";
+        if (spirula::env("SFM_HYBRID_GUIDED") && !spirula::env_on("SFM_HYBRID_GUIDED"))
+            mode = "none";
+        if (mode != "band" && mode != "none") mode = "gate";
+        const bool guided = mode != "none";
         sc.match = MatchOptions();
         sc.match.device = cfg.match.device;
         sc.match.device_selector = cfg.match.device_selector;
         sc.match.batch_pairs = cfg.match.batch_pairs;
         sc.match.descriptor_budget_bytes = cfg.match.descriptor_budget_bytes;
         sc.match.max_num_matches = cfg.match.max_num_matches;
-        // The gate does the rejecting the ratio test and the cross-check would.
-        // Measured on a 678-image interior (a7iii_inside), 0.95 and no cross-check
-        // gave 29% more points than 0.9 with it, +0.12 px, 95% still verifying.
-        sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", guided ? 0.95 : 0.8);
+        // The geometry does the rejecting the ratio test and the cross-check would.
+        // Measured on a 678-image interior (a7iii_inside), gate at 0.95 and no
+        // cross-check gave 29% more points than 0.9 with it, +0.12 px.
+        sc.match.max_ratio =
+            (float)envNumber("SFM_HYBRID_RATIO", mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8);
         sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", guided ? 0 : 1) != 0;
         sc.sift.peak_threshold *= envNumber("SFM_HYBRID_PEAK_SCALE", 1.0);
         sc.sift.max_num_features =
@@ -346,16 +478,48 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         std::vector<int> owner;
         const std::vector<std::pair<uint32_t, uint32_t>> pairs = hybridPairs(models, db, owner);
         st.pairs = pairs.size();
-        std::unique_ptr<IFeatureMatcher> matcher =
-            createFeatureMatcher(sc.matcher, sc.match, sc.lightglue, sc.loma_match);
-        EpipolarGate gate(models, sf, envNumber("SFM_HYBRID_EPIPOLAR_PX", 1.5 * cfg.max_error));
+        std::set<std::pair<int, uint32_t>> keys;
+        for (size_t p = 0; p < pairs.size(); p++)
+            if (guided) {
+                keys.emplace(owner[p], pairs[p].first);
+                keys.emplace(owner[p], pairs[p].second);
+            }
+        BearingMap bearings = modelBearings(models, sf, keys, cfg.threads);
+        const double tol_px = envNumber("SFM_HYBRID_EPIPOLAR_PX", 1.5 * cfg.max_error);
+        auto geometry = [&](size_t p) {
+            return pairGeometry(models[owner[p]], sf, pairs[p].first, pairs[p].second, tol_px);
+        };
+        auto pairBearings = [&](size_t p, bool second) -> const std::vector<Vec3>& {
+            return bearings.at({owner[p], second ? pairs[p].second : pairs[p].first});
+        };
+        std::unique_ptr<IFeatureMatcher> matcher;
+        if (mode != "band")
+            matcher = createFeatureMatcher(sc.matcher, sc.match, sc.lightglue, sc.loma_match);
         uint64_t putative = 0, kept = 0;
         auto matchFn = [&](size_t b, size_t e, std::vector<std::vector<FeatureMatch>>& out) {
+            if (mode == "band") {
+                out.assign(e - b, {});
+                std::atomic<size_t> next{b};
+                std::atomic<uint64_t> found{0};
+                auto worker = [&] {
+                    uint64_t mine = 0;
+                    for (size_t p = next++; p < e; p = next++)
+                        bandMatch(geometry(p), pairBearings(p, false), pairBearings(p, true),
+                                  sf[pairs[p].first], sf[pairs[p].second], sc.match.max_ratio,
+                                  sc.match.max_num_matches, out[p - b], mine);
+                    found += mine;
+                };
+                runWorkers(worker, cfg.threads, e - b);
+                putative += found;
+                for (const auto& m : out) kept += m.size();
+                return;
+            }
             matcher->matchBatch(sf, pairs, b, e, out);
             for (size_t p = b; p < e; p++) {
                 std::vector<FeatureMatch>& m = out[p - b];
                 putative += m.size();
-                if (guided) gate.filter(owner[p], pairs[p].first, pairs[p].second, m);
+                if (guided)
+                    epipolarGate(geometry(p), pairBearings(p, false), pairBearings(p, true), m);
                 kept += m.size();
             }
         };
@@ -363,7 +527,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         vo.two_view = cfg.twoview;
         vo.two_view.ransac.max_error = cfg.max_error;
         vo.num_threads = cfg.threads;
-        vo.match_batch_pairs = sc.match.batch_pairs;
+        vo.match_batch_pairs = mode == "band" ? std::max(sc.match.batch_pairs, 256)
+                                              : sc.match.batch_pairs;
         BearingCache bc;
         std::vector<Camera> percam;
         const CameraSetup& cs = calib.cameras;
@@ -382,6 +547,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         std::vector<TwoViewMatches> verified = verifyPairs(sf, pairs, matchFn, vo);
         events::stage_end(Stage::Match);
         matcher.reset();
+        BearingMap().swap(bearings);
         for (FeatureSet& f : sf) f.dropDescriptors();
         st.putative = putative;
         st.guided_kept = kept;
@@ -392,8 +558,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
                    {(long long)st.verified, (long long)st.pairs, (long long)st.inliers,
                     format_duration(now() - t0)});
         if (verbose && guided)
-            L::diag(Tag::Match, "[hybrid] epipolar gate kept %llu of %llu putative matches",
-                    (unsigned long long)kept, (unsigned long long)putative);
+            L::diag(Tag::Match, "[hybrid] %s matching kept %llu of %llu putative matches",
+                    mode.c_str(), (unsigned long long)kept, (unsigned long long)putative);
 
         MatchesDatabase sdb;
         sdb.images = db.images;

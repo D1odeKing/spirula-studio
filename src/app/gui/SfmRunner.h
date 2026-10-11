@@ -173,6 +173,9 @@ struct SfmJob {
     int progressive_feature_steps = 3;
     int progressive_patience = 2;
     float progressive_time = 0.0f;   // minutes; 0 = no limit
+    // A learned frontend's cameras, then SIFT's points under them
+    // (`--hybrid-sift`). Ignored with SIFT features.
+    bool hybrid_sift = false;
     // An index into kSfmFeatures. A frontend choice, not a quality level: the
     // learned ones run on their own resolution ladder, so the quality preset
     // means something different for each.

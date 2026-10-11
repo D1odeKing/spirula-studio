@@ -7938,6 +7938,11 @@ void GuiApp::draw_sfm_advanced() {
         ui::help_on_hover(learned ? dmsg::matcher_help
                                   : dmsg::matcher_needs_learned);
         if (learned) draw_feature_download();
+        ImGui::BeginDisabled(!learned);
+        bool hybrid = learned && _sfm_job.hybrid_sift;
+        if (ui::Checkbox(dmsg::hybrid_sift, &hybrid) && learned) _sfm_job.hybrid_sift = hybrid;
+        ImGui::EndDisabled();
+        ui::help_on_hover(dmsg::hybrid_sift_help);
     }
 
     ImGui::SetNextItemWidth(px(260.0f));

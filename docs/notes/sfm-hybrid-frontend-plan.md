@@ -18,8 +18,13 @@ cross-check; verification; triangulation against the learned poses and a free
 bundle adjustment (`Mapper::retriangulate`), then the finishing passes again.
 Any image SIFT cannot hold is put back at its learned pose, carried into the
 SIFT frame by a Sim3, with no points. A failure keeps the learned model.
+`SS_SFM_HYBRID_MATCH=band` searches the band instead: each SIFT keypoint is
+compared only with the other image's keypoints on the arc its ray sweeps there,
+epipole to vanishing point, the ratio test over those alone (0.9), then one
+match per keypoint on the other side. The GUI's "Refine with SIFT" (Advanced,
+learned features only) passes `--hybrid-sift`.
 `hybrid.txt` records the stage. Experiment knobs, all `SS_SFM_HYBRID_*`:
-`GUIDED`, `RATIO`, `CROSS_CHECK`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`,
+`MATCH` (`gate`, `band`, `none`), `GUIDED`, `RATIO`, `CROSS_CHECK`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`,
 `EPIPOLAR_PX`, and `LEARNED_POINTS=1`, which also triangulates the learned
 tracks against the final poses (no BA) for a denser seed.
 
@@ -43,9 +48,8 @@ images SIFT cannot, and SIFT keeps all but a few of them with points. Without
 the gate (ratio 0.8, cross-check) there are 22% fewer points and verification
 takes twice as long.
 
-Open: true guided matching (searching the epipolar band rather than gating the
-global nearest neighbour), more SIFT features at high, the GUI and
-`DatasetPlan`'s `model_fields`.
+Open: whether band matching should replace the gate as the default (being
+measured), and more SIFT features at high.
 
 ## Why
 

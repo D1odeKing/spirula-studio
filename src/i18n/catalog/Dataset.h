@@ -8535,6 +8535,81 @@ SS_MSG(mapper_bottom_up,
     RU("Снизу вверх (атомы, объединяемые вверх)"),
     TR("Aşağıdan yukarı (atomlar, yukarı doğru birleştirilir)"));
 
+SS_MSG(hybrid_sift,
+    EN("Refine with SIFT"),
+    JA("SIFT で精密化"),
+    ZH_HANS("用 SIFT 精化"),
+    ZH_HANT("用 SIFT 精化"),
+    KO("SIFT 로 정밀화"),
+    DE("Mit SIFT verfeinern"),
+    FR("Affiner avec SIFT"),
+    ES("Refinar con SIFT"),
+    PT("Refinar com SIFT"),
+    IT("Rifinire con SIFT"),
+    NL("Verfijnen met SIFT"),
+    RU("Уточнить с SIFT"),
+    TR("SIFT ile iyileştir"));
+
+SS_MSG(hybrid_sift_help,
+    EN("Needs a learned feature type. The learned features place the cameras; SIFT is "
+       "then detected on the placed images, matched along the lines those cameras "
+       "predict, and gives the model its points and its final camera positions. Keeps "
+       "every camera the learned features placed, with a lower error. Adds about a "
+       "minute."),
+    JA("学習済みの特徴点の種類が必要です。学習済みの特徴点でカメラを配置し、その後配置された画像で "
+       "SIFT を検出して、それらのカメラが予測する線に沿ってマッチし、モデルの点と最終的なカメラ位置を "
+       "SIFT から求めます。学習済みの特徴点が配置したカメラはすべて残り、誤差は小さくなります。約 1 分かかります。"),
+    ZH_HANS("需要学习型特征类型。由学习型特征放置相机，然后在已放置的图像上检测 SIFT，"
+            "沿这些相机预测的线进行匹配，由 SIFT 得出模型的点和最终的相机位置。"
+            "保留学习型特征放置的全部相机，误差更低。约多用一分钟。"),
+    ZH_HANT("需要學習型特徵類型。由學習型特徵放置相機，然後在已放置的影像上偵測 SIFT，"
+            "沿這些相機預測的線進行匹配，由 SIFT 得出模型的點和最終的相機位置。"
+            "保留學習型特徵放置的全部相機，誤差更低。約多用一分鐘。"),
+    KO("학습형 특징점 종류가 필요합니다. 학습형 특징점으로 카메라를 배치한 뒤, 배치된 이미지에서 "
+       "SIFT 를 검출하고 그 카메라들이 예측하는 선을 따라 매칭하여, 모델의 점과 최종 카메라 위치를 "
+       "SIFT 로 구합니다. 학습형 특징점이 배치한 카메라는 모두 유지되고 오차는 낮아집니다. 약 1분이 더 걸립니다."),
+    DE("Braucht einen gelernten Merkmalstyp. Die gelernten Merkmale platzieren die "
+       "Kameras; danach wird SIFT auf den platzierten Bildern erkannt, entlang der "
+       "Linien zugeordnet, die diese Kameras vorhersagen, und liefert die Punkte des "
+       "Modells und die endgültigen Kamerapositionen. Behält jede Kamera, die die "
+       "gelernten Merkmale platziert haben, mit kleinerem Fehler. Dauert etwa eine "
+       "Minute länger."),
+    FR("Demande un type de points appris. Les points appris placent les caméras ; SIFT "
+       "est ensuite détecté sur les images placées, apparié le long des lignes que ces "
+       "caméras prédisent, et donne au modèle ses points et les positions finales des "
+       "caméras. Garde toutes les caméras placées par les points appris, avec une "
+       "erreur plus faible. Ajoute environ une minute."),
+    ES("Necesita un tipo de rasgos aprendido. Los rasgos aprendidos colocan las "
+       "cámaras; después se detecta SIFT en las imágenes colocadas, se empareja a lo "
+       "largo de las líneas que esas cámaras predicen y da al modelo sus puntos y las "
+       "posiciones finales de las cámaras. Conserva todas las cámaras que colocaron los "
+       "rasgos aprendidos, con menos error. Añade alrededor de un minuto."),
+    PT("Precisa de um tipo de traços aprendido. Os traços aprendidos posicionam as "
+       "câmeras; depois o SIFT é detectado nas imagens posicionadas, emparelhado ao "
+       "longo das linhas que essas câmeras preveem, e dá ao modelo os seus pontos e as "
+       "posições finais das câmeras. Mantém todas as câmeras posicionadas pelos traços "
+       "aprendidos, com erro menor. Acrescenta cerca de um minuto."),
+    IT("Richiede un tipo di punti appreso. I punti appresi posizionano le camere; poi "
+       "SIFT viene rilevato sulle immagini posizionate, abbinato lungo le linee che "
+       "quelle camere prevedono, e dà al modello i suoi punti e le posizioni finali "
+       "delle camere. Tiene ogni camera posizionata dai punti appresi, con un errore "
+       "minore. Aggiunge circa un minuto."),
+    NL("Vereist een geleerd kenmerktype. De geleerde kenmerken plaatsen de camera's; "
+       "daarna wordt SIFT op de geplaatste beelden gedetecteerd, gekoppeld langs de "
+       "lijnen die die camera's voorspellen, en geeft het model zijn punten en de "
+       "uiteindelijke cameraposities. Houdt elke camera die de geleerde kenmerken "
+       "plaatsten, met een kleinere fout. Kost ongeveer een minuut extra."),
+    RU("Нужен обученный тип признаков. Обученные признаки расставляют камеры; затем "
+       "SIFT находится на расставленных изображениях, сопоставляется вдоль линий, "
+       "которые предсказывают эти камеры, и даёт модели её точки и окончательные "
+       "положения камер. Сохраняет каждую камеру, расставленную обученными признаками, "
+       "с меньшей ошибкой. Добавляет около минуты."),
+    TR("Öğrenilmiş bir öznitelik türü gerekir. Öğrenilmiş öznitelikler kameraları "
+       "yerleştirir; ardından yerleştirilen görüntülerde SIFT bulunur, bu kameraların "
+       "öngördüğü çizgiler boyunca eşlenir ve modelin noktalarını ve son kamera "
+       "konumlarını verir. Öğrenilmiş özniteliklerin yerleştirdiği her kamerayı daha "
+       "düşük hatayla korur. Yaklaşık bir dakika ekler."));
+
 SS_MSG(progressive_alignment,
     EN("Progressive alignment"),
     JA("段階的な位置合わせ"),
