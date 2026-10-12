@@ -1,0 +1,1 @@
+bin_work2/spirula.exe sfm auto "H:/Hershy Site GS/GS runs/a7iii_inside/images" -o ws_hybrid_extreme --manifest manifest.yaml --quality extreme --features loma-b128 --matcher loma-b128 --progressive --hybrid-sift

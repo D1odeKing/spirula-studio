@@ -1,0 +1,30 @@
+[run]     Capture type: individual
+[run]     Lens: opencv   Camera grouping: folder
+[run]     The presets set --max-image-size to 2400 (was 0)
+[run]     The presets set --max-features to 16384 (was 8192)
+[run]     The presets set --aliked-max-features to 8192 (was 2048)
+[run]     The presets set --loma-max-features to 8192 (was 2048)
+[run]     The presets set --prefilter-neighbors to 48 (was 32)
+[run]     The presets set --progressive-error-start to 24 (was 20)
+[run]     The presets set --progressive-error-steps to 15 (was 5)
+[run]     The presets set --progressive-feature-steps to 4 (was 3)
+[run]     The presets set --progressive-patience to 4 (was 2)
+[run]     The presets set --ratio to 1 (was 0.8)
+[run]     The presets set --pairs to prefilter (was auto)
+[run]     --metric-gps auto: `full` (EXIF GPS with altitude; images: 37)
+[match]   hybrid: pairs: 11525/11581 verified under the learned poses, inliers: 11346871, 00:02:12.545
+[hybrid] band matching kept 11471252 of 43459196 putative matches
+[map]     hybrid model 0: images: 676, kept by SIFT: 676, restored without points: 0; points 1096970 -> 2514042, mean error 2.09 -> 1.00 px
+[run]     Summary
+[run]     Extraction: 00:00:00.153   Images: 678   Features: 5554176
+[run]     Matching: reused an earlier run's   Pairs kept: 9603   Inliers: 10804827
+[run]     Mapping: 00:22:55.064   Registered: 676/678 images   Points: 2514042   Cameras: 4
+[run]     Assembly: 00:00:39.638   Models: 1 -> 1 over 0 level(s)   Merged: 0   Refused: 0   Grown: 0 image(s)   Coverage: 676 -> 676 images
+[run]     Finishing passes (00:00:39.638): split 0, folds cut 0, reseeded 0, dropped 0, repaired by the audit 0, dropped by the audit 0, seams welded 0
+[run]     Per folder:
+[run]     360_images_inside_Masked: 37/37 images registered
+[run]     A7iii_Inside: 639/641 images registered
+[run]     Total: 00:22:55.381
+[run]     Reprojection error: mean 1.003 px, median 0.887 px, over 5251633 observations
+[run]     Written to ws_hybrid_b6_extreme\sparse\0
+[run]     RESULT: OK -- 100% of the images registered, 1.00 px mean reprojection

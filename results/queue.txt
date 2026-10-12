@@ -1,0 +1,29 @@
+loma_prog done Sat Oct 10 16:13:14 EDT 2026
+hybrid finished (pid 14669) Sat Oct 10 17:13:21 EDT 2026
+restart: B with --reuse-matches keep Sat Oct 10 17:14:01 EDT 2026
+hybrid_noguide exit=0 seconds=1430
+paused by user Sat Oct 10 17:41:26 EDT 2026; sift_prog stopped at progressive attempt 3/12 (642 placed), extraction+matching done
+resumed Sat Oct 10 18:14:42 EDT 2026
+sift_prog finished Sat Oct 10 18:35:59 EDT 2026
+hybrid_r095 exit=0 seconds=1550
+hybrid_peak exit=0 seconds=1417
+hybrid_learned exit=3 seconds=1442
+hybrid_nocc exit=0 seconds=1547
+hybrid_extreme exit=0 seconds=9430
+queue done Sat Oct 10 22:52:42 EDT 2026
+hybrid_b3 exit=0 seconds=1489
+b4 queue start Sun Oct 11 12:09:02 EDT 2026
+hybrid_b4_gate exit=0 seconds=1410
+hybrid_band exit=3 seconds=1705
+hybrid_band_r08 exit=3 seconds=1525
+hybrid_band_r095 exit=3 seconds=1719
+b4 queue done Sun Oct 11 13:55:22 EDT 2026
+b5 queue start Sun Oct 11 14:03:00 EDT 2026
+hybrid_b5_band exit=3 seconds=1612
+hybrid_b5_band_px2 exit=0 seconds=1617
+hybrid_b5_band_r08_px2 exit=0 seconds=1591
+hybrid_b5_gate_px2 exit=0 seconds=1476
+b5 queue done Sun Oct 11 15:48:15 EDT 2026
+b6 queue start Sun Oct 11 15:55:35 EDT 2026
+hybrid_b6 exit=0 seconds=1593
+hybrid_b6_extreme exit=0 seconds=1391

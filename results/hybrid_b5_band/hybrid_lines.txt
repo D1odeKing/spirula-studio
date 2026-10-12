@@ -1,0 +1,4 @@
+[extract] hybrid: SIFT on the 676 registered images at 2400 px, up to 8192 features each
+[match]   hybrid: pairs: 11359/11440 verified under the learned poses, inliers: 5584415, 00:01:56.074
+[hybrid] band matching kept 6091328 of 20926750 putative matches
+[map]     hybrid model 0: images: 676, kept by SIFT: 676, restored without points: 0; points 607507 -> 1244335, mean error 3.01 -> 2.05 px

@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <string>
 #include <vector>
@@ -321,6 +323,85 @@ static void test_insta360(bool raw) {
         check(close_to(tm.gps[0].t, 0.5, 1e-6) && close_to(tm.gps[1].t, 1.5, 1e-6), tag + "gps time from the movie header");
     }
     check(close_to(tm.video_duration, 44.0, 1e-9), tag + "duration from the movie header");
+}
+
+// The Antigravity A1 layout: each record at the start of a slot, the slot's
+// tail filled with bytes that are not a descriptor, and an offsets table.
+static Bytes insta_slotted_trailer(const std::vector<std::pair<uint8_t, Bytes>>& recs) {
+    const size_t slot = 4096;
+    Bytes out, table;
+    for (const auto& [id, data] : recs) {
+        put_u8(table, id); put_u8(table, id == 1 ? 1 : 0);
+        put_le32(table, (uint32_t)data.size()); put_le32(table, (uint32_t)out.size());
+        put_raw(out, data);
+        out.resize((out.size() + slot - 1) / slot * slot, 0xA5);
+    }
+    for (int i = 0; i < 3; i++) { put_u8(table, 0); put_u8(table, 0); put_le32(table, 0); put_le32(table, 0); }
+    put_raw(out, table);
+    put_u8(out, 0); put_u8(out, 0); put_le32(out, (uint32_t)table.size());
+    Bytes hdr(32, 0);
+    put_le32(hdr, (uint32_t)(out.size() + 72));
+    put_le32(hdr, 3);
+    put_str(hdr, "8db42d694ccc418790edff439fe026bf");
+    put_raw(out, hdr);
+    return out;
+}
+
+static Bytes a1_meta(const char* serial) {
+    return cat({pb_str(1, serial), pb_str(2, "Antigravity A1"), pb_str(3, "7.2.633.3_5.5"),
+                pb_v(24, 555759889), pb_v(62, 1), pb_bytes(65, cat({pb_v(1, 32), pb_v(2, 2000)}))});
+}
+
+static Bytes a1_gyro() {
+    Bytes gyro;
+    for (int i = 0; i < 4; i++) {
+        put_le64(gyro, 555759889ull + 1000ull * i);
+        put_le16(gyro, 32768); put_le16(gyro, 32768 + 1024); put_le16(gyro, 32768);   // 1 g on y
+        put_le16(gyro, 32768); put_le16(gyro, 32768); put_le16(gyro, 32768 + 16384);  // 1000 deg/s on z
+    }
+    return gyro;
+}
+
+static void test_insta360_slotted() {
+    Bytes file = build_mp4({}, 30000, 30000 * 10, 0);
+    put_raw(file, insta_slotted_trailer({{1, a1_meta("2137FDE1AL1BBB333B6K")}, {3, a1_gyro()}}));
+    Telemetry tm;
+    std::string err;
+    check(telemetry_read(file.data(), file.size(), tm, err), "insta360 slotted: read (" + err + ")");
+    check(tm.camera == "Antigravity A1", "insta360 slotted: identity");
+    check(tm.gyro.size() == 4, "insta360 slotted: gyro count");
+    if (tm.gyro.size() == 4) {
+        check(close_to(tm.accel[0].y, 9.80665, 1e-9) && close_to(tm.gyro[1].z, 1000 * 3.14159265358979 / 180, 1e-6),
+              "insta360 slotted: units");
+        check(close_to(tm.gyro[0].t, 0.0, 1e-9) && close_to(tm.gyro[3].t, 0.003, 1e-9), "insta360 slotted: time");
+    }
+}
+
+// A PRX_*.prx proxy holds metadata alone; the IMU is in VID_*.insv beside it.
+static void test_insta360_proxy() {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "sfm_telemetry_proxy_test";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    auto write = [&](const char* name, const char* serial, bool sensors) {
+        Bytes file = build_mp4({}, 30000, 30000 * 10, 0);
+        std::vector<std::pair<uint8_t, Bytes>> recs = {{1, a1_meta(serial)}};
+        if (sensors) recs.push_back({3, a1_gyro()});
+        put_raw(file, insta_slotted_trailer(recs));
+        std::ofstream((dir / name).string(), std::ios::binary).write((const char*)file.data(), (std::streamsize)file.size());
+    };
+    write("PRX_20251223_144539_030.prx", "SN1", false);
+    write("VID_20251223_144539_030.insv", "SN1", true);
+    write("PRX_20251223_150000_031.prx", "SN1", false);
+    write("VID_20251223_150000_031.insv", "SN2", true);
+
+    Telemetry tm;
+    std::string err;
+    check(telemetry_read((dir / "PRX_20251223_144539_030.prx").string(), tm, err), "insta360 proxy: read (" + err + ")");
+    check(tm.carrier == TelemetryCarrier::Insta360 && tm.gyro.size() == 4, "insta360 proxy: IMU from the VID file");
+    check(telemetry_read((dir / "PRX_20251223_150000_031.prx").string(), tm, err) && tm.empty(),
+          "insta360 proxy: another camera's VID is not borrowed");
+    fs::remove_all(dir);
 }
 
 static Bytes dji_sample(bool with_clip, uint64_t ts_us, float az) {
@@ -795,6 +876,8 @@ static int cmdTelemetryTest(int argc, char** argv) {
     test_gpmf();
     test_insta360(false);
     test_insta360(true);
+    test_insta360_slotted();
+    test_insta360_proxy();
     test_dji();
     test_dji_avata();
     test_dji_osmo_ignores_avata_fields();

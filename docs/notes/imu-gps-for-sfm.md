@@ -87,6 +87,18 @@ the MP4 movie header's creation time, which on the X5 matches the first GPS
 fix to the second; the metadata's own `creation_time` is a decimal
 YYYYMMDDHHMMSS in local time and is not usable as an epoch.
 
+**Antigravity A1** (`VID_*.insv`, one file, both lenses as two 3840² tracks)
+writes the same records as an X5 at the same rates (raw int16, 2000 deg/s and
+32 g full scale; GPS from the drone's own receiver, ~0.6 Hz, 100 % fix on a
+119 s flight), but lays the trailer out differently: each record starts a
+256 KiB slot and nothing follows it, so the offsets table is the only index
+and the X5's per-record descriptors cannot be checked against it. The
+`PRX_*.prx` proxy beside it (2560x1280, both circles side by side) carries the
+metadata and a thumbnail but no IMU or GPS; it shares the VID file's
+`first_frame_timestamp`, so `telemetry_read(path)` takes the records from
+`VID_<same stamp>.insv` when that file has the same serial and first frame.
+Counts and times agree with telemetry-parser on both files.
+
 ### 2.2 GoPro MAX (`.360`) and any GoPro `.mp4`
 
 | stream | rate | frame | notes |

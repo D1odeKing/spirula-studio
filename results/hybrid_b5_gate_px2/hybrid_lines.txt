@@ -1,0 +1,4 @@
+[extract] hybrid: SIFT on the 676 registered images at 2400 px, up to 8192 features each
+[match]   hybrid: pairs: 9090/11447 verified under the learned poses, inliers: 1547132, 00:00:41.196
+[hybrid] gate matching kept 1582450 of 34922098 putative matches
+[map]     hybrid model 0: images: 676, kept by SIFT: 674, restored without points: 2; points 607548 -> 422666, mean error 3.02 -> 1.36 px

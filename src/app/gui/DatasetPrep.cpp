@@ -72,7 +72,7 @@ namespace gui {
 
 const char* const kVideoExtensions[kNumVideoExtensions] = {
     ".mp4", ".mov", ".mkv", ".webm", ".m4v", ".insv", ".osv", ".avi",
-    ".mts", ".m2ts", ".360", ".ts", ".wmv", ".lrv",
+    ".mts", ".m2ts", ".360", ".ts", ".wmv", ".lrv", ".prx",
 };
 
 bool is_image_file(const fs::path& p) {
@@ -127,6 +127,26 @@ void clear_generated(const fs::path& dir, const fs::path& workspace) {
     for (fs::path up = d.parent_path(); !up.empty() && up != up.root_path();
          up = up.parent_path())
         if (up == w) { remove_tree(d); return; }
+}
+
+// When every input has a folder of its own, anything else directly under
+// `root` is an earlier layout's: one input written flat, or an input since
+// removed. Left, it is extracted and matched as more images. Returns how many.
+int prune_to_inputs(const fs::path& root, const std::vector<PrepInput>& inputs) {
+    std::set<std::string> keep;
+    for (const PrepInput& in : inputs) {
+        if (in.subdir.empty()) return 0;
+        keep.insert(fs::path(in.subdir).begin()->string());
+    }
+    std::error_code ec;
+    std::vector<fs::path> stale;
+    for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
+        if (!keep.count(it->path().filename().string())) stale.push_back(it->path());
+    for (const fs::path& p : stale) {
+        if (fs::is_directory(p, ec)) remove_tree(p);
+        else fs::remove(p, ec);
+    }
+    return (int)stale.size();
 }
 
 // Every walk over an image tree follows directory symlinks. A prepared capture
@@ -615,7 +635,8 @@ bool is_pano360_path(const std::string& path) {
 }
 
 bool is_packed_lens_path(const std::string& path) {
-    return lower_ext(path) == ".insp" || lower_ext(path) == ".lrv";
+    const std::string e = lower_ext(path);
+    return e == ".insp" || e == ".lrv" || e == ".prx";
 }
 
 int probe_packed_lenses(const std::string& dir) {
@@ -1279,6 +1300,11 @@ bool DatasetPrep::run(const PrepJob& job_in, PrepResult& out, std::string& error
     } else {
         out.image_dir = (ws / "images").string();
         out.image_dir_cfg = "images";
+        // features/ mirrors images/, so a stale image's feature file goes too.
+        for (const char* tree : {"images", "masks", "features"})
+            if (const int n = prune_to_inputs(ws / tree, job.inputs))
+                log(fmt(lmsg::pruned_stale_layout, {(long long)n, (ws / tree).string()}),
+                    /*detail=*/false);
         // Every input is measured before any of them is extracted, so the bar
         // covers the whole step from the first frame rather than restarting on
         // each input (StageTally).

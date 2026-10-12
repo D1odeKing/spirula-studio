@@ -1,0 +1,8 @@
+# attempt error_px pairs largest aligned models seconds
+attempt 1 24 9603 676 676 1 262.117
+attempt 2 20.6873 9603 676 676 1 125.622
+attempt 3 17.8319 9603 676 676 1 107.37
+attempt 4 15.3706 9603 676 676 1 134.002
+attempt 5 13.2491 9603 676 676 1 142.876
+attempt 6 3 9602 676 676 1 215.172
+# pass images image_size features pairs verified largest_before largest_after error_before error_after seconds outcome

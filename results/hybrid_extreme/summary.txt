@@ -1,0 +1,30 @@
+[run]     Capture type: individual
+[run]     Lens: opencv   Camera grouping: folder
+[run]     The presets set --max-image-size to 2400 (was 0)
+[run]     The presets set --max-features to 16384 (was 8192)
+[run]     The presets set --aliked-max-features to 8192 (was 2048)
+[run]     The presets set --loma-max-features to 8192 (was 2048)
+[run]     The presets set --prefilter-neighbors to 48 (was 32)
+[run]     The presets set --progressive-error-start to 24 (was 20)
+[run]     The presets set --progressive-error-steps to 15 (was 5)
+[run]     The presets set --progressive-feature-steps to 4 (was 3)
+[run]     The presets set --progressive-patience to 4 (was 2)
+[run]     The presets set --ratio to 1 (was 0.8)
+[run]     The presets set --pairs to prefilter (was auto)
+[run]     --metric-gps auto: `full` (EXIF GPS with altitude; images: 37)
+[match]   hybrid: pairs: 9187/11567 verified under the learned poses, inliers: 1956766, 00:01:28.416
+[hybrid] epipolar gate kept 2014239 of 12090716 putative matches
+[map]     hybrid model 0: images: 676, kept by SIFT: 669, restored without points: 7; points 1096876 -> 558674, mean error 2.09 -> 1.23 px
+[run]     Summary
+[run]     Extraction: 00:10:01.378   Images: 678   Features: 5554176
+[run]     Matching: 02:08:47.480   Pairs kept: 9603/9607   Inliers: 10804827/10928001
+[run]     Mapping: 00:18:16.726   Registered: 676/678 images   Points: 558674   Cameras: 4
+[run]     Assembly: 00:00:34.073   Models: 1 -> 1 over 0 level(s)   Merged: 0   Refused: 0   Grown: 0 image(s)   Coverage: 676 -> 676 images
+[run]     Finishing passes (00:00:34.073): split 0, folds cut 0, reseeded 0, dropped 0, repaired by the audit 0, dropped by the audit 0, seams welded 0
+[run]     Per folder:
+[run]     360_images_inside_Masked: 37/37 images registered
+[run]     A7iii_Inside: 639/641 images registered
+[run]     Total: 02:37:05.584
+[run]     Reprojection error: mean 1.234 px, median 1.005 px, over 1443999 observations
+[run]     Written to ws_hybrid_extreme\sparse\0
+[run]     RESULT: OK -- 100% of the images registered, 1.23 px mean reprojection
