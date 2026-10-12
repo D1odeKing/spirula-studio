@@ -676,9 +676,11 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         }
         const size_t min_views = (size_t)envNumber("SFM_HYBRID_MIN_VIEWS", 0);
         if (min_views > 2)
-            for (size_t k = 0; k < out.size(); k++)
-                slog::diag(Tag::Map, "[hybrid] model %zu: dropped %zu points in under %zu images", k,
-                           dropShortTracks(out[k], min_views), min_views);
+            for (size_t k = 0; k < out.size(); k++) {
+                const size_t dropped = dropShortTracks(out[k], min_views);
+                slog::diag(Tag::Map, "[hybrid] model %zu: dropped %zu points in under %zu images",
+                           k, dropped, min_views);
+            }
 
         for (size_t k = 0; k < models.size(); k++) {
             HybridModelStats ms;
