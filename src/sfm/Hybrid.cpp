@@ -43,12 +43,15 @@ constexpr size_t kCovisiblePartners = 20;
 // otherwise add 20k pair counts for one point.
 constexpr size_t kTrackPairCap = 32;
 
-// SIFT's own resolution at each --quality (SfmConfig.cpp applyPresets).
-int siftImageSize(const std::string& quality) {
-    if (quality == "low") return 1000;
-    if (quality == "medium") return 1600;
-    if (quality == "extreme") return 3200;
-    return 2400;
+// SIFT's own working size at the run's --quality, as the presets give it.
+int siftImageSize(const SfmConfig& cfg) {
+    SfmConfig probe;
+    probe.quality = cfg.quality;
+    probe.features = "sift";
+    probe.max_image_size = 0;
+    std::vector<PresetChange> moved;
+    applyPresets(probe, {}, moved);
+    return probe.max_image_size > 0 ? probe.max_image_size : cfg.max_image_size;
 }
 
 double envNumber(const char* name, double fallback) {
@@ -132,16 +135,23 @@ void runWorkers(F& worker, int threads, size_t jobs) {
     for (std::thread& t : pool) t.join();
 }
 
+// A unit bearing in float: there is one per SIFT keypoint of every registered
+// image, and a double Vec3 is 24 bytes of it.
+struct Bearing {
+    float x, y, z;
+    Vec3 v() const { return {x, y, z}; }
+};
+
 // Every keypoint's bearing under the camera model k gives image i, for each
 // (k, i) in `keys`.
-using BearingMap = std::map<std::pair<int, uint32_t>, std::vector<Vec3>>;
+using BearingMap = std::map<std::pair<int, uint32_t>, std::vector<Bearing>>;
 
 BearingMap modelBearings(const std::vector<Reconstruction>& models,
                          const std::vector<FeatureSet>& feats,
                          const std::set<std::pair<int, uint32_t>>& keys, int threads) {
     BearingMap out;
     std::vector<BearingMap::iterator> slots;
-    for (const auto& key : keys) slots.push_back(out.emplace(key, std::vector<Vec3>()).first);
+    for (const auto& key : keys) slots.push_back(out.emplace(key, std::vector<Bearing>()).first);
     std::atomic<size_t> next{0};
     auto worker = [&] {
         for (size_t s = next++; s < slots.size(); s = next++) {
@@ -149,11 +159,12 @@ BearingMap modelBearings(const std::vector<Reconstruction>& models,
             const uint32_t img = slots[s]->first.second;
             const Reconstruction& rec = models[k];
             const Camera& cam = rec.cameras.at(rec.images.at(img).camera_id);
-            std::vector<Vec3>& v = slots[s]->second;
+            std::vector<Bearing>& v = slots[s]->second;
             v.resize(feats[img].count());
             for (uint32_t f = 0; f < feats[img].count(); f++) {
                 const Keypoint& kp = feats[img].keypoints[f];
-                v[f] = cam.bearing({kp.x, kp.y}).normalized();
+                const Vec3 b = cam.bearing({kp.x, kp.y}).normalized();
+                v[f] = {(float)b.x, (float)b.y, (float)b.z};
             }
         }
     };
@@ -189,12 +200,12 @@ PairGeometry pairGeometry(const Reconstruction& rec, const std::vector<FeatureSe
 
 // Keeps the putative matches within the tolerance of their epipolar plane,
 // measured on bearings so an equirectangular image is gated like a pinhole one.
-void epipolarGate(const PairGeometry& g, const std::vector<Vec3>& ba,
-                  const std::vector<Vec3>& bb, std::vector<FeatureMatch>& m) {
+void epipolarGate(const PairGeometry& g, const std::vector<Bearing>& ba,
+                  const std::vector<Bearing>& bb, std::vector<FeatureMatch>& m) {
     size_t w = 0;
     for (const FeatureMatch& fm : m) {
-        const Vec3 ra = mul(g.R, ba[fm.idx1]);
-        const Vec3& rb = bb[fm.idx2];
+        const Vec3 ra = mul(g.R, ba[fm.idx1].v());
+        const Vec3 rb = bb[fm.idx2].v();
         double e;
         if (g.rotation_only) {
             e = (ra - rb).norm();
@@ -217,11 +228,10 @@ int distanceU8(const uint8_t* a, const uint8_t* b, uint32_t dim) {
     return d;
 }
 
-// Guided search: each keypoint of i is compared only with the keypoints of j on
-// the arc its ray sweeps in j, epipole to vanishing point, widened by the
-// tolerance. The ratio test runs over those alone; `mutual` runs it from j's side
-// too and keeps only mutual nearest neighbours, else one match per j keypoint.
-void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::vector<Vec3>& bb,
+// Each keypoint of i against j's keypoints on the arc its ray sweeps in j
+// (epipole to vanishing point, widened by the tolerance), the ratio test over
+// those alone; `mutual` keeps mutual nearest neighbours, else one per j keypoint.
+void bandMatch(const PairGeometry& g, const std::vector<Bearing>& ba, const std::vector<Bearing>& bb,
                const FeatureSet& fa, const FeatureSet& fb, double ratio, bool mutual,
                size_t cap, std::vector<FeatureMatch>& out, uint64_t& putative) {
     out.clear();
@@ -236,7 +246,7 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
     constexpr int kRings = 5;
     std::vector<std::pair<float, uint32_t>> ring[kRings];
     for (uint32_t q = 0; q < (uint32_t)bb.size(); q++) {
-        const Vec3& b = bb[q];
+        const Vec3 b = bb[q].v();
         const double s = (b - e * b.dot(e)).norm();
         int r = 0;
         while (s < kRing[r]) r++;
@@ -256,7 +266,7 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
     };
     std::vector<Found> found;
     for (uint32_t p = 0; p < (uint32_t)ba.size(); p++) {
-        const Vec3 r = mul(g.R, ba[p]);
+        const Vec3 r = mul(g.R, ba[p].v());
         const Vec3 rp = r - e * r.dot(e);
         const double sr = rp.norm();
         if (sr < 0.02) continue;
@@ -269,7 +279,7 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
         int d1 = INT_MAX, d2 = INT_MAX;
         uint32_t q1 = 0;
         auto test = [&](uint32_t q) {
-            const Vec3& b = bb[q];
+            const Vec3 b = bb[q].v();
             if (std::fabs(nrm.dot(b)) > g.tol || b.dot(e) < min_cos || b.dot(rh) < -g.tol) return;
             const int d = distanceU8(dp, db + (size_t)q * dim, dim);
             if (d < best[q].first) {
@@ -323,9 +333,11 @@ void bandMatch(const PairGeometry& g, const std::vector<Vec3>& ba, const std::ve
 }
 
 // `src`'s registered images that `dst` lost, put back at their `src` pose carried
-// into `dst`'s frame, with no observations. Returns how many.
-uint32_t restoreLost(const Reconstruction& src, Reconstruction& dst,
-                     const std::vector<FeatureSet>& feats) {
+// into `dst`'s frame, with no observations. False, with none put back, when
+// fewer than two shared poses tie the frames.
+bool restoreLost(const Reconstruction& src, Reconstruction& dst,
+                 const std::vector<FeatureSet>& feats, uint32_t& restored) {
+    restored = 0;
     std::vector<Pose> from, to;
     std::vector<uint32_t> lost;
     for (const auto& kv : src.images) {
@@ -338,9 +350,9 @@ uint32_t restoreLost(const Reconstruction& src, Reconstruction& dst,
             lost.push_back(kv.first);
         }
     }
-    if (lost.empty()) return 0;
+    if (lost.empty()) return true;
     Sim3 T;
-    if (!from.empty() && !estimateSim3FromPoses(from, to, T)) return 0;
+    if (!from.empty() && !estimateSim3FromPoses(from, to, T)) return false;
     for (uint32_t id : lost) {
         const Image& s = src.images.at(id);
         Image im;
@@ -357,7 +369,8 @@ uint32_t restoreLost(const Reconstruction& src, Reconstruction& dst,
         if (!dst.cameras.count(s.camera_id)) dst.cameras[s.camera_id] = src.cameras.at(s.camera_id);
         dst.images[id] = std::move(im);
     }
-    return (uint32_t)lost.size();
+    restored = (uint32_t)lost.size();
+    return true;
 }
 
 // The learned frontend's tracks as well, triangulated against the SIFT
@@ -429,12 +442,12 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         std::set<std::string> only;
         for (size_t i = 0; i < n; i++)
             if (registered[i]) only.insert(db.images[i].name);
-        if (only.size() < 2) throw std::runtime_error("fewer than two registered images");
+        if (only.size() < 2) throw std::runtime_error(spirula::i18n::format(M::hybrid_too_few, {}));
 
         SfmConfig sc = cfg;
         sc.features = "sift";
         sc.matcher = "bruteforce";
-        sc.max_image_size = (int)envNumber("SFM_HYBRID_IMAGE_SIZE", siftImageSize(cfg.quality));
+        sc.max_image_size = (int)envNumber("SFM_HYBRID_IMAGE_SIZE", siftImageSize(cfg));
         // gate: the global nearest neighbour, kept near its epipolar plane;
         // band: the nearest neighbour within that band; none: unguided.
         const char* mv = spirula::env("SFM_HYBRID_MATCH");
@@ -450,7 +463,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         sc.match.descriptor_budget_bytes = cfg.match.descriptor_budget_bytes;
         sc.match.max_num_matches = cfg.match.max_num_matches;
         // The geometry does the rejecting the ratio test and the cross-check would.
-        // On a 678-image interior (a7iii_inside), a 2 px band at 0.9 gave three
+        // On a 678-image interior capture, a 2 px band at 0.9 gave three
         // times the gate's points at 1.33 px against 1.74; 0.8 lost 39% for nothing.
         sc.match.max_ratio =
             (float)envNumber("SFM_HYBRID_RATIO", mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8);
@@ -510,13 +523,18 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         auto geometry = [&](size_t p) {
             return pairGeometry(models[owner[p]], sf, pairs[p].first, pairs[p].second, tol_px);
         };
-        auto pairBearings = [&](size_t p, bool second) -> const std::vector<Vec3>& {
+        auto pairBearings = [&](size_t p, bool second) -> const std::vector<Bearing>& {
             return bearings.at({owner[p], second ? pairs[p].second : pairs[p].first});
         };
         std::unique_ptr<IFeatureMatcher> matcher;
         if (mode != "band")
             matcher = createFeatureMatcher(sc.matcher, sc.match, sc.lightglue, sc.loma_match);
         const bool mutual = envNumber("SFM_HYBRID_BAND_MUTUAL", 1) != 0;
+        // Band matching and verification are both CPU work and run at once, so
+        // they split the cores rather than each taking all of them.
+        const int cores = cfg.threads > 0 ? cfg.threads
+                                          : (int)std::max(1u, std::thread::hardware_concurrency());
+        const int band_threads = mode == "band" ? std::max(1, cores / 2) : 0;
         uint64_t putative = 0, kept = 0;
         auto matchFn = [&](size_t b, size_t e, std::vector<std::vector<FeatureMatch>>& out) {
             if (mode == "band") {
@@ -531,7 +549,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
                                   mutual, sc.match.max_num_matches, out[p - b], mine);
                     found += mine;
                 };
-                runWorkers(worker, cfg.threads, e - b);
+                runWorkers(worker, band_threads, e - b);
                 putative += found;
                 for (const auto& m : out) kept += m.size();
                 return;
@@ -548,7 +566,7 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         VerificationOptions vo;
         vo.two_view = cfg.twoview;
         vo.two_view.ransac.max_error = cfg.max_error;
-        vo.num_threads = cfg.threads;
+        vo.num_threads = band_threads ? std::max(1, cores - band_threads) : cfg.threads;
         vo.match_batch_pairs = mode == "band" ? std::max(sc.match.batch_pairs, 256)
                                               : sc.match.batch_pairs;
         BearingCache bc;
@@ -641,16 +659,17 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
             ms.points_before = models[k].points3D.size();
             ms.error_before = meanError(models[k], feats);
             ms.sift = out[k].numRegistered();
-            ms.restored = restoreLost(models[k], out[k], sf);
+            if (!restoreLost(models[k], out[k], sf, ms.restored))
+                L::warn(Tag::Map, M::hybrid_not_restored,
+                        {(long long)k, (long long)ms.images - (long long)ms.sift});
             ms.points_after = out[k].points3D.size();
             ms.error_after = meanError(out[k], sf);
             st.models.push_back(ms);
         }
         const HybridModelStats& main = st.models.front();
         if (out.front().points3D.empty() || 2 * main.sift < main.images)
-            throw std::runtime_error("SIFT kept " + std::to_string(main.sift) + " of " +
-                                     std::to_string(main.images) +
-                                     " images of the largest model");
+            throw std::runtime_error(spirula::i18n::format(
+                M::hybrid_kept_too_few, {(long long)main.sift, (long long)main.images}));
         st.seconds = now() - t0;
         if (verbose)
             for (size_t k = 0; k < st.models.size(); k++) {

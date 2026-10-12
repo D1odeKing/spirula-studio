@@ -2585,15 +2585,13 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
     t0 = now();
     events::stage_begin(Stage::Map, (int64_t)db.images.size());
     events::map_begin(db.images.size());
-    {
-        std::vector<std::string> names;
-        std::vector<uint32_t> keypoints;
-        for (const ImageEntry& im : db.images) {
-            names.push_back(im.name);
-            keypoints.push_back(im.num_features);
-        }
-        progress::images(names, keypoints);
+    std::vector<std::string> names;
+    std::vector<uint32_t> keypoints;
+    for (const ImageEntry& im : db.images) {
+        names.push_back(im.name);
+        keypoints.push_back(im.num_features);
     }
+    progress::images(names, keypoints);
     RigTable rigs;
     SequenceTable seqs;
     try {
@@ -2638,7 +2636,13 @@ AutoResult run_auto(SfmConfig& cfg, const AutoInputs& in) {
         progressive.reset();
         single.reset();
         HybridStats hst;
-        hybridSift(models, feats, db, cfg, calib, rigs, seqs, _imagedir, ws, hst);
+        // The image list then counts SIFT's keypoints, which its points index;
+        // an image SIFT never ran on keeps the learned count.
+        if (hybridSift(models, feats, db, cfg, calib, rigs, seqs, _imagedir, ws, hst)) {
+            for (size_t i = 0; i < keypoints.size() && i < db.images.size(); i++)
+                if (db.images[i].num_features) keypoints[i] = db.images[i].num_features;
+            progress::images(names, keypoints);
+        }
         t_map += hst.seconds;
         if (!writeHybridReport(ws / "hybrid.txt", hst))
             L::err_raw(Tag::Map, "cannot write " + (ws / "hybrid.txt").string());

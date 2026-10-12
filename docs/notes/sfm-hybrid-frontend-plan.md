@@ -19,7 +19,12 @@ one), the ratio test (0.9) over those alone from both sides, keeping mutual
 nearest neighbours; verification; triangulation against the learned poses and
 a free bundle adjustment (`Mapper::retriangulate`), then the finishing passes
 again. Any image SIFT cannot hold is put back at its learned pose, carried into
-the SIFT frame by a Sim3, with no points. A failure keeps the learned model.
+the SIFT frame by a Sim3, with no points; when fewer than two shared poses tie
+the frames, the log says how many images could not be put back. A failure
+keeps the learned model, with the reason translated like the rest of the log.
+Band matching and verification run at once and split the cores between them.
+After the stage the image list counts SIFT's keypoints, and the dataset
+screen's feature reel shows `features.sift/` while it is written.
 `SS_SFM_HYBRID_MATCH=gate` is the earlier form: the global nearest neighbour
 (ratio 0.95, no cross-check), kept within 1.5 x `--max-error` of its epipolar
 plane. The GUI's "Refine with SIFT" (Advanced, learned features only) passes
@@ -29,9 +34,9 @@ plane. The GUI's "Refine with SIFT" (Advanced, learned features only) passes
 `BAND_MUTUAL`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`, `EPIPOLAR_PX`, and `LEARNED_POINTS=1`, which also triangulates the learned
 tracks against the final poses (no BA) for a denser seed.
 
-## Measured: a7iii_inside
+## Measured: a 678-image interior
 
-678 images (37 equirectangular 11904x5952, 641 A7iii pinhole), RTX 4060 8 GB.
+678 images (37 equirectangular 11904x5952, 641 pinhole), RTX 4060 8 GB.
 Errors in source pixels.
 
 | run | images | points | mean px |
@@ -86,8 +91,8 @@ this stage is the deliberate exception, and only behind its own switch.
 2. **Guided matching.** Each LoMa-verified pair carries its two-view geometry;
    a SIFT candidate is accepted only near its epipolar line, which lets the
    ratio test relax where texture repeats. COLMAP's `guided_matching` is the
-   same idea from the pair's own geometry. Nothing in `src/sfm/` does this
-   yet: it is new matcher work (a per-pair F or E handed to the matcher).
+   same idea from the pair's own geometry; `bandMatch` in `sfm/Hybrid.cpp`
+   is this, on bearings from the learned poses.
 3. **Fixed poses.** Keep LoMa's cameras, triangulate SIFT tracks against them,
    then bundle-adjust with the SIFT observations. Every camera LoMa placed is
    kept; only poses cross over, never LoMa's feature rows, so the two feature

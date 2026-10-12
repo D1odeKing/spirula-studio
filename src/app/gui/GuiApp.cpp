@@ -6264,9 +6264,15 @@ void GuiApp::poll_sfm_progress() {
     if (dataset_busy() && dataset_steps()->current() == Stage::Features) {
         std::string fdir = _sfm.features_dir();
         if (dataset_steps()->stage(Stage::Mapping).status == StageStatus::Running) {
-            const std::string pass =
-                newest_pass_dir(fs::path(fdir).parent_path() / "features.progressive");
+            const fs::path ws = fs::path(fdir).parent_path();
+            const std::string pass = newest_pass_dir(ws / "features.progressive");
             if (!pass.empty()) fdir = pass;
+            // The hybrid stage detects SIFT into features.sift after every pass.
+            std::error_code ec;
+            const fs::path sift = ws / "features.sift";
+            if (fs::is_directory(sift, ec) &&
+                (pass.empty() || fs::last_write_time(sift, ec) >= fs::last_write_time(pass, ec)))
+                fdir = sift.string();
         }
         if (fdir != _features_shown) {
             _features.stop();

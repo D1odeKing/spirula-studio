@@ -395,7 +395,7 @@ struct SfmConfig {
       0, 1000000, "", progressive_min_matches)                                                     \
     F(progressive_time, "progressive-time", CMD_AUTO, Tier::Advanced, "progressive", 0, 100000,    \
       "", progressive_time)                                                                        \
-    F(hybrid_sift, "hybrid-sift", CMD_AUTO, Tier::Advanced, "progressive", 0, 0, "", hybrid_sift) \
+    F(hybrid_sift, "hybrid-sift", CMD_AUTO, Tier::Advanced, "features", 0, 0, "", hybrid_sift)    \
     F(max_image_size, "max-image-size", CMD_AUTO | CMD_EXTRACT, Tier::Advanced, "pipeline", 0,     \
       20000, "", max_image_size)                                                                   \
     F(mask_dir, "masks", CMD_AUTO | CMD_EXTRACT, Tier::Basic, "pipeline", 0, 0, "", masks)         \
