@@ -22,7 +22,7 @@
 #include "app/gui/ImageCompare.h"
 #include "app/gui/MatchMatrix.h"
 #include "app/gui/PairPreview.h"
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 #include "app/gui/Layout.h"
 #include "app/gui/LidarStep.h"
 #include "app/gui/MeshRunner.h"

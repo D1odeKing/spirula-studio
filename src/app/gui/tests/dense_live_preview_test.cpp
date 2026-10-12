@@ -1,4 +1,4 @@
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 #include "app/gui/PreviewRenderer.h"
 #include "app/gui/GlLoader.h"
 #include "core/AtomicFile.h"

@@ -557,7 +557,16 @@
 const CFG = {
   // serverUrl: "http://SERVER_HOST:SERVER_PORT",
   serverUrl: window.location.origin,
+  // A server started with --viewer-token answers only requests carrying it.
+  token: new URLSearchParams(window.location.search).get("token") || "",
 };
+
+// `path` with the page's token added to its query, when it has one.
+function api(path) {
+  if (!CFG.token) return CFG.serverUrl + path;
+  return CFG.serverUrl + path + (path.includes("?") ? "&" : "?") +
+         "token=" + encodeURIComponent(CFG.token);
+}
 
 // ═══════════════════════════════════════════════════════
 // Utilities
@@ -949,7 +958,7 @@ const CENTER_LABELS = {
 
 async function fetchScene() {
   try {
-    const response = await fetch(`${CFG.serverUrl}/scene`);
+    const response = await fetch(api("/scene"));
     if (!response.ok) throw new Error("no /scene");
     const j = await response.json();
     Scene.modes = j.center_modes || [];
@@ -982,7 +991,7 @@ async function fetchScene() {
 
 async function fetchBuffers() {
   try {
-    const response = await fetch(`${CFG.serverUrl}/buffers`);
+    const response = await fetch(api("/buffers"));
     const keys = await response.json();
     updateBufferKeyDropdown(keys);
   } catch (e) {
@@ -1030,7 +1039,7 @@ async function sendRenderRequest() {
   _inFlight = true;
   setStatus("rendering");
   try {
-    const resp = await fetch(`${CFG.serverUrl}/render?${params}`, { cache: "no-store" });
+    const resp = await fetch(api(`/render?${params}`), { cache: "no-store" });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
@@ -1219,7 +1228,7 @@ async function pickRecenter(e) {
   });
   _pickInFlight = true;
   try {
-    const resp = await fetch(`${CFG.serverUrl}/pick?${params}`, { cache: "no-store" });
+    const resp = await fetch(api(`/pick?${params}`), { cache: "no-store" });
     if (!resp.ok) return;
     const j = await resp.json();
     if (j.hit) recenterAt(j.p);
@@ -1456,7 +1465,7 @@ $("center-mode").addEventListener("change", e => {
 
 $("btn-pause").addEventListener("click", async () => {
   try {
-    const response = await fetch('/pause-toggle');
+    const response = await fetch(api('/pause-toggle'));
     const result = await response.json();
     if (result.paused) {
       $("btn-pause").textContent = "Resume Training";
@@ -1488,7 +1497,7 @@ window.addEventListener("resize", () => {
 // ═══════════════════════════════════════════════════════
 async function updateProgress() {
   try {
-    const response = await fetch('/progress');
+    const response = await fetch(api('/progress'));
     const progress = await response.json();
     if (progress.total_steps > 0) {
       const percent = (progress.step / progress.total_steps) * 100;

@@ -542,7 +542,7 @@ private:
     std::vector<std::thread> threads_;
 };
 
-// The VKPM model.bin that app/gui/SfmProgress.h reads, so the dataset screen
+// The VKPM model.bin that app/SfmProgress.h reads, so the dataset screen
 // shows the cloud growing. Cameras are the dataset's, points the reconstruction preview.
 class LiveSnapshot {
 public:

@@ -156,12 +156,16 @@ void TrainRunner::start_training(const TrainConfig& cfg, const std::string& pres
             // Optional web viewer alongside the native viewport.
             if (!s->cfg.disable_viewer) {
                 _web_viewer.reset(new ViewerServer());
-                _web_viewer->start("0.0.0.0", s->cfg.viewer_port,
+                _web_viewer->start(s->cfg.viewer_host, s->cfg.viewer_port,
                                    s->make_viewer_config(),
-                                   s->make_viewer_hooks(), s->post);
-                push_log(spirula::i18n::format(
-                    spirula::i18n::msg::log::web_viewer_at,
-                    {(long long)s->cfg.viewer_port}));
+                                   s->make_viewer_hooks(), s->post, s->cfg.viewer_token);
+                namespace lmsg = spirula::i18n::msg::log;
+                push_log(s->cfg.viewer_token.empty()
+                             ? spirula::i18n::format(lmsg::web_viewer_at,
+                                                     {(long long)s->cfg.viewer_port})
+                             : spirula::i18n::format(lmsg::web_viewer_at_token,
+                                                     {(long long)s->cfg.viewer_port,
+                                                      s->cfg.viewer_token}));
             }
 
             _phase = Phase::Training;

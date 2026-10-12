@@ -9,7 +9,7 @@
 // same overlay over pictures of different sizes.
 
 #include "app/gui/Layout.h"         // px
-#include "app/gui/SfmProgress.h"    // KeyPoint2D
+#include "app/SfmProgress.h"    // KeyPoint2D
 
 #include "imgui.h"
 

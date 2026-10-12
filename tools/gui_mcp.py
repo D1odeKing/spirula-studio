@@ -19,8 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import guictl  # noqa: E402
-
-PROTOCOL = "2025-06-18"
+import mcp_stdio  # noqa: E402
 
 TOOLS = [
     {
@@ -254,59 +253,8 @@ def run_tool(name, a):
              "text": json.dumps(body, ensure_ascii=False, indent=2)}], False
 
 
-def handle(msg):
-    """The response to one request, or None for a notification."""
-    method = msg.get("method")
-    if method == "initialize":
-        want = (msg.get("params") or {}).get("protocolVersion") or PROTOCOL
-        return {"protocolVersion": want,
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "spirula-gui", "version": "1"}}
-    if method == "tools/list":
-        return {"tools": TOOLS}
-    if method == "tools/call":
-        params = msg.get("params") or {}
-        try:
-            content, is_error = run_tool(params.get("name"),
-                                         params.get("arguments") or {})
-        except SystemExit as e:
-            content, is_error = [{"type": "text", "text": str(e)}], True
-        except Exception as e:                       # noqa: BLE001
-            content, is_error = [{"type": "text",
-                                  "text": "%s: %s" % (type(e).__name__, e)}], True
-        return {"content": content, "isError": is_error}
-    if method == "ping":
-        return {}
-    return None
-
-
 def main():
-    out = sys.stdout
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if "id" not in msg:
-            continue                                  # a notification
-        try:
-            result = handle(msg)
-        except Exception as e:                        # noqa: BLE001
-            reply = {"jsonrpc": "2.0", "id": msg["id"],
-                     "error": {"code": -32603, "message": str(e)}}
-        else:
-            if result is None:
-                reply = {"jsonrpc": "2.0", "id": msg["id"],
-                         "error": {"code": -32601,
-                                   "message": "method not found: %s"
-                                              % msg.get("method")}}
-            else:
-                reply = {"jsonrpc": "2.0", "id": msg["id"], "result": result}
-        out.write(json.dumps(reply) + "\n")
-        out.flush()
+    mcp_stdio.serve("spirula-gui", TOOLS, run_tool)
 
 
 if __name__ == "__main__":

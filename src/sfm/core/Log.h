@@ -59,6 +59,14 @@ enum class Level { Info, Note, Warning, Error, Diag };
 using Sink = std::function<void(Tag, Level, const std::string&)>;
 void set_sink(Sink s);   // {} restores the printing default
 
+// Also handed every line, after the sink or the terminal has it -- a copy for
+// a watcher (app/SfmMonitor.h) that changes neither. Same rules as a sink.
+using Tap = Sink;
+void set_tap(Tap t);
+
+// A line as the default sink prints it, without the newline.
+std::string line(Tag t, Level lv, const std::string& text);
+
 // "[extract] " -- localized, bracketed, and padded so every tag in the current
 // language occupies the same number of terminal columns. By value because the
 // cache behind it is rebuilt when the language changes, and the GUI reads this

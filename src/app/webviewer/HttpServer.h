@@ -1,6 +1,7 @@
 #pragma once
 
-// HttpServer -- minimal dependency-free HTTP/1.0 server for the CLI viewer.
+// HttpServer -- minimal dependency-free HTTP/1.0 server for the web viewer,
+// the SfM monitor and the GUI's automation surface.
 //
 // Deliberately tiny: GET only, serial request handling on one background
 // thread (the viewer protocol is polling + latest-wins, so serialization is
@@ -57,6 +58,12 @@ public:
     // Exact-path routes; unmatched paths get a 404.
     void route(const std::string& path, Handler h) { _routes[path] = std::move(h); }
 
+    // Non-empty: every route wants `token=<t>` in its query and answers 403
+    // without it, and responses drop `Access-Control-Allow-Origin: *`, so a
+    // page on another site can neither drive the server nor read it.
+    void set_token(std::string t) { _token = std::move(t); }
+    static std::string make_token();   // 32 hex digits from std::random_device
+
     // Bind + start the accept loop on a background thread. Throws on bind
     // failure (port in use etc.).
     void start(const std::string& host, int port);
@@ -67,6 +74,7 @@ public:
 private:
     void serve_loop();
     std::map<std::string, Handler> _routes;
+    std::string _token;
     std::atomic<bool> _running{false};
     std::thread _thread;
     intptr_t _listen_fd = -1;

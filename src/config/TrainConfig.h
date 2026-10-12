@@ -133,6 +133,8 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, save_eval_images, false, "run", "advanced", "")                  \
     X(bool, log_performance, false, "run", "advanced", "")                   \
     X(int, viewer_port, 7007, "run", "advanced", "")                         \
+    X(std::string, viewer_host, "0.0.0.0", "run", "advanced", "")            \
+    X(std::string, viewer_token, "", "run", "advanced", "")                  \
     X(bool, disable_viewer, false, "run", "advanced", "")                    \
     X(bool, keep_viewer_alive, true, "run", "advanced", "")                  \
                                                                              \

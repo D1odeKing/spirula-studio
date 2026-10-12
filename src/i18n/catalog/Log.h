@@ -1444,6 +1444,21 @@ SS_MSG(web_viewer_at,
     RU("Веб-просмотрщик: http://localhost:{0}/"),
     TR("Web görüntüleyici: http://localhost:{0}/"));
 
+SS_MSG(web_viewer_at_token,
+    EN("Web viewer at http://localhost:{0}/?token={1}"),
+    JA("ウェブビューア: http://localhost:{0}/?token={1}"),
+    ZH_HANS("网页查看器：http://localhost:{0}/?token={1}"),
+    ZH_HANT("網頁檢視器：http://localhost:{0}/?token={1}"),
+    KO("웹 뷰어: http://localhost:{0}/?token={1}"),
+    DE("Web-Betrachter unter http://localhost:{0}/?token={1}"),
+    FR("Visionneuse web sur http://localhost:{0}/?token={1}"),
+    ES("Visor web en http://localhost:{0}/?token={1}"),
+    PT("Visualizador web em http://localhost:{0}/?token={1}"),
+    IT("Visualizzatore web su http://localhost:{0}/?token={1}"),
+    NL("Webviewer op http://localhost:{0}/?token={1}"),
+    RU("Веб-просмотрщик: http://localhost:{0}/?token={1}"),
+    TR("Web görüntüleyici: http://localhost:{0}/?token={1}"));
+
 // ---- training ------------------------------------------------------------
 //
 // Only the lines that report progress to whoever is watching. The warnings

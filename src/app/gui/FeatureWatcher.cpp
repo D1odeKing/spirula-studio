@@ -3,7 +3,7 @@
 #include "app/gui/FeatureWatcher.h"
 
 #include "app/FrameMask.h"          // app::load_rgb, app::load_stencil
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 
 #include <algorithm>
 #include <chrono>

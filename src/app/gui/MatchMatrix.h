@@ -10,10 +10,10 @@
 // loop-closure switch at all.
 //
 // Fed live from the run's progress directory while matching, and from its
-// matches.bin afterwards (SfmProgress.h).
+// matches.bin afterwards (app/SfmProgress.h).
 
 #include "app/gui/GlLoader.h"
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 
 namespace gui {
 

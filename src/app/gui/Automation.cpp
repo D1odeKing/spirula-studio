@@ -23,7 +23,6 @@
 #include <fstream>
 #include <map>
 #include <mutex>
-#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -669,24 +668,6 @@ HttpResponse handle_screenshot(const HttpRequest& r) {
     return out;
 }
 
-// Every route goes through this: the server is on the loopback interface, but
-// a page in a browser can still reach it, and these are GETs with effects.
-HttpServer::Handler guard(HttpServer::Handler h) {
-    return [h](const HttpRequest& r) -> HttpResponse {
-        if (!st().token.empty() && r.get("token") != st().token)
-            return err_json(403, "bad or missing token=");
-        return h(r);
-    };
-}
-
-std::string make_token() {
-    std::random_device rd;
-    std::uniform_int_distribution<int> d(0, 15);
-    std::string t;
-    for (int i = 0; i < 32; i++) t += "0123456789abcdef"[d(rd)];
-    return t;
-}
-
 }  // namespace
 
 // ===========================================================================
@@ -726,24 +707,27 @@ void arm() {
     ImGui::GetIO().ConfigDebugIgnoreFocusLoss = true;
 
     if (const char* t = spirula::env("GUI_AUTOMATION_TOKEN")) s.token = t;
-    else s.token = make_token();
+    else s.token = HttpServer::make_token();
 
     const char* port_env = spirula::env("GUI_AUTOMATION_PORT");
     const int port = port_env ? std::atoi(port_env) : 7777;
 
-    s.http.route("/ui/state", guard([](const HttpRequest&) {
+    // The server is on the loopback interface, but a page in a browser can
+    // still reach it, and these are GETs with effects.
+    s.http.set_token(s.token);
+    s.http.route("/ui/state", [](const HttpRequest&) {
         return ok_json(state_json());
-    }));
-    s.http.route("/ui/tree", guard(handle_tree));
-    s.http.route("/ui/click", guard(handle_click));
-    s.http.route("/ui/move", guard(handle_move));
-    s.http.route("/ui/drag", guard(handle_drag));
-    s.http.route("/ui/scroll", guard(handle_scroll));
-    s.http.route("/ui/key", guard(handle_key));
-    s.http.route("/ui/text", guard(handle_text));
-    s.http.route("/ui/wait", guard(handle_wait));
-    s.http.route("/ui/drop", guard(handle_drop));
-    s.http.route("/ui/screenshot", guard(handle_screenshot));
+    });
+    s.http.route("/ui/tree", handle_tree);
+    s.http.route("/ui/click", handle_click);
+    s.http.route("/ui/move", handle_move);
+    s.http.route("/ui/drag", handle_drag);
+    s.http.route("/ui/scroll", handle_scroll);
+    s.http.route("/ui/key", handle_key);
+    s.http.route("/ui/text", handle_text);
+    s.http.route("/ui/wait", handle_wait);
+    s.http.route("/ui/drop", handle_drop);
+    s.http.route("/ui/screenshot", handle_screenshot);
 
     try {
         s.http.start("127.0.0.1", port);

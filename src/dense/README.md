@@ -326,7 +326,7 @@ directories. Before publishing, every input is re-hashed. An edit that kept
 sizes and timestamps still fails the run.
 
 The live preview is `dense/progress/model.bin` (live-model protocol version 7,
-`app/gui/SfmProgress.h`) over an append-only points file. Flag bit 16 marks
+`app/SfmProgress.h`) over an append-only points file. Flag bit 16 marks
 legacy raw observations, bit 32 filtered points awaiting fusion. A separate
 file holds the final cloud.
 

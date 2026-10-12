@@ -19,7 +19,7 @@
 #include "app/gui/DatasetPlan.h"
 #include "app/gui/DatasetPrep.h"
 #include "core/Env.h"
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 #ifdef SS_TOOL_SFM
 // Reaches the Vulkan headers, which a build without the module may not have.
 #include "sfm/core/Manifest.h"

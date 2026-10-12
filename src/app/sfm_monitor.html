@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="robots" content="noindex"/>
+<title>Spirula SfM Monitor</title>
+<!-- Served by app/SfmMonitor.cpp; routes and formats: docs/notes/remote-monitoring.md -->
+<style>
+  :root {
+    --bg: #0d0e12;
+    --panel-bg: #13151c;
+    --panel-border: #252836;
+    --accent: #4f8ef7;
+    --text: #c8cad4;
+    --text-dim: #6a6e82;
+    --text-bright: #e8eaf2;
+    --input-bg: #1a1d28;
+    --good: #4dd959;
+    --warn: #f2cc33;
+    --bad: #f24033;
+    --font: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font);
+    font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    background: var(--panel-bg); border-bottom: 1px solid var(--panel-border);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px;
+    padding: 8px 16px; flex-shrink: 0;
+  }
+  header .logo { font-weight: 700; color: var(--text-bright); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; display: inline-block; }
+  .dot.ok { background: var(--good); box-shadow: 0 0 6px #4dd959aa; }
+  .dot.err { background: var(--bad); }
+  .stat b { color: var(--text-bright); font-weight: 600; }
+  .bar { width: 160px; height: 6px; background: var(--panel-border); border-radius: 3px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #banner { display: none; padding: 8px 16px; background: #3a1518; color: #ffb4ad; }
+  main {
+    flex: 1; min-height: 0; display: grid; gap: 1px; background: var(--panel-border);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-areas: "view side" "tabs tabs";
+  }
+  section { background: var(--bg); min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+  .head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    padding: 6px 10px; background: var(--panel-bg); border-bottom: 1px solid var(--panel-border);
+  }
+  .head .title { color: var(--text-bright); font-weight: 600; margin-right: auto; }
+  select, input, button {
+    font: inherit; color: var(--text); background: var(--input-bg);
+    border: 1px solid var(--panel-border); border-radius: 4px; padding: 2px 6px;
+  }
+  button { cursor: pointer; }
+  button.on { border-color: var(--accent); color: var(--text-bright); }
+  #view { grid-area: view; }
+  #canvas-wrap { position: relative; flex: 1; min-height: 0; }
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #gl:active { cursor: grabbing; }
+  #view-note { position: absolute; left: 10px; bottom: 8px; color: var(--text-dim); pointer-events: none; }
+  #side { grid-area: side; overflow: auto; }
+  #pairs-wrap { position: relative; padding: 8px; }
+  #pairs { width: 100%; aspect-ratio: 1; image-rendering: pixelated; background: #080810; display: block; }
+  #pairs-tip { min-height: 1.4em; padding: 0 10px 6px; color: var(--text-dim); }
+  #thumb-box { padding: 8px; display: none; }
+  #thumb-box img { max-width: 100%; display: block; border: 1px solid var(--panel-border); }
+  #thumb-box .cap { margin-top: 4px; color: var(--text-dim); word-break: break-all; }
+  #tabs { grid-area: tabs; }
+  .pane { flex: 1; min-height: 0; overflow: auto; display: none; }
+  .pane.on { display: block; }
+  #log { white-space: pre-wrap; padding: 6px 10px; line-height: 1.45; }
+  #log .warning { color: var(--warn); }
+  #log .error { color: var(--bad); }
+  #log .diag { color: var(--text-dim); }
+  #progressive { white-space: pre; padding: 6px 10px; }
+  .muted { color: var(--text-dim); padding: 8px 10px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 3px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid #1a1c25; }
+  th:first-child, td:first-child { text-align: left; }
+  th { position: sticky; top: 0; background: var(--panel-bg); cursor: pointer; user-select: none; color: var(--text-bright); }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #1a1d28; }
+  tbody tr.sel { background: #1f2a44; }
+  @media (max-width: 900px) {
+    body { overflow: auto; }
+    main {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: 60vh auto 50vh;
+      grid-template-areas: "view" "side" "tabs";
+    }
+  }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">Spirula SfM monitor</span>
+  <span class="dot" id="dot"></span>
+  <span class="stat" id="stage">-</span>
+  <div class="bar"><div id="bar"></div></div>
+  <span class="stat">Placed <b id="placed">-</b></span>
+  <span class="stat">Points <b id="points">-</b></span>
+  <span class="stat">Models <b id="nmodels">-</b></span>
+  <span class="stat">Mean error <b id="mean">-</b></span>
+</header>
+<div id="banner"></div>
+<main>
+  <section id="view">
+    <div class="head">
+      <span class="title">Model</span>
+      <label>Model <select id="model-pick"></select></label>
+      <label>Cameras <select id="cam-color">
+        <option value="plain">plain</option>
+        <option value="error">by mean error</option>
+        <option value="points">by 3D points</option>
+      </select></label>
+      <label>Frustum <input id="cam-size" type="range" min="0.2" max="3" step="0.1" value="1"/></label>
+      <label>Point <input id="pt-size" type="range" min="1" max="6" step="0.5" value="2"/></label>
+      <button id="reset">Reset view</button>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="gl"></canvas>
+      <div id="view-note">drag: orbit, right-drag / shift: pan, wheel: zoom</div>
+    </div>
+  </section>
+  <section id="side">
+    <div class="head"><span class="title">Match map</span><span id="pairs-legend" class="muted" style="padding:0"></span></div>
+    <div id="pairs-wrap"><canvas id="pairs" width="1" height="1"></canvas></div>
+    <div id="pairs-tip"></div>
+    <div id="thumb-box"><img id="thumb" alt=""/><div class="cap" id="thumb-cap"></div></div>
+  </section>
+  <section id="tabs">
+    <div class="head">
+      <button data-tab="log" class="on">Log</button>
+      <button data-tab="images">Images</button>
+      <button data-tab="progressive">Progressive</button>
+      <span style="margin-left:auto"></span>
+      <span id="images-tools" style="display:none">
+        <input id="img-filter" placeholder="filter names" size="14"/>
+        <label><input id="img-unplaced" type="checkbox"/> unplaced only</label>
+      </span>
+      <label id="follow-wrap"><input id="follow" type="checkbox" checked/> follow</label>
+    </div>
+    <div class="pane on" id="pane-log"><div id="log"></div></div>
+    <div class="pane" id="pane-images">
+      <table><thead><tr>
+        <th data-k="name">Image</th><th data-k="placed">Placed</th><th data-k="keypoints">Keypoints</th>
+        <th data-k="points">3D points</th><th data-k="mean">Mean px</th><th data-k="max">Max px</th>
+      </tr></thead><tbody id="img-body"></tbody></table>
+      <div class="muted" id="img-note"></div>
+    </div>
+    <div class="pane" id="pane-progressive"><div id="progressive" class="muted">No progressive report in this workspace.</div></div>
+  </section>
+</main>
+<script>
+"use strict";
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+// sfm::Stage, in order (src/sfm/core/Events.h).
+const STAGES = ["extract features", "match", "map", "merge", "orient", "finish",
+                "load", "select pairs", "seed", "refine", "focal", "progressive"];
+const $ = (id) => document.getElementById(id);
+
+function url(path, params) {
+  const q = new URLSearchParams(params || {});
+  if (TOKEN) q.set("token", TOKEN);
+  const s = q.toString();
+  return path + (s ? "?" + s : "");
+}
+
+async function get(path, params, kind) {
+  const r = await fetch(url(path, params), { cache: "no-store" });
+  if (r.status === 403) { banner("The token is missing or wrong: open the address the run printed, ?token= included."); throw new Error("403"); }
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(path + ": " + r.status);
+  return kind === "bin" ? r.arrayBuffer() : kind === "text" ? r.text() : r.json();
+}
+
+function banner(msg) {
+  const b = $("banner");
+  b.textContent = msg || "";
+  b.style.display = msg ? "block" : "none";
+}
+
+// The GUI's camera colours (app/gui/GuiApp.cpp badness_color): green, yellow,
+// red in twelve steps; the badness itself comes from the server.
+function badColor(b) {
+  if (!(b >= 0)) return [0.6, 0.6, 0.6];
+  const q = Math.round(Math.min(1, b) * 11) / 11;
+  const good = [0.30, 0.85, 0.35], mid = [0.95, 0.80, 0.20], bad = [0.95, 0.25, 0.20];
+  const a = q < 0.5 ? good : mid, c = q < 0.5 ? mid : bad, f = q < 0.5 ? q * 2 : (q - 0.5) * 2;
+  return [0, 1, 2].map((i) => a[i] + (c[i] - a[i]) * f);
+}
+const css = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(",")})`;
+
+// ===========================================================================
+// Model view
+// ===========================================================================
+
+const gl = $("gl").getContext("webgl2", { antialias: true });
+const view = { yaw: 0.6, pitch: 0.35, dist: 2.6, target: [0, 0, 0], up: [0, 0, 1] };
+let model = null;   // parsed /model
+let pointBuf = null, lineBuf = null, nLineVerts = 0, nPoints = 0;
+
+function shader(vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.linkProgram(p);
+  return p;
+}
+
+const progPts = gl && shader(`#version 300 es
+  uniform mat4 uMvp; uniform float uSize;
+  layout(location=0) in vec3 aPos; layout(location=1) in vec3 aCol;
+  out vec3 vCol;
+  void main() { gl_Position = uMvp * vec4(aPos, 1.0); gl_PointSize = uSize; vCol = aCol; }`,
+  `#version 300 es
+  precision mediump float; in vec3 vCol; out vec4 o;
+  void main() { o = vec4(vCol, 1.0); }`);
+
+function mul4(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++)
+    for (let r = 0; r < 4; r++)
+      o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+  return o;
+}
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+// Two axes perpendicular to `up`, so the orbit turns about the model's up.
+function basis() {
+  const u = norm(view.up);
+  const seed = Math.abs(u[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const x = norm(cross(seed, u)), y = cross(u, x);
+  return [x, y, u];
+}
+
+function eyePos() {
+  const [x, y, u] = basis(), cp = Math.cos(view.pitch);
+  const d = [0, 1, 2].map((i) => x[i] * cp * Math.cos(view.yaw) + y[i] * cp * Math.sin(view.yaw) + u[i] * Math.sin(view.pitch));
+  return [0, 1, 2].map((i) => view.target[i] + d[i] * view.dist);
+}
+
+function mvp() {
+  const cv = $("gl"), aspect = cv.width / Math.max(1, cv.height);
+  const eye = eyePos(), f = norm(sub(view.target, eye));
+  const s = norm(cross(f, view.up)), u = cross(s, f);
+  const V = new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0,
+                              -dot(s, eye), -dot(u, eye), dot(f, eye), 1]);
+  const n = 0.01, fa = 100, t = 1 / Math.tan(0.45);
+  const P = new Float32Array([t / aspect, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0]);
+  return mul4(P, V);
+}
+
+// docs/notes/remote-monitoring.md "/model": 12-word header, 23 words a camera,
+// then f32 xyz and u8 rgb per point.
+function parseModel(buf) {
+  const dv = new DataView(buf);
+  if (dv.getUint32(0, true) !== 0x564d5353) throw new Error("not a model");
+  const nc = dv.getUint32(8, true), np = dv.getUint32(12, true);
+  const m = { nImages: dv.getUint32(16, true), flags: dv.getUint32(20, true), scale: dv.getFloat32(24, true),
+              up: [dv.getFloat32(28, true), dv.getFloat32(32, true), dv.getFloat32(36, true)], cams: [] };
+  let o = 48;
+  for (let i = 0; i < nc; i++, o += 92) {
+    const f = (k) => dv.getFloat32(o + 4 + k * 4, true);
+    m.cams.push({ id: dv.getUint32(o, true), c2w: Array.from({ length: 12 }, (_, k) => f(k)),
+                  fx: f(12), fy: f(13), w: f(16), h: f(17), badErr: f(18), badPts: f(19) });
+  }
+  m.xyz = new Float32Array(buf, o, np * 3);
+  m.rgb = new Uint8Array(buf, o + np * 12, np * 3);
+  return m;
+}
+
+function camColor(c) {
+  const mode = $("cam-color").value;
+  if (mode === "error") return badColor(c.badErr);
+  if (mode === "points") return badColor(c.badPts);
+  return [0.31, 0.56, 0.97];
+}
+
+// A pyramid out of the camera's -Z (OpenGL), sized to the image's field of
+// view, with a tick on its +Y edge so an upside-down camera shows.
+function buildLines() {
+  if (!model) return;
+  const n = model.cams.length, size = 0.35 / Math.sqrt(Math.max(4, n)) * parseFloat($("cam-size").value);
+  const v = [];
+  for (const c of model.cams) {
+    const M = c.c2w, col = camColor(c);
+    const P = (x, y, z) => [M[0] * x + M[1] * y + M[2] * z + M[3], M[4] * x + M[5] * y + M[6] * z + M[7], M[8] * x + M[9] * y + M[10] * z + M[11]];
+    const tx = Math.min(2, c.w / 2 / Math.max(1e-3, c.fx)), ty = Math.min(2, c.h / 2 / Math.max(1e-3, c.fy));
+    const o = P(0, 0, 0), k = [P(-tx * size, -ty * size, -size), P(tx * size, -ty * size, -size),
+                               P(tx * size, ty * size, -size), P(-tx * size, ty * size, -size)];
+    const tip = P(0, ty * size * 1.5, -size);
+    const seg = (a, b) => v.push(...a, ...col, ...b, ...col);
+    for (let i = 0; i < 4; i++) { seg(o, k[i]); seg(k[i], k[(i + 1) % 4]); }
+    seg(k[2], tip); seg(tip, k[3]);
+  }
+  nLineVerts = v.length / 6;
+  lineBuf = lineBuf || gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, lineBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+}
+
+function uploadModel(m) {
+  const first = !model;
+  model = m;
+  nPoints = m.xyz.length / 3;
+  const inter = new Float32Array(nPoints * 6);
+  for (let i = 0; i < nPoints; i++) {
+    inter.set(m.xyz.subarray(i * 3, i * 3 + 3), i * 6);
+    for (let k = 0; k < 3; k++) inter[i * 6 + 3 + k] = m.rgb[i * 3 + k] / 255;
+  }
+  pointBuf = pointBuf || gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, inter, gl.STATIC_DRAW);
+  view.up = m.flags & 1 ? [0, 0, 1] : m.flags & 8 ? m.up : [0, 1, 0];
+  if (first) resetView();
+  buildLines();
+  $("view-note").textContent = `${m.cams.length} cameras of ${m.nImages}, ${nPoints} points shown` +
+    (m.flags & 2 ? ", metric" : "") + (m.flags & 4 ? ", provisional" : "") +
+    " -- drag: orbit, right-drag / shift: pan, wheel: zoom";
+  draw();
+}
+
+function resetView() { Object.assign(view, { yaw: 0.6, pitch: 0.35, dist: 2.6, target: [0, 0, 0] }); }
+
+function draw() {
+  if (!gl) return;
+  const cv = $("gl"), dpr = window.devicePixelRatio || 1;
+  const w = Math.round(cv.clientWidth * dpr), h = Math.round(cv.clientHeight * dpr);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  gl.viewport(0, 0, w, h);
+  gl.clearColor(0.03, 0.03, 0.06, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  if (!model) return;
+  gl.useProgram(progPts);
+  gl.uniformMatrix4fv(gl.getUniformLocation(progPts, "uMvp"), false, mvp());
+  gl.uniform1f(gl.getUniformLocation(progPts, "uSize"), parseFloat($("pt-size").value) * dpr);
+  const bind = (buf) => {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+  };
+  if (nPoints) { bind(pointBuf); gl.drawArrays(gl.POINTS, 0, nPoints); }
+  if (nLineVerts) { bind(lineBuf); gl.drawArrays(gl.LINES, 0, nLineVerts); }
+}
+
+(function input() {
+  const cv = $("gl");
+  let drag = null;
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+  cv.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointerup", () => { drag = null; });
+  cv.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.pan) {
+      const eye = eyePos(), f = norm(sub(view.target, eye)), s = norm(cross(f, view.up)), u = cross(s, f);
+      const k = view.dist * 0.0015;
+      view.target = [0, 1, 2].map((i) => view.target[i] - s[i] * dx * k + u[i] * dy * k);
+    } else {
+      view.yaw -= dx * 0.008;
+      view.pitch = Math.max(-1.5, Math.min(1.5, view.pitch + dy * 0.008));
+    }
+    draw();
+  });
+  cv.addEventListener("wheel", (e) => { e.preventDefault(); view.dist = Math.max(0.05, Math.min(50, view.dist * Math.exp(e.deltaY * 0.001))); draw(); }, { passive: false });
+  window.addEventListener("resize", draw);
+  $("reset").onclick = () => { resetView(); draw(); };
+  $("cam-color").onchange = () => { buildLines(); draw(); };
+  $("cam-size").oninput = () => { buildLines(); draw(); };
+  $("pt-size").oninput = draw;
+  $("model-pick").onchange = () => loadModel();
+})();
+
+async function loadModels() {
+  const r = await get("/models");
+  const sizes = (r && r.sizes) || [];
+  const pick = $("model-pick"), cur = pick.value;
+  pick.innerHTML = "";
+  sizes.forEach((n, k) => {
+    const o = document.createElement("option");
+    o.value = k; o.textContent = `${k} (${n} images)`;
+    pick.appendChild(o);
+  });
+  if (cur && cur < sizes.length) pick.value = cur;
+}
+
+async function loadModel() {
+  const buf = await get("/model", { k: $("model-pick").value || 0 }, "bin");
+  if (buf) uploadModel(parseModel(buf));
+}
+
+// ===========================================================================
+// Match map
+// ===========================================================================
+
+let pairs = null;
+
+function parsePairs(buf) {
+  const dv = new DataView(buf), n = dv.getUint32(8, true);
+  const p = { nImages: dv.getUint32(4, true), bins: n, peak: dv.getUint32(12, true), staged: dv.getUint32(16, true) === 1 };
+  p.counts = new Uint32Array(buf, 20, n * n);
+  if (p.staged) {
+    p.planned = new Uint32Array(buf, 20 + n * n * 4, n * n);
+    p.verified = new Uint32Array(buf, 20 + n * n * 8, n * n);
+  }
+  return p;
+}
+
+// Inliers on a log scale against the peak; a planned cell nothing has reached
+// is dim, a verified one that found nothing is dark red.
+function drawPairs() {
+  if (!pairs) return;
+  const n = pairs.bins, cv = $("pairs");
+  cv.width = n; cv.height = n;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(n, n), d = img.data;
+  const lp = Math.log1p(Math.max(1, pairs.peak));
+  for (let i = 0; i < n * n; i++) {
+    let c = [8, 8, 16];
+    const v = pairs.counts[i];
+    if (v > 0) {
+      const t = Math.log1p(v) / lp;
+      c = [40 + 40 * t, 70 + 150 * t, 120 + 135 * t];
+    } else if (pairs.staged && pairs.planned[i] > 0) {
+      c = pairs.verified[i] >= pairs.planned[i] ? [70, 22, 26] : [38, 40, 52];
+    }
+    d.set([c[0], c[1], c[2], 255], i * 4);
+  }
+  ctx.putImageData(img, 0, 0);
+  $("pairs-legend").textContent = `${pairs.nImages} images` + (n < pairs.nImages ? `, ${n} bins` : "") + `, peak ${pairs.peak}`;
+}
+
+$("pairs").addEventListener("mousemove", (e) => {
+  if (!pairs) return;
+  const r = e.target.getBoundingClientRect(), n = pairs.bins;
+  const col = Math.floor((e.clientX - r.left) / r.width * n), row = Math.floor((e.clientY - r.top) / r.height * n);
+  if (row < 0 || col < 0 || row >= n || col >= n) return;
+  const span = (b) => { const a = Math.floor(b * pairs.nImages / n), z = Math.floor((b + 1) * pairs.nImages / n) - 1; return a >= z ? `${a}` : `${a}-${z}`; };
+  const i = row * n + col;
+  let s = `images ${span(row)} x ${span(col)}: inliers ${pairs.counts[i]}`;
+  if (pairs.staged) s += `, pairs verified ${pairs.verified[i]}/${pairs.planned[i]}`;
+  $("pairs-tip").textContent = s;
+});
+
+// ===========================================================================
+// Images, progressive, log
+// ===========================================================================
+
+let images = [], sortKey = "mean", sortDesc = true, selected = null;
+
+function renderImages() {
+  const filter = $("img-filter").value.toLowerCase(), unplaced = $("img-unplaced").checked;
+  const rows = images.filter((s) => (!unplaced || !s.placed) && (!filter || s.name.toLowerCase().includes(filter)));
+  rows.sort((a, b) => {
+    const x = a[sortKey], y = b[sortKey];
+    const c = typeof x === "string" ? x.localeCompare(y) : x - y;
+    return sortDesc ? -c : c;
+  });
+  const shown = rows.slice(0, 3000), body = $("img-body");
+  body.innerHTML = "";
+  for (const s of shown) {
+    const tr = document.createElement("tr");
+    if (s.name === selected) tr.className = "sel";
+    const td = (text, color) => { const e = document.createElement("td"); e.textContent = text; if (color) e.style.color = color; tr.appendChild(e); };
+    td(s.name);
+    td(s.placed ? "yes" : "no", s.placed ? null : "var(--bad)");
+    td(s.keypoints);
+    td(s.points, s.placed ? css(badColor(s.bad_pts)) : null);
+    td(s.placed ? s.mean.toFixed(2) : "-", s.placed ? css(badColor(s.bad_err)) : null);
+    td(s.placed ? s.max.toFixed(2) : "-");
+    tr.onclick = () => showThumb(s.name);
+    body.appendChild(tr);
+  }
+  const placed = images.filter((s) => s.placed).length;
+  $("img-note").textContent = `${placed} of ${images.length} placed` + (rows.length > shown.length ? `; first ${shown.length} of ${rows.length} rows shown` : "");
+}
+
+function showThumb(name) {
+  selected = name;
+  const stem = name.replace(/\.[^./]*$/, "");
+  $("thumb").src = url("/thumb", { name: stem });
+  $("thumb").onerror = () => { $("thumb-cap").textContent = name + " (no thumbnail kept for it)"; };
+  $("thumb-cap").textContent = name;
+  $("thumb-box").style.display = "block";
+  renderImages();
+}
+
+document.querySelectorAll("th[data-k]").forEach((th) => th.onclick = () => {
+  const k = th.dataset.k;
+  if (sortKey === k) sortDesc = !sortDesc; else { sortKey = k; sortDesc = k !== "name"; }
+  renderImages();
+});
+$("img-filter").oninput = renderImages;
+$("img-unplaced").onchange = renderImages;
+
+document.querySelectorAll("button[data-tab]").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("button[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("on", p.id === "pane-" + b.dataset.tab));
+  $("images-tools").style.display = b.dataset.tab === "images" ? "" : "none";
+  $("follow-wrap").style.display = b.dataset.tab === "log" ? "" : "none";
+});
+
+let logNext = 0, logLive = null;
+
+function appendLog(lines) {
+  const pane = $("pane-log"), log = $("log");
+  for (const l of lines) {
+    const e = document.createElement("div");
+    if (l.level !== "info" && l.level !== "note") e.className = l.level;
+    e.textContent = l.text;
+    log.appendChild(e);
+  }
+  while (log.childNodes.length > 5000) log.removeChild(log.firstChild);
+  if ($("follow").checked) pane.scrollTop = pane.scrollHeight;
+}
+
+// ===========================================================================
+// Polling
+// ===========================================================================
+
+const seen = {};
+let busy = false, lastPairs = 0;
+
+function changed(key, value) {
+  if (seen[key] === value) return false;
+  seen[key] = value;
+  return true;
+}
+
+async function poll() {
+  if (busy) return;
+  busy = true;
+  try {
+    const s = await get("/status");
+    $("dot").className = "dot ok";
+    banner("");
+    if (s) {
+      const name = STAGES[s.stage] || `stage ${s.stage}`;
+      $("stage").innerHTML = s.have ? `<b>${s.finished ? (s.partial ? "finished, partial" : "finished") : name}</b>` +
+        (s.total > 0 && !s.finished ? ` ${s.done}/${s.total}` : "") : "waiting for the run";
+      $("bar").style.width = s.finished ? "100%" : s.total > 0 ? `${100 * s.done / s.total}%` : "0";
+      $("placed").textContent = s.have ? `${s.registered}/${s.images}` : "-";
+      $("points").textContent = s.have ? s.points.toLocaleString() : "-";
+      $("nmodels").textContent = s.have ? s.models : "-";
+      $("mean").textContent = s.have && s.mean_reproj > 0 ? s.mean_reproj.toFixed(3) + " px" : "-";
+
+      if (logLive !== s.live) {
+        logLive = s.live;
+        if (!s.live) $("log").innerHTML = '<div class="muted">The log is only served while the run that started this monitor is going (spirula sfm auto --monitor).</div>';
+      }
+      if (s.live && s.log !== logNext) {
+        const l = await get("/log", { since: logNext });
+        if (l) { appendLog(l.lines); logNext = l.next; }
+      }
+      const imgChanged = changed("images", s.stamps.images);
+      if (changed("model", s.stamps.model) || imgChanged) { await loadModels(); await loadModel(); }
+      if (imgChanged) {
+        const r = await get("/images");
+        images = (r && r.images) || [];
+        renderImages();
+      }
+      if (seen.pairs !== s.stamps.pairs && Date.now() - lastPairs > 3000) {
+        seen.pairs = s.stamps.pairs;
+        lastPairs = Date.now();
+        const buf = await get("/pairs", null, "bin");
+        if (buf) { pairs = parsePairs(buf); drawPairs(); }
+      }
+      if (changed("progressive", s.stamps.progressive)) {
+        const t = await get("/progressive", null, "text");
+        $("progressive").textContent = t || "No progressive report in this workspace.";
+        $("progressive").className = t ? "" : "muted";
+      }
+    }
+  } catch (e) {
+    $("dot").className = "dot err";
+    if (e.message !== "403") banner("Lost the monitor: " + e.message + ". Retrying.");
+  } finally {
+    busy = false;
+  }
+}
+
+if (!gl) banner("This browser has no WebGL2; the model view is off, the rest still works.");
+draw();
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@ struct DenseResult {
     double seconds = 0;
 };
 
-// `progress_dir`, when set, receives model.bin snapshots of the cloud (app/gui/SfmProgress.h);
+// `progress_dir`, when set, receives model.bin snapshots of the cloud (app/SfmProgress.h);
 // `perf_dir` the machine and phase counters tools/perf/perf_report.py reads.
 DenseResult run_dense(const std::string& dataset, const spirula::dense::DenseConfig& config,
                        const spirula::dense::DenseProgress& progress = {}, const std::atomic<bool>* cancel = nullptr,

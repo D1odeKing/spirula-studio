@@ -557,32 +557,47 @@ SS_MSG(resume_target,
     RU("Продолжение с: {0}"),
     TR("Şuradan devam ediliyor: {0}"));
 SS_MSG(viewer_at,
-    EN("Viewer at http://0.0.0.0:{0}/ (forward the port for remote boxes: "
+    EN("Viewer at http://{3}:{0}/ (forward the port for remote boxes: "
        "ssh -L {1}:localhost:{2} <host>)"),
-    JA("ビューアは http://0.0.0.0:{0}/ です（リモートのマシンならポートを転送"
+    JA("ビューアは http://{3}:{0}/ です（リモートのマシンならポートを転送"
        "してください: ssh -L {1}:localhost:{2} <host>）"),
-    ZH_HANS("查看器在 http://0.0.0.0:{0}/（远程机器请转发端口："
+    ZH_HANS("查看器在 http://{3}:{0}/（远程机器请转发端口："
             "ssh -L {1}:localhost:{2} <host>）"),
-    ZH_HANT("檢視器在 http://0.0.0.0:{0}/（遠端機器請轉送連接埠："
+    ZH_HANT("檢視器在 http://{3}:{0}/（遠端機器請轉送連接埠："
             "ssh -L {1}:localhost:{2} <host>）"),
-    KO("뷰어 주소는 http://0.0.0.0:{0}/ 입니다(원격 장비라면 포트를 전달하세요: "
+    KO("뷰어 주소는 http://{3}:{0}/ 입니다(원격 장비라면 포트를 전달하세요: "
        "ssh -L {1}:localhost:{2} <host>)"),
-    DE("Betrachter unter http://0.0.0.0:{0}/ (bei entfernten Rechnern den Port "
+    DE("Betrachter unter http://{3}:{0}/ (bei entfernten Rechnern den Port "
        "weiterleiten: ssh -L {1}:localhost:{2} <host>)"),
-    FR("Visionneuse sur http://0.0.0.0:{0}/ (sur une machine distante, "
+    FR("Visionneuse sur http://{3}:{0}/ (sur une machine distante, "
        "rediriger le port : ssh -L {1}:localhost:{2} <host>)"),
-    ES("Visor en http://0.0.0.0:{0}/ (en máquinas remotas, redirige el puerto: "
+    ES("Visor en http://{3}:{0}/ (en máquinas remotas, redirige el puerto: "
        "ssh -L {1}:localhost:{2} <host>)"),
-    PT("Visualizador em http://0.0.0.0:{0}/ (em máquinas remotas, encaminhe a "
+    PT("Visualizador em http://{3}:{0}/ (em máquinas remotas, encaminhe a "
        "porta: ssh -L {1}:localhost:{2} <host>)"),
-    IT("Visualizzatore su http://0.0.0.0:{0}/ (su macchine remote inoltra la "
+    IT("Visualizzatore su http://{3}:{0}/ (su macchine remote inoltra la "
        "porta: ssh -L {1}:localhost:{2} <host>)"),
-    NL("Viewer op http://0.0.0.0:{0}/ (op machines op afstand: stuur de poort "
+    NL("Viewer op http://{3}:{0}/ (op machines op afstand: stuur de poort "
        "door met ssh -L {1}:localhost:{2} <host>)"),
-    RU("Просмотр по адресу http://0.0.0.0:{0}/ (для удалённых машин пробросьте "
+    RU("Просмотр по адресу http://{3}:{0}/ (для удалённых машин пробросьте "
        "порт: ssh -L {1}:localhost:{2} <host>)"),
-    TR("Görüntüleyici http://0.0.0.0:{0}/ adresinde (uzak makinelerde bağlantı "
+    TR("Görüntüleyici http://{3}:{0}/ adresinde (uzak makinelerde bağlantı "
        "noktasını yönlendirin: ssh -L {1}:localhost:{2} <host>)"));
+
+SS_MSG(viewer_with_token,
+    EN("With its token: http://localhost:{0}/?token={1}"),
+    JA("トークン付きのアドレス: http://localhost:{0}/?token={1}"),
+    ZH_HANS("带令牌的地址：http://localhost:{0}/?token={1}"),
+    ZH_HANT("帶權杖的位址：http://localhost:{0}/?token={1}"),
+    KO("토큰을 붙인 주소: http://localhost:{0}/?token={1}"),
+    DE("Mit Token: http://localhost:{0}/?token={1}"),
+    FR("Avec son jeton : http://localhost:{0}/?token={1}"),
+    ES("Con su token: http://localhost:{0}/?token={1}"),
+    PT("Com o token: http://localhost:{0}/?token={1}"),
+    IT("Con il token: http://localhost:{0}/?token={1}"),
+    NL("Met het token: http://localhost:{0}/?token={1}"),
+    RU("С токеном: http://localhost:{0}/?token={1}"),
+    TR("Belirteçle: http://localhost:{0}/?token={1}"));
 // {0} and {2} are already padded to a fixed width by the caller, so the
 // numbers stay in a column while the words around them change length.
 // {4}|{5} is elapsed|remaining, in the same words as the GUI status strip.

@@ -1,6 +1,6 @@
 // SfmProgress.cpp -- see SfmProgress.h.
 
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 
 #include "core/CameraModel.h"
 
@@ -322,6 +322,51 @@ bool read_image_stats(const std::string& path, int64_t& mtime, std::vector<Image
     out = std::move(v);
     mtime = stamp;
     return true;
+}
+
+namespace {
+
+// A 360 image covers about fourteen times a 64-degree lens's view, so 3D
+// points are only comparable within one camera.
+std::string camera_group(const std::string& name) {
+    const size_t slash = name.rfind('/');
+    return slash == std::string::npos ? std::string() : name.substr(0, slash);
+}
+
+// --max-error's default: the run's own final gate when nothing sets it.
+constexpr float kDefaultMaxErrorPx = 3.0f;
+
+// A gate bounds every observation; an image's mean sat near a third of it in
+// the 260-image runs (1.5 px at 20, 0.9 px at 3). Progressive: red at a third
+// of the first attempt's gate, green at a third of the last's.
+constexpr float kMeanPerGate = 1.0f / 3.0f;
+
+}  // namespace
+
+FitScale fit_scale(const std::vector<ImageStat>& stats, bool progressive,
+                   float error_start, float error_end) {
+    FitScale f;
+    std::map<std::string, std::vector<uint32_t>> groups;
+    for (const ImageStat& s : stats)
+        if (s.placed) groups[camera_group(s.name)].push_back(s.points);
+    for (auto& [g, v] : groups) {
+        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        f.median_points[g] = (float)v[v.size() / 2];
+    }
+    const float end = error_end > 0 ? error_end : kDefaultMaxErrorPx;
+    f.green_px = (progressive ? end : 0.0f) * kMeanPerGate;
+    f.red_px = (progressive ? std::max(error_start, end * 1.5f) : end) * kMeanPerGate;
+    return f;
+}
+
+float image_badness(const ImageStat& s, bool by_error, const FitScale& f) {
+    if (by_error)
+        return std::clamp((s.mean_error - f.green_px) / std::max(f.red_px - f.green_px, 1e-3f),
+                          0.0f, 1.0f);
+    const auto it = f.median_points.find(camera_group(s.name));
+    const float median = it == f.median_points.end() ? 1.0f : it->second;
+    const float n = (float)std::max<uint32_t>(s.points, 1);
+    return std::clamp(std::log2(std::max(median, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
 }
 
 namespace {

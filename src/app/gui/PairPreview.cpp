@@ -4,7 +4,7 @@
 
 #include "app/gui/FeatureOverlay.h"
 #include "app/gui/Layout.h"
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 #include "app/gui/Ui.h"
 #include "i18n/catalog/Dataset.h"
 

@@ -51,6 +51,9 @@ tools/guictl.py             drive the GUI from a script -- list the widgets on
                               screen, click them, read the framebuffer back.
                               tools/gui_mcp.py is the same surface as an MCP
                               server; docs/notes/gui-automation.md
+tools/monitor_mcp.py        a headless SfM run and the training viewer as MCP
+                              tools (both share tools/mcp_stdio.py);
+                              docs/notes/remote-monitoring.md
 reference/scripts/          dataset preprocessing CLI tools (Python, standalone,
                               run by hand; nothing in the build uses them)
 reference/python/           hand-run tools on NO code path: eval_lpips.py,
@@ -198,6 +201,10 @@ src/
 │   ├── webviewer/          HTTP server + render worker + viewer.html (the ONE
 │   │                         browser client, embedded into the engine library
 │   │                         so the CLI and the GUI serve the same bytes)
+│   ├── SfmProgress.{h,cpp} the reader for a run's --progress-dir snapshots, which
+│   │                         the GUI and SfmMonitor.{h,cpp} (`sfm auto
+│   │                         --monitor`, a browser view of a headless run) share
+│   │                         -- docs/notes/remote-monitoring.md
 │   └── TrainerCore.{h,cpp} the ONE training driver: config -> dataset ->
 │                             seeding -> step loop -> eval. Both the CLI and
 │                             the GUI drive this; it lives in the engine

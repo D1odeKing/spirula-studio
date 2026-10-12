@@ -205,7 +205,7 @@ accepted reference result to a buffered disk checkpoint. Every 1.5 seconds it
 flushes that file and atomically publishes `model.bin` metadata: the registered
 cameras, checkpoint filename, and committed point count. The GUI reads exactly
 that immutable prefix; it never reads points still being written. This is
-version 7 of the shared live-model protocol (`app/gui/SfmProgress.h`); existing
+version 7 of the shared live-model protocol (`app/SfmProgress.h`); existing
 SfM and dense snapshots through version 6 remain readable. Camera records preserve the
 parser's lens model, distortion tier, intrinsics and all eight distortion
 coefficients, so fisheye and panorama wireframes use the shared camera math.

@@ -10,7 +10,7 @@
 // learned frontend's process-wide nn device is shut down on the way out, so
 // the GPU is handed back when this returns, cancelled or not.
 
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 
 #include <atomic>
 #include <functional>

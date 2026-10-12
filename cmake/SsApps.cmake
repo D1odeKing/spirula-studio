@@ -136,6 +136,18 @@ if(SS_BUILD_SFM)
          ${SS_SRC}/app/cli/sfm_ba.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_SFM=1)
     list(APPEND SS_TOOL_LIBS ss_sfm)
+
+    # `spirula sfm auto --monitor` / `spirula sfm monitor`: a browser view of
+    # the run (docs/notes/remote-monitoring.md). Not in SS_SEPARATE_TOOLS'
+    # spirula-sfm, which links no engine library and so no HttpServer.
+    ss_embed_file(
+        ${SS_SRC}/app/sfm_monitor.html
+        ${CMAKE_BINARY_DIR}/app_generated/sfm_monitor_html.h
+        SfmMonitorHtml)
+    list(APPEND SS_TOOL_SOURCES
+         ${SS_SRC}/app/SfmMonitor.cpp
+         ${SS_SRC}/app/SfmProgress.cpp)
+    list(APPEND SS_TOOL_DEFS SS_SFM_MONITOR=1)
 endif()
 
 if(SS_BUILD_SAM)
@@ -260,7 +272,8 @@ if(SS_BUILD_GUI)
     file(GLOB SS_GUI_SOURCES CONFIGURE_DEPENDS
         ${SS_SRC}/app/gui/*.cpp ${SS_SRC}/app/gui/edit/*.cpp
         ${SS_SRC}/app/gui/render/*.cpp ${SS_SRC}/app/gui/mask/*.cpp)
-    list(APPEND SS_TOOL_SOURCES ${SS_GUI_SOURCES} ${SS_SRC}/app/FfmpegVideo.cpp)
+    list(APPEND SS_TOOL_SOURCES ${SS_GUI_SOURCES} ${SS_SRC}/app/FfmpegVideo.cpp
+                                ${SS_SRC}/app/SfmProgress.cpp)
     list(APPEND SS_TOOL_DEFS SS_TOOL_GUI=1)
     list(APPEND SS_TOOL_LIBS imgui_glfw OpenGL::GL)
 
@@ -397,6 +410,21 @@ if(SS_BUILD_SAM)
     target_link_libraries(dense_camera_test PRIVATE ss_nn)
 endif()
 
+# The SfM monitor over a real socket: the token, the JSON, the model layout the
+# page parses, and a thumbnail name that tries to climb out of thumbs/.
+if(SS_BUILD_SFM)
+    add_executable(sfm_monitor_test
+        ${SS_SRC}/app/tests/sfm_monitor_test.cpp
+        ${SS_SRC}/app/SfmMonitor.cpp
+        ${SS_SRC}/app/SfmProgress.cpp)
+    ss_configure_app(sfm_monitor_test)
+    target_compile_definitions(sfm_monitor_test PRIVATE SS_TOOL_SFM=1)
+    target_link_libraries(sfm_monitor_test PRIVATE ss_sfm)
+    if(WIN32)
+        target_link_libraries(sfm_monitor_test PRIVATE ws2_32)
+    endif()
+endif()
+
 # .cube parsing and the tetrahedral map: a wrong colour is silent too.
 add_executable(cube_lut_test
     ${SS_SRC}/app/tests/cube_lut_test.cpp
@@ -469,7 +497,7 @@ if(SS_BUILD_GUI)
 
     add_executable(dense_live_preview_test
         ${SS_SRC}/app/gui/tests/dense_live_preview_test.cpp
-        ${SS_SRC}/app/gui/SfmProgress.cpp
+        ${SS_SRC}/app/SfmProgress.cpp
         ${SS_SRC}/app/gui/PreviewRenderer.cpp
         ${SS_SRC}/app/gui/GlLoader.cpp)
     ss_configure_app(dense_live_preview_test)

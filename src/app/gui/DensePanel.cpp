@@ -1,6 +1,6 @@
 #include "app/gui/GuiApp.h"
 
-#include "app/gui/SfmProgress.h"
+#include "app/SfmProgress.h"
 #include "app/gui/Ui.h"
 #include "dense/Artifact.h"
 #include "dense/ConfigFields.h"

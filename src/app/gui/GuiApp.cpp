@@ -6504,45 +6504,6 @@ void GuiApp::poll_sfm_progress() {
 
 namespace {
 
-// What the colours are measured against: the run's own error gates, and the
-// placed images' median 3D points per folder -- one camera, by the run's grouping.
-struct FitScale {
-    float green_px = 0, red_px = 3;
-    std::map<std::string, float> median_points;
-};
-
-// A 360 image covers about fourteen times a 64-degree lens's view, so 3D
-// points are only comparable within one camera.
-std::string camera_group(const std::string& name) {
-    const size_t slash = name.rfind('/');
-    return slash == std::string::npos ? std::string() : name.substr(0, slash);
-}
-
-// 0 for an image that fits the model well, 1 for one that barely does: by its
-// mean reprojection error against the gates, or by its 3D points against the
-// median, an eighth of it being red.
-float image_badness(const ImageStat& s, int by, const FitScale& f) {
-    if (by == 1)
-        return std::clamp((s.mean_error - f.green_px) / std::max(f.red_px - f.green_px, 1e-3f),
-                          0.0f, 1.0f);
-    const auto it = f.median_points.find(camera_group(s.name));
-    const float median = it == f.median_points.end() ? 1.0f : it->second;
-    const float n = (float)std::max<uint32_t>(s.points, 1);
-    return std::clamp(std::log2(std::max(median, 1.0f) / n) / 3.0f, 0.0f, 1.0f);
-}
-
-std::map<std::string, float> median_points(const std::vector<ImageStat>& stats) {
-    std::map<std::string, std::vector<uint32_t>> groups;
-    for (const ImageStat& s : stats)
-        if (s.placed) groups[camera_group(s.name)].push_back(s.points);
-    std::map<std::string, float> out;
-    for (auto& [g, v] : groups) {
-        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
-        out[g] = (float)v[v.size() / 2];
-    }
-    return out;
-}
-
 // Green through yellow to red in twelve steps: the renderer draws the cameras
 // one colour at a time.
 ImVec4 badness_color(float b) {
@@ -6555,22 +6516,8 @@ ImVec4 badness_color(float b) {
     return ImVec4(a.x + (c.x - a.x) * f, a.y + (c.y - a.y) * f, a.z + (c.z - a.z) * f, 1);
 }
 
-// --max-error's default: the run's own final gate when nothing sets it.
-constexpr float kDefaultMaxErrorPx = 3.0f;
-
-// A gate bounds every observation; an image's mean sat near a third of it in
-// the 260-image runs (1.5 px at 20, 0.9 px at 3). Progressive: red at a third
-// of the first attempt's gate, green at a third of the last's.
-constexpr float kMeanPerGate = 1.0f / 3.0f;
-
 FitScale fit_scale(const std::vector<ImageStat>& stats, const SfmJob& j) {
-    FitScale f;
-    f.median_points = median_points(stats);
-    const float end = j.progressive_error_end > 0 ? j.progressive_error_end : kDefaultMaxErrorPx;
-    f.green_px = (j.progressive ? end : 0.0f) * kMeanPerGate;
-    f.red_px = (j.progressive ? std::max(j.progressive_error_start, end * 1.5f) : end) *
-               kMeanPerGate;
-    return f;
+    return gui::fit_scale(stats, j.progressive, j.progressive_error_start, j.progressive_error_end);
 }
 
 }  // namespace
@@ -6587,7 +6534,7 @@ void GuiApp::attach_live_model() {
         for (size_t i = 0; i < ids.size(); i++) {
             const auto it = by_id.find(ids[i]);
             const ImVec4 c = it == by_id.end() ? ImVec4(0.6f, 0.6f, 0.6f, 1)
-                                               : badness_color(image_badness(*it->second, _camera_color, scale));
+                                               : badness_color(image_badness(*it->second, _camera_color == 1, scale));
             rgb[i * 3] = c.x;
             rgb[i * 3 + 1] = c.y;
             rgb[i * 3 + 2] = c.z;
@@ -6728,7 +6675,7 @@ void GuiApp::draw_image_list(float height) {
                 else ui::TextColored(kDim, dmsg::images_not_placed);
                 ImGui::TableNextColumn();
                 if (s.placed)
-                    ui::TextColoredRaw(badness_color(image_badness(s, 2, scale)),
+                    ui::TextColoredRaw(badness_color(image_badness(s, false, scale)),
                                        std::to_string(s.points));
                 ImGui::TableNextColumn();
                 ui::TextRaw(std::to_string(s.keypoints));
@@ -6736,7 +6683,7 @@ void GuiApp::draw_image_list(float height) {
                 char num[32];
                 if (s.placed && s.points) {
                     std::snprintf(num, sizeof num, "%.2f", s.mean_error);
-                    ui::TextColoredRaw(badness_color(image_badness(s, 1, scale)), num);
+                    ui::TextColoredRaw(badness_color(image_badness(s, true, scale)), num);
                 }
                 ImGui::TableNextColumn();
                 if (s.placed && s.points) {

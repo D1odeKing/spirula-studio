@@ -139,7 +139,9 @@ reports both and the scale between them.
 `tools/gui_mcp.py` wraps the same endpoints as MCP tools over stdio, in the
 standard library alone — no dependency, and MCP over stdio is newline-delimited
 JSON-RPC. `.mcp.json` at the repo root registers it for Claude Code; anything
-else wants `python3 tools/gui_mcp.py` as the command.
+else wants `python3 tools/gui_mcp.py` as the command. The stdio loop itself is
+`tools/mcp_stdio.py`, shared with the headless-run server
+(`tools/monitor_mcp.py`, [remote-monitoring.md](remote-monitoring.md)).
 
 The reason to prefer it over the shell client is `gui_screenshot`, which
 returns the picture as an image rather than as a path to one. It downscales to

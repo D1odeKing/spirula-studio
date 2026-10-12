@@ -14,7 +14,7 @@
 
 #include "app/gui/GlLoader.h"
 #include "app/gui/Picture.h"
-#include "app/gui/SfmProgress.h"    // KeyPoint2D
+#include "app/SfmProgress.h"    // KeyPoint2D
 
 #include <cstddef>
 #include <chrono>

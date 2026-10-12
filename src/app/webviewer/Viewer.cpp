@@ -201,7 +201,7 @@ ViewerServer::~ViewerServer() { stop(); }
 
 void ViewerServer::start(const std::string& host, int port,
                          ViewerRenderConfig cfg, ViewerHooks hooks,
-                         const PostSplitCameras& post) {
+                         const PostSplitCameras& post, const std::string& token) {
     Impl& im = *_impl;
     im.hooks = hooks;
 
@@ -217,6 +217,7 @@ void ViewerServer::start(const std::string& host, int port,
     im.buffer_keys = im.worker.buffer_keys();
     im.started = true;
 
+    im.http.set_token(token);
     im.http.route("/",           [&im](const HttpRequest&) { return im.handle_index(); });
     im.http.route("/index.html", [&im](const HttpRequest&) { return im.handle_index(); });
     im.http.route("/render",     [&im](const HttpRequest& r) { return im.handle_render(r); });

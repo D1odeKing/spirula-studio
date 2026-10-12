@@ -3,6 +3,10 @@
     "spirula-gui": {
       "command": "python3",
       "args": ["tools/gui_mcp.py"]
+    },
+    "spirula-monitor": {
+      "command": "python3",
+      "args": ["tools/monitor_mcp.py"]
     }
   }
 }

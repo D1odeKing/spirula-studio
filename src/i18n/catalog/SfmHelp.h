@@ -2041,6 +2041,233 @@ SS_MSG(opt_sequence,
        "bu yüzden bir rigin lensleri tek bir dizidir (cam0,cam1). Birden çok dizi "
        "için yineleyin; `.` görüntü dizininin kendisidir."));
 
+SS_MSG(opt_monitor,
+    EN("Serve a browser view of the run on PORT while it goes: where it is, the model as it "
+       "grows, the match map, each image's fit and the log. Writes the snapshots to "
+       "WORKSPACE/.progress unless --progress-dir names a place. Listens on 127.0.0.1 behind a "
+       "random token, both printed with the address; from another machine, tunnel the port "
+       "over SSH."),
+    JA("実行中の様子を PORT でブラウザに表示します。進み具合、育っていくモデル、マッチングの表、"
+       "画像ごとの当てはまり、ログが見られます。--progress-dir の指定がなければ "
+       "WORKSPACE/.progress に書き出します。127.0.0.1 でランダムなトークン付きで待ち受け、"
+       "アドレスと一緒に表示します。別のマシンからは SSH でポートを転送してください。"),
+    ZH_HANS("运行期间在 PORT 上提供浏览器视图：进度、逐步成形的模型、匹配表、每张图像的拟合"
+            "情况和日志。若未用 --progress-dir 指定位置，快照写入 WORKSPACE/.progress。监听 "
+            "127.0.0.1 并带随机令牌，两者随地址一起打印；从另一台机器访问时，请用 SSH 转发该端口。"),
+    ZH_HANT("執行期間在 PORT 上提供瀏覽器檢視：進度、逐步成形的模型、匹配表、每張影像的擬合"
+            "情況和日誌。若未用 --progress-dir 指定位置，快照寫入 WORKSPACE/.progress。監聽 "
+            "127.0.0.1 並帶隨機權杖，兩者隨位址一起列印；從另一台機器存取時，請用 SSH 轉送該"
+            "連接埠。"),
+    KO("실행 중인 상태를 PORT 에서 브라우저로 보여 줍니다. 진행 상황, 자라나는 모델, 매칭 표, "
+       "이미지별 맞춤 정도와 로그를 볼 수 있습니다. --progress-dir 로 위치를 정하지 않으면 "
+       "스냅샷을 WORKSPACE/.progress 에 씁니다. 127.0.0.1 에서 무작위 토큰과 함께 대기하며, "
+       "둘 다 주소와 함께 출력합니다. 다른 장비에서는 SSH 로 포트를 전달하십시오."),
+    DE("Während des Laufs eine Browseransicht auf PORT bereitstellen: Stand, das wachsende "
+       "Modell, die Paarmatrix, die Passung jedes Bildes und das Protokoll. Schreibt die "
+       "Momentaufnahmen nach WORKSPACE/.progress, wenn --progress-dir keinen Ort nennt. Lauscht "
+       "auf 127.0.0.1 hinter einem zufälligen Token; beides wird mit der Adresse ausgegeben. "
+       "Von einem anderen Rechner den Port per SSH weiterleiten."),
+    FR("Servir sur PORT une vue du calcul dans le navigateur pendant qu'il tourne : où il en "
+       "est, le modèle qui grandit, la carte des appariements, l'ajustement de chaque image et "
+       "le journal. Écrit les instantanés dans WORKSPACE/.progress si --progress-dir n'indique "
+       "pas d'endroit. Écoute sur 127.0.0.1 derrière un jeton aléatoire, tous deux affichés avec "
+       "l'adresse ; depuis une autre machine, rediriger le port par SSH."),
+    ES("Servir en PORT una vista del proceso en el navegador mientras avanza: en qué punto está, "
+       "el modelo que crece, el mapa de emparejamientos, el ajuste de cada imagen y el registro. "
+       "Escribe las instantáneas en WORKSPACE/.progress si --progress-dir no indica un lugar. "
+       "Escucha en 127.0.0.1 tras un token aleatorio, ambos impresos con la dirección; desde "
+       "otra máquina, redirija el puerto por SSH."),
+    PT("Servir em PORT uma visão da execução no navegador enquanto ela anda: em que ponto está, "
+       "o modelo crescendo, o mapa de correspondências, o ajuste de cada imagem e o registro. "
+       "Grava os instantâneos em WORKSPACE/.progress se --progress-dir não indicar um lugar. "
+       "Escuta em 127.0.0.1 atrás de um token aleatório, ambos impressos com o endereço; de "
+       "outra máquina, encaminhe a porta por SSH."),
+    IT("Servire su PORT una vista dell'esecuzione nel browser mentre procede: a che punto è, il "
+       "modello che cresce, la mappa delle corrispondenze, l'adattamento di ogni immagine e il "
+       "registro. Scrive le istantanee in WORKSPACE/.progress se --progress-dir non indica un "
+       "luogo. Ascolta su 127.0.0.1 dietro un token casuale, entrambi stampati con "
+       "l'indirizzo; da un'altra macchina, inoltrare la porta via SSH."),
+    NL("Tijdens de run een browserweergave op PORT aanbieden: waar hij is, het groeiende model, "
+       "de koppelingskaart, hoe goed elk beeld past en het logboek. Schrijft de momentopnamen "
+       "naar WORKSPACE/.progress als --progress-dir geen plek noemt. Luistert op 127.0.0.1 "
+       "achter een willekeurig token, beide afgedrukt met het adres; stuur vanaf een andere "
+       "machine de poort door via SSH."),
+    RU("Показывать ход запуска в браузере на порту PORT: где он сейчас, растущую модель, карту "
+       "сопоставлений, насколько хорошо легло каждое изображение и журнал. Пишет снимки в "
+       "WORKSPACE/.progress, если --progress-dir не указывает место. Слушает 127.0.0.1 за "
+       "случайным токеном; оба печатаются вместе с адресом. С другой машины пробросьте порт "
+       "через SSH."),
+    TR("Çalışma sürerken PORT üzerinde bir tarayıcı görünümü sunar: nerede olduğu, büyüyen "
+       "model, eşleşme haritası, her görüntünün uyumu ve günlük. --progress-dir bir yer "
+       "belirtmezse anlık görüntüleri WORKSPACE/.progress içine yazar. 127.0.0.1 üzerinde "
+       "rastgele bir belirteçle dinler; ikisi de adresle birlikte yazdırılır. Başka bir "
+       "makineden bağlantı noktasını SSH ile yönlendirin."));
+
+SS_MSG(opt_monitor_host,
+    EN("Address the monitor listens on. 0.0.0.0 opens it to the network, where the token is "
+       "all that guards it; an SSH tunnel to 127.0.0.1 is the safer way in."),
+    JA("モニターが待ち受けるアドレスです。0.0.0.0 にするとネットワークに公開され、守るものは"
+       "トークンだけになります。127.0.0.1 への SSH トンネルのほうが安全です。"),
+    ZH_HANS("监视页面监听的地址。0.0.0.0 会把它开放到网络上，届时只有令牌在保护它；通过 SSH "
+            "隧道连到 127.0.0.1 更安全。"),
+    ZH_HANT("監視頁面監聽的位址。0.0.0.0 會把它開放到網路上，屆時只有權杖在保護它；透過 SSH "
+            "通道連到 127.0.0.1 更安全。"),
+    KO("모니터가 대기하는 주소입니다. 0.0.0.0 이면 네트워크에 열리고 토큰만이 그것을 "
+       "지킵니다. 127.0.0.1 로 가는 SSH 터널이 더 안전합니다."),
+    DE("Adresse, auf der der Monitor lauscht. 0.0.0.0 öffnet ihn ins Netz, wo ihn nur das Token "
+       "schützt; ein SSH-Tunnel zu 127.0.0.1 ist der sicherere Weg."),
+    FR("Adresse sur laquelle écoute le moniteur. 0.0.0.0 l'ouvre au réseau, où seul le jeton le "
+       "protège ; un tunnel SSH vers 127.0.0.1 est l'accès le plus sûr."),
+    ES("Dirección en la que escucha el monitor. 0.0.0.0 lo abre a la red, donde solo el token lo "
+       "protege; un túnel SSH a 127.0.0.1 es la vía más segura."),
+    PT("Endereço em que o monitor escuta. 0.0.0.0 o abre para a rede, onde só o token o protege; "
+       "um túnel SSH para 127.0.0.1 é o caminho mais seguro."),
+    IT("Indirizzo su cui ascolta il monitor. 0.0.0.0 lo apre alla rete, dove solo il token lo "
+       "protegge; un tunnel SSH verso 127.0.0.1 è la via più sicura."),
+    NL("Adres waarop de monitor luistert. 0.0.0.0 stelt hem open voor het netwerk, waar alleen "
+       "het token hem beschermt; een SSH-tunnel naar 127.0.0.1 is de veiligere weg."),
+    RU("Адрес, который слушает монитор. 0.0.0.0 открывает его в сеть, где его защищает только "
+       "токен; SSH-туннель к 127.0.0.1 надёжнее."),
+    TR("İzleme sayfasının dinlediği adres. 0.0.0.0 onu ağa açar ve orada onu yalnızca belirteç "
+       "korur; 127.0.0.1'e bir SSH tüneli daha güvenli yoldur."));
+
+SS_MSG(opt_monitor_token,
+    EN("The token the monitor's address must carry (?token=). Default: a random one, printed "
+       "with the address."),
+    JA("モニターのアドレスに付けるトークン (?token=) です。既定ではランダムに作り、アドレスと"
+       "一緒に表示します。"),
+    ZH_HANS("监视页面地址必须带上的令牌（?token=）。默认随机生成，并随地址一起打印。"),
+    ZH_HANT("監視頁面位址必須帶上的權杖（?token=）。預設隨機產生，並隨位址一起列印。"),
+    KO("모니터 주소에 붙여야 하는 토큰(?token=)입니다. 기본값은 무작위로 만들어 주소와 함께 "
+       "출력합니다."),
+    DE("Das Token, das die Adresse des Monitors tragen muss (?token=). Standard: ein zufälliges, "
+       "mit der Adresse ausgegeben."),
+    FR("Le jeton que l'adresse du moniteur doit porter (?token=). Par défaut : un jeton "
+       "aléatoire, affiché avec l'adresse."),
+    ES("El token que debe llevar la dirección del monitor (?token=). Por defecto: uno aleatorio, "
+       "impreso con la dirección."),
+    PT("O token que o endereço do monitor deve levar (?token=). Padrão: um aleatório, impresso "
+       "com o endereço."),
+    IT("Il token che l'indirizzo del monitor deve portare (?token=). Predefinito: uno casuale, "
+       "stampato con l'indirizzo."),
+    NL("Het token dat het adres van de monitor moet dragen (?token=). Standaard: een willekeurig "
+       "token, afgedrukt met het adres."),
+    RU("Токен, который должен быть в адресе монитора (?token=). По умолчанию случайный, "
+       "печатается вместе с адресом."),
+    TR("İzleme sayfasının adresinin taşıması gereken belirteç (?token=). Varsayılan: rastgele bir "
+       "tane, adresle birlikte yazdırılır."));
+
+SS_MSG(opt_monitor_port,
+    EN("Port to listen on."),
+    JA("待ち受けるポートです。"),
+    ZH_HANS("监听的端口。"),
+    ZH_HANT("監聽的連接埠。"),
+    KO("대기할 포트입니다."),
+    DE("Port, auf dem gelauscht wird."),
+    FR("Port d'écoute."),
+    ES("Puerto en el que escuchar."),
+    PT("Porta em que escutar."),
+    IT("Porta su cui ascoltare."),
+    NL("Poort om op te luisteren."),
+    RU("Порт для прослушивания."),
+    TR("Dinlenecek bağlantı noktası."));
+
+SS_MSG(sum_monitor,
+    EN("serve a browser view of a run, going or finished"),
+    JA("実行中または完了した処理をブラウザで表示します"),
+    ZH_HANS("在浏览器中查看一次运行，无论进行中还是已完成"),
+    ZH_HANT("在瀏覽器中檢視一次執行，無論進行中還是已完成"),
+    KO("진행 중이거나 끝난 실행을 브라우저로 보여 줍니다"),
+    DE("einen laufenden oder fertigen Lauf im Browser zeigen"),
+    FR("montrer dans le navigateur un calcul en cours ou terminé"),
+    ES("mostrar en el navegador una ejecución en curso o terminada"),
+    PT("mostrar no navegador uma execução em andamento ou terminada"),
+    IT("mostrare nel browser un'esecuzione in corso o terminata"),
+    NL("een lopende of afgeronde run in de browser tonen"),
+    RU("показать в браузере идущий или завершённый запуск"),
+    TR("süren ya da bitmiş bir çalışmayı tarayıcıda göster"));
+
+SS_MSG(desc_monitor_1,
+    EN("Serves the page `auto --monitor` serves, for a workspace or a progress directory the "
+       "monitor did not start with: a run another process started with --progress-dir, or a "
+       "finished workspace copied back from the machine it ran on. It reads the files as they "
+       "are written and serves until Ctrl-C."),
+    JA("`auto --monitor` と同じページを、モニターと一緒に始まったのではないワークスペースや"
+       "進捗ディレクトリについて表示します。別のプロセスが --progress-dir 付きで始めた実行や、"
+       "実行したマシンから持ち帰った完了済みのワークスペースが対象です。書き込まれるファイルを"
+       "そのまま読み、Ctrl-C まで表示し続けます。"),
+    ZH_HANS("为并非随监视页面一起启动的工作区或进度目录提供与 `auto --monitor` 相同的页面："
+            "另一个进程用 --progress-dir 启动的运行，或从运行它的机器上拷回来的已完成工作区。"
+            "它边写边读这些文件，一直提供到按下 Ctrl-C。"),
+    ZH_HANT("為並非隨監視頁面一起啟動的工作區或進度目錄提供與 `auto --monitor` 相同的頁面："
+            "另一個行程用 --progress-dir 啟動的執行，或從執行它的機器上拷回來的已完成工作區。"
+            "它邊寫邊讀這些檔案，一直提供到按下 Ctrl-C。"),
+    KO("`auto --monitor` 와 같은 페이지를, 모니터와 함께 시작하지 않은 작업 공간이나 진행 "
+       "디렉터리에 대해 보여 줍니다. 다른 프로세스가 --progress-dir 로 시작한 실행이나, "
+       "실행한 장비에서 가져온 끝난 작업 공간이 그 대상입니다. 파일이 쓰이는 대로 읽으며 "
+       "Ctrl-C 까지 계속 제공합니다."),
+    DE("Liefert die Seite von `auto --monitor` für ein Arbeitsverzeichnis oder ein "
+       "Fortschrittsverzeichnis, mit dem der Monitor nicht gestartet wurde: einen Lauf, den ein "
+       "anderer Prozess mit --progress-dir begonnen hat, oder ein fertiges Arbeitsverzeichnis, "
+       "das vom Rechner des Laufs zurückkopiert wurde. Liest die Dateien, während sie "
+       "geschrieben werden, und läuft bis Strg-C."),
+    FR("Sert la page de `auto --monitor` pour un espace de travail ou un dossier de progression "
+       "que le moniteur n'a pas lancé : un calcul démarré par un autre processus avec "
+       "--progress-dir, ou un espace de travail terminé rapatrié de la machine où il a tourné. "
+       "Lit les fichiers au fil de leur écriture et sert jusqu'à Ctrl-C."),
+    ES("Sirve la página de `auto --monitor` para un espacio de trabajo o una carpeta de progreso "
+       "con los que el monitor no empezó: una ejecución que otro proceso inició con "
+       "--progress-dir, o un espacio de trabajo terminado copiado desde la máquina donde corrió. "
+       "Lee los archivos a medida que se escriben y sirve hasta Ctrl-C."),
+    PT("Serve a página de `auto --monitor` para um espaço de trabalho ou uma pasta de progresso "
+       "com os quais o monitor não começou: uma execução que outro processo iniciou com "
+       "--progress-dir, ou um espaço de trabalho terminado copiado da máquina onde rodou. Lê os "
+       "arquivos à medida que são gravados e serve até Ctrl-C."),
+    IT("Serve la pagina di `auto --monitor` per uno spazio di lavoro o una cartella di "
+       "avanzamento con cui il monitor non è partito: un'esecuzione avviata da un altro "
+       "processo con --progress-dir, o uno spazio di lavoro finito ricopiato dalla macchina su "
+       "cui è girato. Legge i file mentre vengono scritti e serve fino a Ctrl-C."),
+    NL("Biedt de pagina van `auto --monitor` aan voor een werkmap of voortgangsmap waarmee de "
+       "monitor niet is gestart: een run die een ander proces met --progress-dir begon, of een "
+       "afgeronde werkmap die van de machine van de run is teruggekopieerd. Leest de bestanden "
+       "terwijl ze worden geschreven en draait tot Ctrl-C."),
+    RU("Отдаёт страницу `auto --monitor` для рабочего каталога или каталога прогресса, с "
+       "которыми монитор не запускался: запуска, начатого другим процессом с --progress-dir, "
+       "или готового рабочего каталога, скопированного с машины, где он шёл. Читает файлы по "
+       "мере записи и работает до Ctrl-C."),
+    TR("`auto --monitor` sayfasını, izleme sayfasıyla birlikte başlamamış bir çalışma klasörü "
+       "ya da ilerleme klasörü için sunar: başka bir işlemin --progress-dir ile başlattığı bir "
+       "çalışma ya da çalıştığı makineden geri kopyalanmış bitmiş bir çalışma klasörü. "
+       "Dosyaları yazıldıkça okur ve Ctrl-C'ye kadar sunar."));
+
+SS_MSG(desc_monitor_2,
+    EN("Only a run started with --monitor shows its log, since nothing else holds it; "
+       "everything else on the page comes from the files."),
+    JA("ログは --monitor 付きで始めた実行だけが表示します。ほかに残っている場所がないためです。"
+       "ページのそれ以外はすべてファイルから読みます。"),
+    ZH_HANS("只有用 --monitor 启动的运行才显示日志，因为别处没有保存它；页面上的其他内容都"
+            "来自这些文件。"),
+    ZH_HANT("只有用 --monitor 啟動的執行才顯示日誌，因為別處沒有保存它；頁面上的其他內容都"
+            "來自這些檔案。"),
+    KO("로그는 --monitor 로 시작한 실행만 보여 줍니다. 다른 곳에는 남아 있지 않기 때문입니다. "
+       "페이지의 나머지는 모두 파일에서 읽습니다."),
+    DE("Das Protokoll zeigt nur ein mit --monitor gestarteter Lauf, weil es sonst nirgends "
+       "liegt; alles andere auf der Seite kommt aus den Dateien."),
+    FR("Seul un calcul lancé avec --monitor montre son journal, que rien d'autre ne conserve ; "
+       "tout le reste de la page vient des fichiers."),
+    ES("Solo una ejecución iniciada con --monitor muestra su registro, que nada más guarda; todo "
+       "lo demás de la página sale de los archivos."),
+    PT("Só uma execução iniciada com --monitor mostra o registro, que nada mais guarda; todo o "
+       "resto da página vem dos arquivos."),
+    IT("Solo un'esecuzione avviata con --monitor mostra il registro, che nient'altro conserva; "
+       "tutto il resto della pagina viene dai file."),
+    NL("Alleen een run die met --monitor is gestart toont zijn logboek, want niets anders bewaart "
+       "het; de rest van de pagina komt uit de bestanden."),
+    RU("Журнал показывает только запуск с --monitor, потому что больше его нигде нет; всё "
+       "остальное на странице берётся из файлов."),
+    TR("Günlüğü yalnızca --monitor ile başlatılan bir çalışma gösterir, çünkü onu başka hiçbir "
+       "şey tutmaz; sayfadaki geri kalan her şey dosyalardan gelir."));
+
 }  // namespace sfmhelp
 }  // namespace msg
 }  // namespace i18n

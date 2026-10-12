@@ -27,13 +27,12 @@ public:
     ViewerServer();
     ~ViewerServer();
 
-    // Uploads the POST-split camera table to the engine's viewer cache
-    // (engine_viewer_init: frustum annotation + thumbnail slots; thumbnails
-    // fill as training batches flow through), then starts the render worker
-    // and HTTP threads. Call after engine_setup_data_manager.
+    // Uploads the post-split cameras to the engine's viewer cache (frustums,
+    // thumbnail slots), then starts the render worker and the HTTP thread. Call
+    // after engine_setup_data_manager. A non-empty `token`: HttpServer::set_token.
     void start(const std::string& host, int port,
                ViewerRenderConfig cfg, ViewerHooks hooks,
-               const PostSplitCameras& post);
+               const PostSplitCameras& post, const std::string& token = {});
     void stop();
 
 private:

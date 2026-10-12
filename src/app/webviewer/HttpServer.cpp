@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <random>
 #include <stdexcept>
 
 #ifdef _WIN32
@@ -120,10 +121,20 @@ const char* status_text(int code) {
     switch (code) {
         case 200: return "OK";
         case 400: return "Bad Request";
+        case 403: return "Forbidden";
         case 404: return "Not Found";
         case 500: return "Internal Server Error";
         default:  return "";
     }
+}
+
+// Every byte is compared whatever the first mismatch, so the time a wrong
+// guess takes says nothing about how much of it was right.
+bool same_secret(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    unsigned char d = 0;
+    for (size_t i = 0; i < a.size(); i++) d |= (unsigned char)(a[i] ^ b[i]);
+    return d == 0;
 }
 
 }  // namespace
@@ -132,6 +143,14 @@ const char* status_text(int code) {
 // ===========================================================================
 // HttpServer
 // ===========================================================================
+
+std::string HttpServer::make_token() {
+    std::random_device rd;
+    std::uniform_int_distribution<int> d(0, 15);
+    std::string t;
+    for (int i = 0; i < 32; i++) t += "0123456789abcdef"[d(rd)];
+    return t;
+}
 
 void HttpServer::start(const std::string& host, int port) {
     if (!socket_startup())
@@ -148,7 +167,8 @@ void HttpServer::start(const std::string& host, int port) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons((uint16_t)port);
     if (host.empty() || host == "0.0.0.0") addr.sin_addr.s_addr = INADDR_ANY;
-    else if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+    else if (inet_pton(AF_INET, host == "localhost" ? "127.0.0.1" : host.c_str(),
+                       &addr.sin_addr) != 1) {
         close_socket(fd);
         throw std::runtime_error("HttpServer: bad host " + host);
     }
@@ -243,6 +263,10 @@ void HttpServer::serve_loop() {
             auto it = _routes.find(req.path);
             if (req.method != "GET") {
                 resp = HttpResponse::text(400, "GET only");
+            } else if (!_token.empty() && !same_secret(req.get("token"), _token)) {
+                resp = HttpResponse::text(
+                    403, "{\"ok\":false,\"error\":\"bad or missing token=\"}",
+                    "application/json");
             } else if (it == _routes.end()) {
                 resp = HttpResponse::text(404, "not found");
             } else {
@@ -255,12 +279,13 @@ void HttpServer::serve_loop() {
             }
         }
 
-        char hdr[256];
+        char hdr[320];
         int n = std::snprintf(hdr, sizeof hdr,
             "HTTP/1.0 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
-            "Access-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
+            "%sConnection: close\r\n\r\n",
             resp.status, status_text(resp.status),
-            resp.content_type.c_str(), resp.body.size());
+            resp.content_type.c_str(), resp.body.size(),
+            _token.empty() ? "Access-Control-Allow-Origin: *\r\n" : "");
         // Client disconnects mid-response (tab refresh, latest-wins drop) are
         // routine; send_all just fails and we move on -- parity with the
         // Python handler's BrokenPipeError swallowing.

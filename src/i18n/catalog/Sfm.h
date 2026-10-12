@@ -4542,6 +4542,71 @@ SS_MSG(match_sequence_added,
     RU("окна последовательностей добавили пар: {0}, к выбранным парам: {1} (пар в окнах: {2})"),
     TR("dizi pencereleri çift ekledi: {0}, seçilmiş çiftlere ek olarak: {1} (pencere çifti: {2})"));
 
+SS_MSG(monitor_at,
+    EN("Monitor: http://{0}:{1}/?token={2}"),
+    JA("モニター: http://{0}:{1}/?token={2}"),
+    ZH_HANS("监视页面：http://{0}:{1}/?token={2}"),
+    ZH_HANT("監視頁面：http://{0}:{1}/?token={2}"),
+    KO("모니터: http://{0}:{1}/?token={2}"),
+    DE("Monitor: http://{0}:{1}/?token={2}"),
+    FR("Moniteur : http://{0}:{1}/?token={2}"),
+    ES("Monitor: http://{0}:{1}/?token={2}"),
+    PT("Monitor: http://{0}:{1}/?token={2}"),
+    IT("Monitor: http://{0}:{1}/?token={2}"),
+    NL("Monitor: http://{0}:{1}/?token={2}"),
+    RU("Монитор: http://{0}:{1}/?token={2}"),
+    TR("İzleme sayfası: http://{0}:{1}/?token={2}"));
+
+SS_MSG(monitor_tunnel,
+    EN("From another machine: ssh -L {0}:localhost:{0} <user>@<host>, then open the address above"),
+    JA("別のマシンから見るには: ssh -L {0}:localhost:{0} <user>@<host> を実行して、上のアドレスを開いてください"),
+    ZH_HANS("从另一台机器查看：先运行 ssh -L {0}:localhost:{0} <user>@<host>，再打开上面的地址"),
+    ZH_HANT("從另一台機器查看：先執行 ssh -L {0}:localhost:{0} <user>@<host>，再開啟上面的位址"),
+    KO("다른 장비에서 보려면: ssh -L {0}:localhost:{0} <user>@<host> 를 실행한 뒤 위 주소를 여십시오"),
+    DE("Von einem anderen Rechner: ssh -L {0}:localhost:{0} <user>@<host>, dann die Adresse oben öffnen"),
+    FR("Depuis une autre machine : ssh -L {0}:localhost:{0} <user>@<host>, puis ouvrir l'adresse "
+       "ci-dessus"),
+    ES("Desde otra máquina: ssh -L {0}:localhost:{0} <user>@<host> y luego abra la dirección de "
+       "arriba"),
+    PT("De outra máquina: ssh -L {0}:localhost:{0} <user>@<host> e depois abra o endereço acima"),
+    IT("Da un'altra macchina: ssh -L {0}:localhost:{0} <user>@<host>, poi aprire l'indirizzo qui "
+       "sopra"),
+    NL("Vanaf een andere machine: ssh -L {0}:localhost:{0} <user>@<host>, open daarna het adres "
+       "hierboven"),
+    RU("С другой машины: ssh -L {0}:localhost:{0} <user>@<host>, затем откройте адрес выше"),
+    TR("Başka bir makineden: ssh -L {0}:localhost:{0} <user>@<host>, ardından yukarıdaki adresi "
+       "açın"));
+
+SS_MSG(monitor_failed,
+    EN("Cannot start the monitor: {0}"),
+    JA("モニターを開始できません: {0}"),
+    ZH_HANS("无法启动监视页面：{0}"),
+    ZH_HANT("無法啟動監視頁面：{0}"),
+    KO("모니터를 시작할 수 없습니다: {0}"),
+    DE("Monitor kann nicht starten: {0}"),
+    FR("Impossible de lancer le moniteur : {0}"),
+    ES("No se puede iniciar el monitor: {0}"),
+    PT("Não é possível iniciar o monitor: {0}"),
+    IT("Impossibile avviare il monitor: {0}"),
+    NL("Kan de monitor niet starten: {0}"),
+    RU("Не удаётся запустить монитор: {0}"),
+    TR("İzleme sayfası başlatılamıyor: {0}"));
+
+SS_MSG(monitor_stopped,
+    EN("Monitor stopped"),
+    JA("モニターを停止しました"),
+    ZH_HANS("监视页面已停止"),
+    ZH_HANT("監視頁面已停止"),
+    KO("모니터를 멈췄습니다"),
+    DE("Monitor beendet"),
+    FR("Moniteur arrêté"),
+    ES("Monitor detenido"),
+    PT("Monitor parado"),
+    IT("Monitor fermato"),
+    NL("Monitor gestopt"),
+    RU("Монитор остановлен"),
+    TR("İzleme sayfası durduruldu"));
+
 }  // namespace sfm
 }  // namespace msg
 }  // namespace i18n

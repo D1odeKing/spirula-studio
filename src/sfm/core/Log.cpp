@@ -69,33 +69,40 @@ Sink g_sink;
 // sink asked for prefix(), which is exactly what a front end does.
 std::mutex g_out_mu;
 
+std::string compose(const std::string& pfx, Level lv, const std::string& text) {
+    if (lv == Level::Diag) return text;
+    const char* word = lv == Level::Warning  ? msg::word_warning.get()
+                       : lv == Level::Error  ? msg::word_error.get()
+                                             : nullptr;
+    std::string s = pfx;
+    if (word) s.append(word).append(" ");
+    return s + text;
+}
+
 void print(const std::string& pfx, Level lv, const std::string& text) {
     std::FILE* f = lv == Level::Info ? stdout : stderr;
-    if (lv == Level::Diag) {
-        std::fprintf(f, "%s\n", text.c_str());
-    } else {
-        const char* word = lv == Level::Warning  ? msg::word_warning.get()
-                           : lv == Level::Error  ? msg::word_error.get()
-                                                 : nullptr;
-        std::fprintf(f, "%s%s%s%s\n", pfx.c_str(), word ? word : "",
-                     word ? " " : "", text.c_str());
-    }
+    std::fprintf(f, "%s\n", compose(pfx, lv, text).c_str());
     // Unbuffered enough to interleave correctly with the other stream when a
     // parent process is reading both: the GUI shows one terminal, not two.
     std::fflush(f);
 }
 
+Tap g_tap;
+
 void emit(Tag t, Level lv, const std::string& text) {
     Sink sink;
+    Tap tap;
     std::string pfx;
     {
         std::lock_guard<std::mutex> lk(g_mu);
         sink = g_sink;
+        tap = g_tap;
         if (!sink) pfx = table().prefix[(int)t];
     }
     std::lock_guard<std::mutex> out(g_out_mu);
     if (sink) sink(t, lv, text);
     else print(pfx, lv, text);
+    if (tap) tap(t, lv, text);
 }
 
 }  // namespace
@@ -111,6 +118,15 @@ void set_sink(Sink s) {
 std::string prefix(Tag t) {
     std::lock_guard<std::mutex> lk(g_mu);
     return table().prefix[(int)t];
+}
+
+void set_tap(Tap t) {
+    std::lock_guard<std::mutex> lk(g_mu);
+    g_tap = std::move(t);
+}
+
+std::string line(Tag t, Level lv, const std::string& text) {
+    return compose(lv == Level::Diag ? std::string() : prefix(t), lv, text);
 }
 
 std::string num(double v, int decimals) {

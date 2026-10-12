@@ -63,7 +63,9 @@ rewritten at most every 1.5 s and renamed into place so a reader never sees
 half of one. It is off unless asked for, and it exists so a
 front end can show a run rather than tail it — the GUI passes it to its own
 child and polls the two files (`src/sfm/core/Progress.h`,
-`src/app/gui/SfmProgress.h`). Nothing in the pipeline reads them back.
+`src/app/SfmProgress.h`). Nothing in the pipeline reads them back.
+`auto --monitor PORT` serves the same files, and the log, to a browser on a
+headless box (docs/notes/remote-monitoring.md).
 
 The `map` box is one incremental reconstruction of the whole capture by default.
 `--mapper bottom-up` replaces it with the opposite schedule (`map/Bottomup.h`,

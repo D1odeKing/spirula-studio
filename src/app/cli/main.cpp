@@ -572,12 +572,15 @@ int spirula_train_main(int argc, char** argv) {
         ViewerServer viewer;
         bool viewer_on = !cfg.disable_viewer;
         if (viewer_on) {
-            viewer.start("0.0.0.0", cfg.viewer_port,
+            viewer.start(cfg.viewer_host, cfg.viewer_port,
                          session.make_viewer_config(), session.make_viewer_hooks(),
-                         session.post);
+                         session.post, cfg.viewer_token);
             std::printf("%s\n", format(cmsg::viewer_at,
                                        {cfg.viewer_port, cfg.viewer_port,
-                                        cfg.viewer_port}).c_str());
+                                        cfg.viewer_port, cfg.viewer_host}).c_str());
+            if (!cfg.viewer_token.empty())
+                std::printf("%s\n", format(cmsg::viewer_with_token,
+                                           {cfg.viewer_port, cfg.viewer_token}).c_str());
         }
 
         // ---- Train loop ------------------------------------------------------

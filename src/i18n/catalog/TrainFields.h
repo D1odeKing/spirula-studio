@@ -538,6 +538,98 @@ SS_MSG(viewer_port_help,
     TR("Yerleşik web görüntüleyicinin dinlediği ağ bağlantı noktası. O bağlantı "
        "noktası doluysa değiştirin."));
 
+SS_MSG(viewer_host,
+    EN("Web viewer address"), JA("Web ビューアのアドレス"),
+    ZH_HANS("网页查看器地址"), ZH_HANT("網頁檢視器位址"),
+    KO("웹 뷰어 주소"), DE("Adresse des Web-Viewers"),
+    FR("Adresse de la visionneuse web"), ES("Dirección del visor web"),
+    PT("Endereço do visualizador web"), IT("Indirizzo del visualizzatore web"),
+    NL("Adres van de webviewer"), RU("Адрес веб-просмотрщика"),
+    TR("Web görüntüleyici adresi"));
+SS_MSG(viewer_host_help,
+    EN("Address the web viewer listens on. 0.0.0.0 answers any machine that can reach this one; "
+       "127.0.0.1 answers only this machine, which an SSH tunnel then reaches from another."),
+    JA("Web ビューアが待ち受けるアドレスです。0.0.0.0 はこのマシンに届くどのマシンにも応え、"
+       "127.0.0.1 はこのマシンにだけ応えます。その場合、別のマシンからは SSH トンネルで"
+       "つなぎます。"),
+    ZH_HANS("网页查看器监听的地址。0.0.0.0 会回应任何能连到本机的机器；127.0.0.1 只回应本机，"
+            "此时从另一台机器要通过 SSH 隧道连接。"),
+    ZH_HANT("網頁檢視器監聽的位址。0.0.0.0 會回應任何能連到本機的機器；127.0.0.1 只回應本機，"
+            "此時從另一台機器要透過 SSH 通道連線。"),
+    KO("웹 뷰어가 대기하는 주소입니다. 0.0.0.0 은 이 장비에 닿는 모든 장비에 응답하고, "
+       "127.0.0.1 은 이 장비에만 응답합니다. 그때 다른 장비에서는 SSH 터널로 연결합니다."),
+    DE("Adresse, auf der der Web-Viewer lauscht. 0.0.0.0 antwortet jedem Rechner, der diesen "
+       "erreicht; 127.0.0.1 nur diesem Rechner, den ein SSH-Tunnel dann von einem anderen aus "
+       "erreicht."),
+    FR("Adresse sur laquelle écoute la visionneuse web. 0.0.0.0 répond à toute machine qui "
+       "atteint celle-ci ; 127.0.0.1 ne répond qu'à cette machine, qu'un tunnel SSH atteint "
+       "alors depuis une autre."),
+    ES("Dirección en la que escucha el visor web. 0.0.0.0 responde a cualquier máquina que "
+       "llegue a esta; 127.0.0.1 solo a esta máquina, a la que entonces se llega desde otra "
+       "con un túnel SSH."),
+    PT("Endereço em que o visualizador web escuta. 0.0.0.0 responde a qualquer máquina que "
+       "alcance esta; 127.0.0.1 só a esta máquina, que um túnel SSH então alcança a partir de "
+       "outra."),
+    IT("Indirizzo su cui ascolta il visualizzatore web. 0.0.0.0 risponde a qualsiasi macchina "
+       "che raggiunga questa; 127.0.0.1 solo a questa macchina, che un tunnel SSH raggiunge "
+       "allora da un'altra."),
+    NL("Adres waarop de webviewer luistert. 0.0.0.0 antwoordt elke machine die deze bereikt; "
+       "127.0.0.1 alleen deze machine, die een SSH-tunnel dan vanaf een andere bereikt."),
+    RU("Адрес, который слушает веб-просмотрщик. 0.0.0.0 отвечает любой машине, которая "
+       "достаёт до этой; 127.0.0.1 отвечает только этой машине, до которой с другой тогда "
+       "доходят через SSH-туннель."),
+    TR("Web görüntüleyicinin dinlediği adres. 0.0.0.0 bu makineye ulaşabilen her makineye "
+       "yanıt verir; 127.0.0.1 yalnızca bu makineye yanıt verir, başka bir makineden de ona "
+       "bir SSH tüneliyle ulaşılır."));
+
+SS_MSG(viewer_token,
+    EN("Web viewer token"), JA("Web ビューアのトークン"),
+    ZH_HANS("网页查看器令牌"), ZH_HANT("網頁檢視器權杖"),
+    KO("웹 뷰어 토큰"), DE("Token des Web-Viewers"),
+    FR("Jeton de la visionneuse web"), ES("Token del visor web"),
+    PT("Token do visualizador web"), IT("Token del visualizzatore web"),
+    NL("Token van de webviewer"), RU("Токен веб-просмотрщика"),
+    TR("Web görüntüleyici belirteci"));
+SS_MSG(viewer_token_help,
+    EN("When set, the viewer answers only requests that carry ?token= with this value, and "
+       "pages on other sites can no longer read it. The address printed at the start includes "
+       "it. Kept in the run's config.json like every other setting."),
+    JA("設定すると、ビューアはこの値の ?token= が付いた要求にだけ応え、ほかのサイトのページから"
+       "は読めなくなります。開始時に表示するアドレスに含まれます。ほかの設定と同じく、実行の "
+       "config.json に保存されます。"),
+    ZH_HANS("设置后，查看器只回应带有该值 ?token= 的请求，其他网站的页面也无法再读取它。开始"
+            "时打印的地址会包含它。与其他设置一样保存在本次运行的 config.json 中。"),
+    ZH_HANT("設定後，檢視器只回應帶有該值 ?token= 的請求，其他網站的頁面也無法再讀取它。開始"
+            "時列印的位址會包含它。與其他設定一樣保存在本次執行的 config.json 中。"),
+    KO("설정하면 뷰어는 이 값의 ?token= 이 붙은 요청에만 응답하고, 다른 사이트의 페이지는 더 "
+       "이상 그것을 읽을 수 없습니다. 시작할 때 출력하는 주소에 포함됩니다. 다른 설정과 "
+       "마찬가지로 실행의 config.json 에 저장됩니다."),
+    DE("Wenn gesetzt, beantwortet der Viewer nur Anfragen mit ?token= in diesem Wert, und Seiten "
+       "anderer Websites können ihn nicht mehr lesen. Die beim Start ausgegebene Adresse "
+       "enthält es. Wird wie jede andere Einstellung in der config.json des Laufs gespeichert."),
+    FR("Une fois défini, la visionneuse ne répond qu'aux requêtes portant ?token= avec cette "
+       "valeur, et les pages d'autres sites ne peuvent plus la lire. L'adresse affichée au "
+       "début l'inclut. Conservé dans le config.json de l'exécution comme tout autre réglage."),
+    ES("Si se define, el visor solo responde a las peticiones que llevan ?token= con este valor, "
+       "y las páginas de otros sitios ya no pueden leerlo. La dirección impresa al inicio lo "
+       "incluye. Se guarda en el config.json de la ejecución como cualquier otro ajuste."),
+    PT("Quando definido, o visualizador só responde a pedidos que levam ?token= com este valor, "
+       "e páginas de outros sites não conseguem mais lê-lo. O endereço impresso no início o "
+       "inclui. Fica no config.json da execução como qualquer outra configuração."),
+    IT("Se impostato, il visualizzatore risponde solo alle richieste che portano ?token= con "
+       "questo valore, e le pagine di altri siti non possono più leggerlo. L'indirizzo stampato "
+       "all'inizio lo include. Salvato nel config.json dell'esecuzione come ogni altra "
+       "impostazione."),
+    NL("Indien gezet, beantwoordt de viewer alleen verzoeken met ?token= met deze waarde, en "
+       "pagina's van andere sites kunnen hem niet meer lezen. Het adres dat bij de start wordt "
+       "afgedrukt bevat het. Bewaard in de config.json van de run, zoals elke andere instelling."),
+    RU("Если задан, просмотрщик отвечает только на запросы с ?token= с этим значением, и "
+       "страницы других сайтов больше не могут его читать. Адрес, печатаемый при запуске, его "
+       "содержит. Хранится в config.json запуска, как и любой другой параметр."),
+    TR("Ayarlanırsa görüntüleyici yalnızca bu değerde ?token= taşıyan isteklere yanıt verir ve "
+       "başka sitelerin sayfaları onu artık okuyamaz. Başlangıçta yazdırılan adres onu içerir. "
+       "Diğer her ayar gibi çalışmanın config.json dosyasında saklanır."));
+
 SS_MSG(disable_viewer,
     EN("Disable the web viewer"), JA("Web ビューアを使わない"),
     ZH_HANS("不启用网页查看器"), ZH_HANT("不啟用網頁檢視器"),

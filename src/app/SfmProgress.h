@@ -3,8 +3,9 @@
 // The reader for what a running reconstruction writes about itself.
 //
 // The other half of sfm/core/Progress.h: the GUI passes `--progress-dir` to its
-// own child and polls atomic snapshots. Dense versions 5/6 reference a flushed,
-// immutable prefix of an append-only point file.
+// own child and polls atomic snapshots, and app/SfmMonitor.h serves the same
+// files to a browser. Dense versions 5/6 reference a flushed, immutable prefix
+// of an append-only point file. Outside app/gui/ so a headless build has it.
 //
 // Polling rather than watching on purpose -- two files at 2 Hz is a pair of
 // stats, and an inotify/ReadDirectoryChangesW pair is a portability problem for
@@ -14,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -115,6 +117,20 @@ struct ImageStat {
 };
 // `path` is a run's images.bin or the image_stats.bin its workspace keeps.
 bool read_image_stats(const std::string& path, int64_t& mtime, std::vector<ImageStat>& out);
+
+// What the fit colours are measured against: the run's own error gates, and the
+// placed images' median 3D points per folder -- one camera, by the run's grouping.
+struct FitScale {
+    float green_px = 0, red_px = 3;
+    std::map<std::string, float> median_points;
+};
+// The run's gates as `spirula sfm auto` takes them; `error_end` 0 is the default.
+FitScale fit_scale(const std::vector<ImageStat>& stats, bool progressive,
+                   float error_start, float error_end);
+// 0 for an image that fits the model well, 1 for one that barely does: by its
+// mean reprojection error against the gates, or by its 3D points against the
+// median, an eighth of it being red.
+float image_badness(const ImageStat& s, bool by_error, const FitScale& f);
 
 // The similarity (row-major 3x4 [sR | t]) taking `from`'s normalized frame onto
 // `to`'s, fitted to the cameras both hold. False when too few are shared or they

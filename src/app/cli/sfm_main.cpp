@@ -63,6 +63,10 @@
 #include "i18n/catalog/SfmHelp.h"
 #include "i18n/TimeFormat.h"
 
+#ifdef SS_SFM_MONITOR
+#include "app/SfmMonitor.h"
+#endif
+
 // `spirula-sfm ba`, in sfm_ba.cpp. It prints its own help.
 int cmdBa(int argc, char** argv);
 void printBaHelp(FILE* out);
@@ -154,6 +158,11 @@ static void ownOptionsAuto(FILE* out) {
     helpLine(out, "--no-masks", "", H::opt_no_masks.get());
     helpLine(out, "--no-manage", "", H::opt_no_manage_auto.get());
     helpLine(out, "--progress-dir DIR", "", H::opt_progress_dir.get());
+#ifdef SS_SFM_MONITOR
+    helpLine(out, "--monitor PORT", "", H::opt_monitor.get());
+    helpLine(out, "--monitor-host HOST", "127.0.0.1", H::opt_monitor_host.get());
+    helpLine(out, "--monitor-token TOKEN", "", H::opt_monitor_token.get());
+#endif
     helpLine(out, "-h, --help", "", H::opt_help.get());
 }
 static void ownOptionsExtract(FILE* out) {
@@ -179,6 +188,14 @@ static void ownOptionsMerge(FILE* out) {
     helpLine(out, "-o, --output DIR", "", H::opt_merge_output.get());
     helpLine(out, "-h, --help", "", H::opt_help.get());
 }
+#ifdef SS_SFM_MONITOR
+static void ownOptionsMonitor(FILE* out) {
+    helpLine(out, "--port PORT", "7008", H::opt_monitor_port.get());
+    helpLine(out, "--host HOST", "127.0.0.1", H::opt_monitor_host.get());
+    helpLine(out, "--token TOKEN", "", H::opt_monitor_token.get());
+    helpLine(out, "-h, --help", "", H::opt_help.get());
+}
+#endif
 
 static const CommandInfo kCommands[] = {
     {"auto", CMD_AUTO, &H::sum_auto,
@@ -230,6 +247,17 @@ static const CommandInfo kCommands[] = {
      "  spirula-sfm merge runA/sparse/0 runB/sparse/0 -o merged/ --min-common 5\n"
      "  spirula-sfm merge ws/sparse --in-place --metric-gps horizontal --images ws/images",
      false},
+
+#ifdef SS_SFM_MONITOR
+    {"monitor", 0, &H::sum_monitor,
+     "<WORKSPACE|PROGRESS_DIR> [--port PORT] [options]",
+     {&H::desc_monitor_1, &H::desc_monitor_2, nullptr},
+     ownOptionsMonitor,
+     "  spirula-sfm auto images/ -o ws/ --monitor 7008\n"
+     "  spirula-sfm monitor ws/ --port 7008\n"
+     "  ssh -L 7008:localhost:7008 user@gpu-box     # on the laptop, then open the printed address",
+     false},
+#endif
 };
 
 static const CommandInfo* findCommand(const std::string& name) {
@@ -1213,6 +1241,108 @@ static int cmdMerge(int argc, char** argv) {
     return merge_metric ? 0 : 4;
 }
 
+#ifdef SS_SFM_MONITOR
+// -----------------------------------------------------------------------
+// monitor: the run as a web page (docs/notes/remote-monitoring.md)
+// -----------------------------------------------------------------------
+
+static bool parsePort(const std::string& v, int& port) {
+    try {
+        size_t used = 0;
+        port = std::stoi(v, &used);
+        return used == v.size() && port > 0 && port < 65536;
+    } catch (...) {
+        return false;
+    }
+}
+
+static const char* levelName(L::Level lv) {
+    switch (lv) {
+        case L::Level::Info:    return "info";
+        case L::Level::Note:    return "note";
+        case L::Level::Warning: return "warning";
+        case L::Level::Error:   return "error";
+        case L::Level::Diag:    return "diag";
+    }
+    return "info";
+}
+
+// Starts it and prints where it is, or says why not.
+static bool startMonitor(app::SfmMonitor& monitor, const app::SfmMonitorOptions& opt) {
+    std::string token;
+    try {
+        token = monitor.start(opt);
+    } catch (const std::exception& e) {
+        L::fail(Tag::Run, M::monitor_failed, {e.what()});
+        return false;
+    }
+    const std::string host = opt.host == "0.0.0.0" || opt.host.empty() ? "localhost" : opt.host;
+    L::out(Tag::Run, M::monitor_at, {host, (long long)opt.port, token});
+    L::out(Tag::Run, M::monitor_tunnel, {(long long)opt.port});
+    return true;
+}
+
+// Takes --monitor PORT, --monitor-host and --monitor-token out of `args`, so
+// what remains is the settings list the GUI would hand over too.
+static std::string takeMonitorArgs(std::vector<std::string>& args, int& port,
+                                   app::SfmMonitorOptions& opt) {
+    std::vector<std::string> rest;
+    for (size_t i = 0; i < args.size(); i++) {
+        const std::string& a = args[i];
+        if (a != "--monitor" && a != "--monitor-host" && a != "--monitor-token") {
+            rest.push_back(a);
+            continue;
+        }
+        if (i + 1 >= args.size()) return a + ": missing value";
+        const std::string& v = args[++i];
+        if (a == "--monitor-host") opt.host = v;
+        else if (a == "--monitor-token") opt.token = v;
+        else if (!parsePort(v, port)) return "--monitor: not a port: " + v;
+    }
+    args.swap(rest);
+    return {};
+}
+
+static int cmdMonitor(int argc, char** argv) {
+    app::SfmMonitorOptions opt;
+    std::string dir;
+    for (int i = 0; i < argc; i++) {
+        const std::string a = argv[i];
+        if (a == "--help" || a == "-h") { printCommandHelp(*findCommand("monitor")); return 0; }
+        if (a == "--port" || a == "--host" || a == "--token") {
+            if (i + 1 >= argc) return usageError("monitor", a + ": missing value");
+            const std::string v = argv[++i];
+            if (a == "--host") opt.host = v;
+            else if (a == "--token") opt.token = v;
+            else if (!parsePort(v, opt.port)) return usageError("monitor", "--port: not a port: " + v);
+            continue;
+        }
+        if (a[0] == '-') return usageError("monitor", "unknown option " + a);
+        if (!dir.empty()) return usageError("monitor", "unexpected argument '" + a + "'");
+        dir = a;
+    }
+    if (dir.empty()) return usageError("monitor", "a workspace or a progress directory is required");
+    // A workspace holds .progress; anything else is the progress directory
+    // itself, whose reports sit beside it only when it is a .progress.
+    const fs::path d = fs::path(dir).lexically_normal();
+    if (fs::is_directory(d / ".progress")) {
+        opt.progress_dir = (d / ".progress").string();
+        opt.workspace = d.string();
+    } else {
+        opt.progress_dir = d.string();
+        opt.workspace = d.filename() == ".progress" ? d.parent_path().string() : d.string();
+    }
+    opt.progressive = fs::exists(fs::path(opt.workspace) / "progressive.txt");
+
+    app::SfmMonitor monitor;
+    if (!startMonitor(monitor, opt)) return 1;
+    while (!g_interrupted) std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    monitor.stop();
+    L::out(Tag::Run, M::monitor_stopped);
+    return 0;
+}
+#endif
+
 // -----------------------------------------------------------------------
 // auto: one command from an image directory to a COLMAP sparse model
 // -----------------------------------------------------------------------
@@ -1225,13 +1355,47 @@ static int cmdMerge(int argc, char** argv) {
 
 static int cmdAuto(int argc, char** argv) {
     std::vector<std::string> args(argv, argv + argc);
+#ifdef SS_SFM_MONITOR
+    int monitor_port = 0;
+    app::SfmMonitorOptions mon;
+    if (std::string err = takeMonitorArgs(args, monitor_port, mon); !err.empty())
+        return usageError("auto", err);
+#endif
     AutoRequest req;
     if (std::string err = parse_auto_args(args, req); !err.empty())
         return usageError("auto", err);
     if (req.wants_help) { printCommandHelp(*findCommand("auto")); return 0; }
+#ifdef SS_SFM_MONITOR
+    app::SfmMonitor monitor;
+    // Declared after the monitor, so a throw takes the tap away before it.
+    struct TapOff { ~TapOff() { L::set_tap({}); } } tap_off;
+    if (monitor_port) {
+        if (req.progress_dir.empty())
+            req.progress_dir = (fs::path(req.in.workspace) / ".progress").string();
+        mon.port = monitor_port;
+        mon.progress_dir = req.progress_dir;
+        mon.workspace = req.in.workspace;
+        mon.progressive = req.cfg.progressive;
+        mon.error_start = (float)req.cfg.progressive_error_start;
+        mon.error_end = (float)req.cfg.progressive_error_end;
+        mon.log = true;
+        if (!startMonitor(monitor, mon)) return 1;
+        L::set_tap([&monitor](Tag t, L::Level lv, const std::string& text) {
+            monitor.log(levelName(lv), L::line(t, lv, text));
+        });
+    }
+#endif
     if (!req.progress_dir.empty()) sfm::progress::set_dir(req.progress_dir);
     installEventPrinter(req.cfg);
-    return run_auto(req.cfg, req.in).exit_code;
+    const int code = run_auto(req.cfg, req.in).exit_code;
+#ifdef SS_SFM_MONITOR
+    if (monitor_port) {
+        L::set_tap({});
+        monitor.stop();
+        L::out(Tag::Run, M::monitor_stopped);
+    }
+#endif
+    return code;
 }
 
 int spirula_sfm_main(int argc, char** argv) {
@@ -1294,6 +1458,9 @@ int spirula_sfm_main(int argc, char** argv) {
         if (cmd == "map") return cmdMap(argc - 2, argv + 2);
         if (cmd == "merge") return cmdMerge(argc - 2, argv + 2);
         if (cmd == "ba") return cmdBa(argc - 2, argv + 2);
+#ifdef SS_SFM_MONITOR
+        if (cmd == "monitor") return cmdMonitor(argc - 2, argv + 2);
+#endif
     } catch (const sfm::Cancelled&) {
         L::err(Tag::Run, M::run_cancelled);
         return 130;   // the shell's convention for SIGINT, 128 + 2
