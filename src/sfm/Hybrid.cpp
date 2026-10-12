@@ -332,6 +332,28 @@ void bandMatch(const PairGeometry& g, const std::vector<Bearing>& ba, const std:
     keepClosest(out, dist, cap);
 }
 
+// Drops the points seen by fewer than `min_views` images. A wrong match along
+// its epipolar line triangulates without error in two views; a third exposes it.
+size_t dropShortTracks(Reconstruction& m, size_t min_views) {
+    size_t dropped = 0;
+    for (auto it = m.points3D.begin(); it != m.points3D.end();) {
+        std::set<uint32_t> views;
+        for (const TrackElement& te : it->second.track) views.insert(te.image_id);
+        if (views.size() >= min_views) {
+            ++it;
+            continue;
+        }
+        for (const TrackElement& te : it->second.track) {
+            auto im = m.images.find(te.image_id);
+            if (im != m.images.end() && te.point2D_idx < im->second.point3D_ids.size())
+                im->second.point3D_ids[te.point2D_idx] = kInvalidPoint3D;
+        }
+        it = m.points3D.erase(it);
+        dropped++;
+    }
+    return dropped;
+}
+
 // `src`'s registered images that `dst` lost, put back at their `src` pose carried
 // into `dst`'s frame, with no observations. False, with none put back, when
 // fewer than two shared poses tie the frames.
@@ -465,8 +487,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         // The geometry does the rejecting the ratio test and the cross-check would.
         // On a 678-image interior capture, a 2 px band at 0.9 gave three
         // times the gate's points at 1.33 px against 1.74; 0.8 lost 39% for nothing.
-        sc.match.max_ratio =
-            (float)envNumber("SFM_HYBRID_RATIO", mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8);
+        const double ratio = mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8;
+        sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", ratio);
         sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", guided ? 0 : 1) != 0;
         sc.sift.peak_threshold *= envNumber("SFM_HYBRID_PEAK_SCALE", 1.0);
         sc.sift.max_num_features =
@@ -652,6 +674,11 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
             double secs = 0;
             out = finishModels(mapper, std::move(out), cfg, verbose, secs);
         }
+        const size_t min_views = (size_t)envNumber("SFM_HYBRID_MIN_VIEWS", 0);
+        if (min_views > 2)
+            for (size_t k = 0; k < out.size(); k++)
+                slog::diag(Tag::Map, "[hybrid] model %zu: dropped %zu points in under %zu images", k,
+                           dropShortTracks(out[k], min_views), min_views);
 
         for (size_t k = 0; k < models.size(); k++) {
             HybridModelStats ms;
