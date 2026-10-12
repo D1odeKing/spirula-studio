@@ -1,8 +1,8 @@
 # Hybrid frontend — plan
 
 Status: steps 0 to 2 are in as `spirula sfm auto --hybrid-sift` (`sfm/Hybrid.cpp`),
-with step 2 as guided matching: SIFT is searched along the epipolar lines the
-learned model's poses predict.
+with step 2 as an epipolar gate: SIFT's putative matches are kept only near the
+epipolar lines the learned model's poses predict.
 An experimental, opt-in stage after mapping: a learned frontend (LoMa) decides
 where the cameras are, then SIFT is matched under that geometry and gives the
 model its precision.
@@ -11,27 +11,24 @@ model its precision.
 
 After the learned run's mapping and finishing passes: SIFT at the quality's own
 size on every registered image (`features.sift/`); pairs the learned frontend
-verified, plus each image's 20 best partners by shared points; band matching:
-each keypoint is compared only with the other image's keypoints within 2/3 x
-`--max-error` of the arc its ray sweeps there, epipole to vanishing point
-(angles on bearings, so an equirectangular image is searched like a pinhole
-one), the ratio test (0.9) over those alone from both sides, keeping mutual
-nearest neighbours; verification; triangulation against the learned poses and
+verified, plus each image's 20 best partners by shared points; the global
+nearest neighbour (ratio 0.95, no cross-check), kept within 1.5 x
+`--max-error` of its epipolar plane (angles on bearings, so an
+equirectangular image is gated like a pinhole one); verification; triangulation against the learned poses and
 a free bundle adjustment (`Mapper::retriangulate`), then the finishing passes
 again. Any image SIFT cannot hold is put back at its learned pose, carried into
 the SIFT frame by a Sim3, with no points; when fewer than two shared poses tie
 the frames, the log says how many images could not be put back. A failure
 keeps the learned model, with the reason translated like the rest of the log.
-Band matching and verification run at once and split the cores between them.
 After the stage the image list counts SIFT's keypoints, and the dataset
 screen's feature reel shows `features.sift/` while it is written.
-`SS_SFM_HYBRID_MATCH=gate` is the earlier form: the global nearest neighbour
-(ratio 0.95, no cross-check), kept within 1.5 x `--max-error` of its epipolar
-plane. The GUI's "Refine with SIFT" (Advanced, learned features only) passes
+`SS_SFM_HYBRID_MATCH=band` searches the band instead (below: it misplaces
+points); band matching and verification then split the cores. The GUI's "Refine with SIFT" (Advanced, learned features only) passes
 `--hybrid-sift`.
 `hybrid.txt` records the stage. Experiment knobs, all `SS_SFM_HYBRID_*`:
-`MATCH` (`band`, `gate`, `none`), `GUIDED`, `RATIO`, `CROSS_CHECK`,
-`BAND_MUTUAL`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`, `EPIPOLAR_PX`, and `LEARNED_POINTS=1`, which also triangulates the learned
+`MATCH` (`gate`, `band`, `none`), `GUIDED`, `RATIO`, `CROSS_CHECK`,
+`BAND_MUTUAL`, `MIN_VIEWS`, `PEAK_SCALE`, `FEATURES`, `IMAGE_SIZE`,
+`EPIPOLAR_PX`, and `LEARNED_POINTS=1`, which also triangulates the learned
 tracks against the final poses (no BA) for a denser seed.
 
 ## Measured: a 678-image interior
@@ -44,17 +41,17 @@ Errors in source pixels.
 | LoMa `--progressive`, high | 676 | 606,874 | 3.015 |
 | SIFT `--progressive`, high | 645 | 273,451 | 1.454 |
 | hybrid, high, ratio 0.9 + cross-check | 676 | 382,112 | 1.616 |
-| hybrid, high, gate, ratio 0.95, no cross-check | 676 | 494,144 | 1.739 |
+| hybrid, high, gate, ratio 0.95, no cross-check (default) | 676 | 494,144 | 1.739 |
 | hybrid, high, + `LEARNED_POINTS` | 676 | 1,051,321 | 2.104 |
 | hybrid, extreme, ratio 0.9 + cross-check | 676 | 558,674 | 1.234 |
 | hybrid, high, band 0.8, one per keypoint | 676 | 1,115,680 | 2.062 |
 | hybrid, high, band 0.9, one per keypoint | 676 | 1,671,280 | 2.126 |
 | hybrid, high, band 0.95, one per keypoint | 676 | 1,911,700 | 2.124 |
 | hybrid, high, band 0.9, mutual, 4.5 px | 676 | 1,244,335 | 2.049 |
-| hybrid, high, band 0.9, mutual, 2 px (default) | 676 | 1,454,903 | 1.333 |
+| hybrid, high, band 0.9, mutual, 2 px | 676 | 1,454,903 | 1.333 |
 | hybrid, high, band 0.8, mutual, 2 px | 676 | 891,486 | 1.323 |
 | hybrid, high, gate, 2 px | 674 + 2 restored | 422,666 | 1.364 |
-| hybrid, extreme, band (default) | 676 | 2,514,042 | 1.003 |
+| hybrid, extreme, band | 676 | 2,514,042 | 1.003 |
 
 The stage itself is about a minute at high. LoMa leaves out 2 images where SIFT
 leaves out 33, so step 0's question is answered: the learned frontend places
@@ -62,15 +59,27 @@ images SIFT cannot, and SIFT keeps all but a few of them with points. Without
 the gate (ratio 0.8, cross-check) there are 22% fewer points and verification
 takes twice as long.
 
-The band's width is what matters. At 4.5 px (1.5 x `--max-error`) a ratio test
-over a few dozen candidates passes near neighbours along the line, and the
-median error rises from 1.43 to 1.78 px however the ratio is set. At 2 px it
-gives 2.9 times the gate's points at 1.33 px against 1.74, more points than
-LoMa's own model at well under half its error, in about 2.5 minutes. Ratio 0.8
-loses 39% of the points for no gain; a 2 px gate loses 15% and two images.
+Mean reprojection error does not show whether a point is in the right place.
+A wrong match that slides along its epipolar line triangulates at the wrong
+depth with no error in two views, and band matching makes exactly those: its
+1.45M points at 1.33 px are 91% two-view tracks, and the GUI showed no room.
+`results/tools/hybrid_diag.py` aligns a model to the LoMa one by camera centres
+and counts its points within 1% of the scene extent of a LoMa point:
 
-At extreme the band gives 4.5 times the old extreme run's points at 1.00 px
-against 1.23, keeps all 676 images (the old run restored 7), in 3 minutes.
+| model | points | two-view | near structure | two-view near |
+|---|---|---|---|---|
+| LoMa | 606,874 | 63% | 100% | 100% |
+| SIFT alone | 273,451 | 69% | 99.0% | 98.8% |
+| hybrid, gate (default) | 494,221 | 73% | 97.0% | 96.0% |
+| hybrid, band 2 px | 1,455,018 | 91% | 80.8% | 79.3% |
+
+The cameras were never at fault: the band model's centres agree with LoMa's to
+under 0.0001 of the extent and 0.007 deg. Its tracks of three or more views
+number about the gate's (128k against 132k), so the band adds almost nothing
+but two-view points. Dropping two-view points (`MIN_VIEWS=3`) cleans either
+model but leaves fewer points than SIFT alone, at about 1.8 px. So the gate is
+the default; the band would need a per-point check against the learned
+model's depth before it could be.
 
 Open: more SIFT features at high.
 

@@ -473,10 +473,10 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         // gate: the global nearest neighbour, kept near its epipolar plane;
         // band: the nearest neighbour within that band; none: unguided.
         const char* mv = spirula::env("SFM_HYBRID_MATCH");
-        std::string mode = mv && mv[0] ? mv : "band";
+        std::string mode = mv && mv[0] ? mv : "gate";
         if (spirula::env("SFM_HYBRID_GUIDED") && !spirula::env_on("SFM_HYBRID_GUIDED"))
             mode = "none";
-        if (mode != "gate" && mode != "none") mode = "band";
+        if (mode != "band" && mode != "none") mode = "gate";
         const bool guided = mode != "none";
         sc.match = MatchOptions();
         sc.match.device = cfg.match.device;
@@ -485,8 +485,8 @@ bool hybridSift(std::vector<Reconstruction>& models, std::vector<FeatureSet>& fe
         sc.match.descriptor_budget_bytes = cfg.match.descriptor_budget_bytes;
         sc.match.max_num_matches = cfg.match.max_num_matches;
         // The geometry does the rejecting the ratio test and the cross-check would.
-        // On a 678-image interior capture, a 2 px band at 0.9 gave three
-        // times the gate's points at 1.33 px against 1.74; 0.8 lost 39% for nothing.
+        // The band is opt-in: a fifth of its points lay off the structure, against
+        // 3% for the gate (docs/notes/sfm-hybrid-frontend-plan.md).
         const double ratio = mode == "gate" ? 0.95 : mode == "band" ? 0.9 : 0.8;
         sc.match.max_ratio = (float)envNumber("SFM_HYBRID_RATIO", ratio);
         sc.match.cross_check = envNumber("SFM_HYBRID_CROSS_CHECK", guided ? 0 : 1) != 0;
