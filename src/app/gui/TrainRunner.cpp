@@ -35,6 +35,11 @@ spirula::TrainerProgress TrainRunner::latest_progress() {
     return _latest;
 }
 
+spirula::EvalProgress TrainRunner::latest_eval_progress() {
+    std::lock_guard<std::mutex> lk(_mu);
+    return _eval;
+}
+
 double TrainRunner::avg_latency_locked() const {
     if (_latencies.empty()) return -1.0;
     double sum = 0.0;
@@ -126,6 +131,7 @@ void TrainRunner::start_training(const TrainConfig& cfg, const std::string& pres
         std::lock_guard<std::mutex> lk(_mu);
         _error.clear();
         _latest = {};
+        _eval = {};
         _latencies.clear();
         _metrics.clear();
     }
@@ -189,7 +195,10 @@ void TrainRunner::start_training(const TrainConfig& cfg, const std::string& pres
             s->train(cb);
             if (!s->stop_requested.load() && s->cfg.eval_mode != "all") {
                 _phase = Phase::Evaluating;
-                s->eval();
+                s->eval([this](const spirula::EvalProgress& p) {
+                    std::lock_guard<std::mutex> lk(_mu);
+                    _eval = p;
+                });
             }
             _phase = Phase::Done;
         } catch (const std::exception& e) {

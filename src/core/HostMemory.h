@@ -1,6 +1,6 @@
 #pragma once
-// How much physical memory the machine has, or 0 when the platform will not
-// say. Callers that need a working number must supply their own fallback.
+// How much memory the machine has, or 0 when the platform will not say.
+// Callers that need a working number must supply their own fallback.
 
 #include <cstddef>
 
@@ -50,6 +50,19 @@ inline size_t availableRamBytes() {
     if (pages > 0 && page > 0) return (size_t)pages * (size_t)page;
 #endif
     return 0;
+}
+
+// What new allocations can still take: Windows refuses them at the commit limit, which
+// a small page file puts well below free RAM, and charges Vulkan device memory to it too.
+inline size_t availableCommitBytes() {
+#if defined(_WIN32)
+    MEMORYSTATUSEX st{};
+    st.dwLength = sizeof(st);
+    if (GlobalMemoryStatusEx(&st)) return (size_t)st.ullAvailPageFile;
+    return 0;
+#else
+    return availableRamBytes();
+#endif
 }
 
 // This process's resident set: the physical memory it holds right now.

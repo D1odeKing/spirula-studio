@@ -348,6 +348,85 @@ panorama and 2K photo pair.
   `dense/Generation.h`). `dense_edit_test` covers both artifact layouts, a
   second edit, and repairing a cloud an older build saved unsigned.
 
+## Surface-driven pairing
+
+Automatic pairing gave each reference a fixed number of neighbours and chose
+references by sparse-track coverage in capture order. Pair counts therefore
+followed the number of frames: a 5,730-face dual-fisheye room walk planned
+13,545 Balanced pairs against 1,530 at every 8th frame, and a Nerfstudio
+dataset without tracks made each of its 31,292 faces a reference (83,935
+pairs). The cause on video was track fragmentation: a sparse point is tracked
+through about four consecutive frames, so tracks barely overlap between
+references and almost every frame looks uncovered.
+
+Pairing now plans from geometry (`dense/Visibility.cpp`, `dense/PairSelection.cpp`;
+`docs/dense.md`, "Automatic pairing"). The sweeps behind the constants ran the
+earlier and the new planner in one process on the same views
+(`SS_DENSE_PLAN_ONLY` and a temporary sweep hook), measuring both plans with
+the same projected visibility:
+
+- Coverage counted in angle-weighted units (full from 10 degrees) never
+  reached its target on distant cells, so the 2S cap set the pair count;
+  counting a partner fully from 3 degrees and using the 10-degree weight only
+  to order partners matched the earlier pairing's coverage at about its pair
+  count.
+- With tracks for visibility, references stayed at about 90% of the frames of
+  a dense video. Projected visibility removed that.
+- Thinning the points to a fixed count let the sample spacing, and so the
+  surface measured, follow how much cloud SfM made, and cells sized from the
+  nearest camera alone grow finer as cameras get denser. With cells of 5% of
+  the nearest-camera distance, floored at the median such distance, the room
+  walk measures 24,648 cells at every 8th frame and 27,029 at full density
+  when both keep the full point cloud; dropping the points no longer seen by
+  two kept frames, as a thinned model does, measures less.
+- A view qualified as a reference while a tenth of its own cells was
+  uncovered, which a face seeing a sliver of surface met with a handful of
+  cells; a tenth of a typical view's cells cut the room walk's full-density
+  pairs by a quarter.
+
+Calibration against the earlier presets on the nine Mip-NeRF 360 scenes,
+geometric means of new over earlier per scene: Fast (R 12, S 2) references
+per cell ×1.07, partners ×0.97, pairs ×1.02; Balanced (12, 3) ×0.95, ×1.00,
+×0.96; High (16, 4) ×0.94, ×1.02, ×0.98. Garden Balanced at quarter
+resolution, RTX 3070 laptop, 7,000 steps scored on every eighth image:
+
+| Pairing | Pairs | Points | Dense time | PSNR / SSIM |
+|---|---:|---:|---:|---:|
+| Earlier Balanced | 508 | 4.15M | 952 s (build running) | 25.76 / 0.840 |
+| Reference coverage 12 (Balanced) | 343 | 3.09M | 384 s (158 pairs cached) | 25.79 / 0.842 |
+| Reference coverage 8 | 253 | 2.30M | 307 s | 25.75 / 0.840 |
+
+The masked 160-image object capture, Balanced, same protocol: the earlier
+pairing's 191 pairs (101 references, 142k points, 253 s) trained to 36.45 /
+0.993, the surface-driven 147 (68 references, 92k points, 170 s) to 36.53 /
+0.993.
+
+## Windows commit and device memory
+
+Balanced on Mip-NeRF 360 garden failed with "bad allocation" twice on a 16 GB
+laptop (RTX 3070, a page file that leaves about 6.5 GB of commit free), at
+pairs 194 and 246 of 508, with 6.45 GB committed. Commit minus working set
+tracked the card's memory to within a few MB (2,223 MB against 2,220 MB at one
+sample): Windows charges Vulkan device memory to the commit limit. The feature
+cache grew into the card's free memory, and the host budgets planned 3.4 times
+an eighth of RAM. The host budget now also takes a fifth of available commit
+and its shares sum to 1.4 times it; on Windows and Apple the feature cache
+stops at the available commit less 1 GB and the host plan's remaining growth.
+The same run completed with a 4.7 GB commit peak and 1.2 GB working set, the
+cache answering 806 of 1,016 descriptor requests, and the cloud matching the
+earlier one's point count (4,145,929).
+
+## Checkpoint loading
+
+`Session::load` read the official checkpoint in 7-8 s on one thread: each
+tensor reopened the ZIP, and every element was decoded through a string
+comparison of its storage type and a division per axis. One archive per
+reader thread, the type resolved once and contiguous runs decoded in bulk,
+with up to 16 workers packing FP16 in parallel, load it in 0.8 s (mixed and
+FP32 alike). The device weights are the same bytes in the same chunks:
+predictions dumped by `roma_profile_test` on a garden pair are identical
+between the two loaders in both precisions.
+
 ## Open validation
 
 - Full native/upstream cascade parity and real-scene quality acceptance remain

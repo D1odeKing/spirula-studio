@@ -37,7 +37,8 @@ int main() {
             require(pair.first < pair.second && unique.insert(pair).second, "automatic pairs not canonical/distinct");
             ++degrees[pair.first]; ++degrees[pair.second];
         }
-        require(!selected.empty() && *std::max_element(degrees.begin(), degrees.end()) <= 2, "automatic neighbor cap failed");
+        require(!selected.empty() && *std::max_element(degrees.begin(), degrees.end()) <= 2 * options.neighbors,
+                "automatic neighbor cap failed");
         require(pairs(images, options) == selected, "automatic pair ordering changed");
         images[0].visible_points = {2, 4, 6}; images[11].visible_points = {2, 4, 6};
         selected = pairs(images, options);

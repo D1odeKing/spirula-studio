@@ -1,10 +1,16 @@
 #include "roma/model/Weights.h"
 
 #include "nn/core/Error.h"
+#include "nn/core/Half.h"
 
+#include <algorithm>
 #include <cmath>
+#include <condition_variable>
+#include <exception>
 #include <map>
+#include <mutex>
 #include <set>
+#include <thread>
 
 namespace spirula::roma {
 namespace {
@@ -118,6 +124,61 @@ void Weights::validate(const nn::TorchCheckpoint& f) {
     }
 }
 
+namespace {
+
+struct Prepared {
+    std::string name;
+    std::vector<int64_t> shape;
+    std::vector<float> data;
+    std::vector<uint16_t> half;
+    uint64_t bytes() const { return data.size() * sizeof(float) + half.size() * sizeof(uint16_t); }
+};
+
+// One checkpoint tensor as staged, after any batch-normalization folding it feeds.
+std::vector<Prepared> prepare(const nn::TorchCheckpoint& f, nn::TorchCheckpoint::Reader& reader, const std::string& path,
+                              const std::string& name, bool mixed) {
+    std::vector<Prepared> out;
+    nn::OnnxTensor t = reader.read(name);
+    for (float v : t.data) NN_CHECK(std::isfinite(v), "'%s': nonfinite weight '%s'", path.c_str(), name.c_str());
+    if (name.size() >= 12 && name.compare(name.size() - 12, 12, ".running_var") == 0) {
+        const std::string p = name.substr(0, name.size() - 12);
+        const auto mean = reader.read(p + ".running_mean").data;
+        const auto gamma = reader.read(p + ".weight").data;
+        const auto beta = reader.read(p + ".bias").data;
+        std::vector<float> scale(t.data.size()), shift(t.data.size());
+        for (size_t i = 0; i < scale.size(); ++i) {
+            NN_CHECK(t.data[i] >= 0, "'%s': negative batch normalization variance", path.c_str());
+            scale[i] = gamma[i] / std::sqrt(t.data[i] + 1e-5f);
+            shift[i] = beta[i] - mean[i] * scale[i];
+        }
+        out.push_back({p + ".scale", t.shape, std::move(scale), {}});
+        out.push_back({p + ".shift", t.shape, std::move(shift), {}});
+    }
+    if (name.size() >= 5 && name.compare(name.size() - 5, 5, ".bias") == 0 && f.has(name + "_mask")) {
+        const auto mask = reader.read(name + "_mask").data;
+        for (size_t i = 0; i < mask.size(); ++i) t.data[i] *= mask[i];
+    }
+    const bool transpose = name == "matcher.head.resize_layers.0.weight" || name == "matcher.head.resize_layers.1.weight";
+    if (transpose) {
+        auto data = transpose_patch(t);
+        t.shape = {t.shape[1] * t.shape[2] * t.shape[3], t.shape[0]};
+        t.data = std::move(data);
+    }
+    const bool matrix = name.size() >= 7 && name.compare(name.size() - 7, 7, ".weight") == 0 &&
+        (t.shape.size() == 2 || t.shape.size() == 4) && name.find("conv_depthwise") == std::string::npos;
+    bool half = mixed && matrix;
+    if (half) for (float v : t.data) if (std::abs(v) > 65504) { half = false; break; }
+    Prepared tensor{name, std::move(t.shape), {}, {}};
+    if (half) {
+        tensor.half.resize(t.data.size());
+        for (size_t i = 0; i < t.data.size(); ++i) tensor.half[i] = nn::float_to_half(t.data[i]);
+    } else tensor.data = std::move(t.data);
+    out.push_back(std::move(tensor));
+    return out;
+}
+
+}  // namespace
+
 void Weights::load(const std::string& path, bool mixed, const std::function<void(uint64_t, uint64_t)>& progress) {
     release();
     mixed_ = mixed;
@@ -135,44 +196,71 @@ void Weights::load(const std::string& path, bool mixed, const std::function<void
              "'%s': RoMa matcher temperature must be positive", path.c_str());
     uint64_t staged = 0;
     try {
+        // Workers decode, check and pack tensors; this thread stages them in checkpoint
+        // order, so device placement does not depend on which worker finished first.
         const auto names = f.names();
-        uint64_t loaded = 0;
-        for (const auto& name : names) {
-            if (progress && loaded * 100 / names.size() != (loaded + 1) * 100 / names.size())
-                progress(loaded + 1, names.size());   // whole percents: a log line per tensor is noise
-            ++loaded;
-            nn::OnnxTensor t = f.read(name);
-            for (float v : t.data) NN_CHECK(std::isfinite(v), "'%s': nonfinite weight '%s'", path.c_str(), name.c_str());
-            if (name.size() >= 12 && name.compare(name.size() - 12, 12, ".running_var") == 0) {
-                const std::string p = name.substr(0, name.size() - 12);
-                const auto mean = f.read(p + ".running_mean").data;
-                const auto gamma = f.read(p + ".weight").data;
-                const auto beta = f.read(p + ".bias").data;
-                std::vector<float> scale(t.data.size()), shift(t.data.size());
-                for (size_t i = 0; i < scale.size(); ++i) {
-                    NN_CHECK(t.data[i] >= 0, "'%s': negative batch normalization variance", path.c_str());
-                    scale[i] = gamma[i] / std::sqrt(t.data[i] + 1e-5f);
-                    shift[i] = beta[i] - mean[i] * scale[i];
+        const size_t n = names.size();
+        std::vector<std::vector<Prepared>> slots(n);
+        std::vector<char> ready(n, 0);
+        std::mutex mutex;
+        std::condition_variable changed;
+        size_t next = 0;
+        uint64_t ahead = 0;
+        bool stop = false;
+        std::exception_ptr failure;
+        constexpr uint64_t kAheadBytes = 256ull << 20;
+        auto work = [&] {
+            try {
+                nn::TorchCheckpoint::Reader reader(f);
+                for (;;) {
+                    size_t i;
+                    {
+                        std::unique_lock<std::mutex> lock(mutex);
+                        changed.wait(lock, [&] { return stop || ahead < kAheadBytes; });
+                        if (stop || next == n) return;
+                        i = next++;
+                    }
+                    auto items = prepare(f, reader, path, names[i], mixed);
+                    std::lock_guard<std::mutex> lock(mutex);
+                    for (const auto& item : items) ahead += item.bytes();
+                    slots[i] = std::move(items); ready[i] = 1;
+                    changed.notify_all();
                 }
-                store_.stage(p + ".scale", t.shape, std::move(scale), false);
-                store_.stage(p + ".shift", t.shape, std::move(shift), false);
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(mutex);
+                if (!failure) failure = std::current_exception();
+                stop = true;
+                changed.notify_all();
             }
-            if (name.size() >= 5 && name.compare(name.size() - 5, 5, ".bias") == 0 && f.has(name + "_mask")) {
-                const auto mask = f.read(name + "_mask").data;
-                for (size_t i = 0; i < mask.size(); ++i) t.data[i] *= mask[i];
+        };
+        std::vector<std::thread> pool;
+        struct Join {
+            std::vector<std::thread>& pool; std::mutex& mutex; std::condition_variable& changed; bool& stop;
+            ~Join() {
+                { std::lock_guard<std::mutex> lock(mutex); stop = true; }
+                changed.notify_all();
+                for (auto& thread : pool) thread.join();
             }
-            const bool transpose = name == "matcher.head.resize_layers.0.weight" || name == "matcher.head.resize_layers.1.weight";
-            if (transpose) {
-                auto data = transpose_patch(t);
-                t.shape = {t.shape[1] * t.shape[2] * t.shape[3], t.shape[0]};
-                t.data = std::move(data);
+        } join{pool, mutex, changed, stop};
+        const unsigned threads = std::clamp(std::thread::hardware_concurrency(), 1u, 16u);
+        for (unsigned t = 0; t < threads; ++t) pool.emplace_back(work);
+        for (size_t i = 0; i < n; ++i) {
+            if (progress && i * 100 / n != (i + 1) * 100 / n)
+                progress(i + 1, n);   // whole percents: a log line per tensor is noise
+            std::vector<Prepared> items;
+            {
+                std::unique_lock<std::mutex> lock(mutex);
+                changed.wait(lock, [&] { return ready[i] || failure; });
+                if (!ready[i]) std::rethrow_exception(failure);
+                items = std::move(slots[i]);
+                for (const auto& item : items) ahead -= item.bytes();
             }
-            staged += t.data.size() * sizeof(float);
-            const bool matrix = name.size() >= 7 && name.compare(name.size() - 7, 7, ".weight") == 0 &&
-                (t.shape.size() == 2 || t.shape.size() == 4) && name.find("conv_depthwise") == std::string::npos;
-            bool half = mixed && matrix;
-            if (half) for (float v : t.data) if (std::abs(v) > 65504) { half = false; break; }
-            store_.stage(name, std::move(t.shape), std::move(t.data), half);
+            changed.notify_all();
+            staged += (items.back().data.size() + items.back().half.size()) * sizeof(float);
+            for (auto& item : items) {
+                if (!item.half.empty()) store_.stage_f16(item.name, std::move(item.shape), std::move(item.half));
+                else store_.stage(item.name, std::move(item.shape), std::move(item.data), false);
+            }
             if (staged >= (64ull << 20)) { store_.upload("roma-weights"); staged = 0; }
         }
         store_.stage("input.std", {3}, {0.229f, 0.224f, 0.225f}, false);

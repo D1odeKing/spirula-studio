@@ -8,9 +8,11 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <queue>
 #include <set>
-#include <unordered_map>
 #include <stdexcept>
+#include <tuple>
+#include <unordered_set>
 
 namespace spirula::dense {
 namespace {
@@ -49,18 +51,330 @@ bool sees_same_region(const PairImage& a, const PairImage& b) {
 // narrower ones count by the angle squared (Goesele et al. 2007, view selection).
 constexpr double kFullWeightAngle = 10 * 3.141592653589793 / 180;
 constexpr size_t kScoredPoints = 1024, kScoredTrack = 256, kPoseCandidates = 48;
-// Reference coverage: a view stays a reference while this share of its point cells is
-// under-covered, and always when it has fewer cells than this.
+// References stop once no view would add this share of a typical view's cells. Measured against
+// each view's own count, views that see a sliver qualified and denser captures made more of them.
 constexpr double kFreshShare = 0.1;
-constexpr size_t kFewPoints = 32;
-// The coverage cell's side, as a share of the median distance from a camera to its points.
-constexpr double kCoverageCell = 0.02;
+// A cell's side, as a share of the median distance from the cameras that see its points, rounded
+// down to a power of two: a cell is then about the same share of every view that sees it.
+constexpr double kCoverageCell = 0.04;
+// Cells kept per view (median), by a hash every view agrees on, which bounds planning time.
+constexpr size_t kCellsPerView = 512;
+// A partner sees a cell for coverage from this angle up, and by the angle squared below it: a
+// distant cell that no pair sees widely must not draw partners until the cap.
+constexpr double kCoverageAngle = 3 * 3.141592653589793 / 180;
+// A reference takes another neighbour only while it adds this much coverage per cell of its view.
+constexpr double kMinNeighbourGain = 0.05;
+// Partners a reference ranks by shared cells before coverage chooses among them.
+constexpr size_t kCandidates = 24;
 
-// Near-linear in views and observations: candidates come from the sparse tracks and the
-// nearest camera centres, never from a scan over every other view.
-void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& options, const std::vector<uint32_t>& order,
-                     const std::vector<sfm::Vec3>& points, const std::function<bool(ImagePair)>& publish,
-                     PairStatistics& statistics, const std::function<void()>& check_cancel) {
+double pair_angle(const sfm::Vec3& x, const sfm::Vec3& a, const sfm::Vec3& b) {
+    const auto ra = x - a, rb = x - b;
+    const double norms = ra.norm() * rb.norm();
+    return norms > 0 ? std::acos(std::clamp(ra.dot(rb) / norms, -1.0, 1.0)) : 0;
+}
+
+double angle_weight(const sfm::Vec3& x, const sfm::Vec3& a, const sfm::Vec3& b) {
+    const double angle = pair_angle(x, a, b);
+    return std::min(1.0, (angle / kFullWeightAngle) * (angle / kFullWeightAngle));
+}
+
+uint64_t mix(uint64_t x) {
+    x += 0x9e3779b97f4a7c15ull;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ull;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebull;
+    return x ^ (x >> 31);
+}
+
+// The surface the views see, as cells of sparse points, and which views see each cell.
+struct Cells {
+    std::vector<std::vector<uint32_t>> of_view;   // sorted cell ids
+    std::vector<sfm::Vec3> centroid;              // empty without point positions
+    std::vector<uint64_t> begin;                  // views[begin[c] .. begin[c + 1]] see cell c
+    std::vector<uint32_t> views;
+    size_t count() const { return begin.empty() ? 0 : begin.size() - 1; }
+};
+
+Cells surface_cells(const std::vector<PairImage>& images, const std::vector<sfm::Vec3>& points,
+                    const std::function<void()>& check_cancel) {
+    Cells out;
+    const size_t n = images.size();
+    out.of_view.resize(n);
+    std::vector<uint64_t> ids;
+    for (const auto& image : images) ids.insert(ids.end(), image.visible_points.begin(), image.visible_points.end());
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    if (ids.empty()) return out;
+    std::vector<std::vector<uint32_t>> compact(n);
+    std::vector<uint64_t> first(ids.size() + 1, 0);
+    for (size_t v = 0; v < n; ++v) {
+        if (check_cancel) check_cancel();
+        auto at = ids.begin();
+        for (uint64_t point : images[v].visible_points) {
+            at = std::lower_bound(at, ids.end(), point);
+            compact[v].push_back((uint32_t)(at - ids.begin()));
+            ++first[compact[v].back() + 1];
+        }
+    }
+    std::partial_sum(first.begin(), first.end(), first.begin());
+    std::vector<uint32_t> observers(first.back());
+    {
+        std::vector<uint64_t> fill(first.begin(), first.end() - 1);
+        for (size_t v = 0; v < n; ++v) for (uint32_t p : compact[v]) observers[fill[p]++] = (uint32_t)v;
+    }
+    std::vector<uint64_t> key(ids.size());
+    for (size_t p = 0; p < ids.size(); ++p) {
+        if (points.empty()) { key[p] = mix(ids[p]); continue; }
+        const auto& x = points[ids[p]];
+        double distance[8];
+        size_t m = 0;
+        const uint64_t step = std::max<uint64_t>(1, (first[p + 1] - first[p]) / 8);
+        for (uint64_t o = first[p]; o < first[p + 1] && m < 8; o += step) distance[m++] = (x - images[observers[o]].center).norm();
+        std::nth_element(distance, distance + m / 2, distance + m);
+        const double side = kCoverageCell * distance[m / 2];
+        const int level = side > 0 && std::isfinite(side) ? std::ilogb(side) : 0;
+        const double size = std::ldexp(1.0, level);
+        uint64_t k = mix((uint64_t)(int64_t)level);
+        for (double coordinate : {x.x, x.y, x.z}) k = mix(k ^ (uint64_t)(int64_t)std::floor(coordinate / size));
+        key[p] = k;
+    }
+    std::vector<uint64_t> keys = key;
+    std::sort(keys.begin(), keys.end());
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    std::vector<uint32_t> cell(ids.size());
+    for (size_t p = 0; p < ids.size(); ++p) cell[p] = (uint32_t)(std::lower_bound(keys.begin(), keys.end(), key[p]) - keys.begin());
+    std::vector<size_t> sizes;
+    for (size_t v = 0; v < n; ++v) {
+        auto& cells = out.of_view[v];
+        for (uint32_t p : compact[v]) cells.push_back(cell[p]);
+        std::vector<uint32_t>().swap(compact[v]);
+        std::sort(cells.begin(), cells.end());
+        cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+        if (!cells.empty()) sizes.push_back(cells.size());
+    }
+    std::nth_element(sizes.begin(), sizes.begin() + sizes.size() / 2, sizes.end());
+    const double keep = std::min(1.0, (double)kCellsPerView / std::max<size_t>(1, sizes[sizes.size() / 2]));
+    std::vector<uint32_t> renumber(keys.size(), UINT32_MAX);
+    uint32_t kept = 0;
+    for (size_t c = 0; c < keys.size(); ++c)
+        if ((double)(mix(keys[c] ^ 0x5bd1e995ull) >> 11) * 0x1.0p-53 < keep) renumber[c] = kept++;
+    for (auto& cells : out.of_view) {
+        size_t o = 0;
+        for (uint32_t c : cells) if (renumber[c] != UINT32_MAX) cells[o++] = renumber[c];
+        cells.resize(o); cells.shrink_to_fit();
+    }
+    if (!points.empty()) {
+        out.centroid.assign(kept, {});
+        std::vector<uint32_t> members(kept, 0);
+        for (size_t p = 0; p < ids.size(); ++p)
+            if (const uint32_t c = renumber[cell[p]]; c != UINT32_MAX) { out.centroid[c] = out.centroid[c] + points[ids[p]]; ++members[c]; }
+        for (uint32_t c = 0; c < kept; ++c) out.centroid[c] = out.centroid[c] * (1.0 / members[c]);
+    }
+    out.begin.assign((size_t)kept + 1, 0);
+    for (const auto& cells : out.of_view) for (uint32_t c : cells) ++out.begin[c + 1];
+    std::partial_sum(out.begin.begin(), out.begin.end(), out.begin.begin());
+    out.views.resize(out.begin.back());
+    std::vector<uint64_t> fill(out.begin.begin(), out.begin.end() - 1);
+    for (size_t v = 0; v < n; ++v) for (uint32_t c : out.of_view[v]) out.views[fill[c]++] = (uint32_t)v;
+    return out;
+}
+
+// Greedy multi-cover: the view that sees the most cells still short of `coverage` references
+// goes next. Views that see nothing are never references.
+std::vector<uint32_t> cover_references(const Cells& cells, int coverage, const std::vector<uint32_t>& order,
+                                       const std::function<void()>& check_cancel) {
+    std::vector<uint8_t> count(cells.count(), 0);
+    auto gain = [&](uint32_t v) {
+        size_t g = 0;
+        for (uint32_t c : cells.of_view[v]) g += count[c] < coverage;
+        return g;
+    };
+    // A view's gain only falls as references are added, so a stale bound is still an upper bound.
+    std::priority_queue<std::tuple<size_t, int64_t, uint32_t>> queue;
+    for (size_t rank = 0; rank < order.size(); ++rank)
+        if (!cells.of_view[order[rank]].empty()) queue.emplace(cells.of_view[order[rank]].size(), -(int64_t)rank, order[rank]);
+    std::vector<uint32_t> selected;
+    std::vector<size_t> sizes;
+    for (const auto& c : cells.of_view) if (!c.empty()) sizes.push_back(c.size());
+    if (!sizes.empty()) std::nth_element(sizes.begin(), sizes.begin() + sizes.size() / 2, sizes.end());
+    const double typical = sizes.empty() ? 1.0 : (double)sizes[sizes.size() / 2];
+    while (!queue.empty()) {
+        if (check_cancel && queue.size() % 1024 == 0) check_cancel();
+        auto [bound, rank, v] = queue.top();
+        queue.pop();
+        const size_t g = gain(v);
+        if ((double)g < std::max(1.0, kFreshShare * typical)) continue;
+        if (!queue.empty() && std::make_tuple(g, rank) < std::make_tuple(std::get<0>(queue.top()), std::get<1>(queue.top()))) {
+            queue.emplace(g, rank, v);
+            continue;
+        }
+        selected.push_back(v);
+        for (uint32_t c : cells.of_view[v]) if (count[c] < 255) ++count[c];
+    }
+    return selected;
+}
+
+struct Shared { uint32_t at_a, at_b; float unit, weight; };
+
+std::vector<Shared> shared_cells(const Cells& cells, uint32_t a, uint32_t b, const std::vector<PairImage>& images) {
+    std::vector<Shared> out;
+    const auto& x = cells.of_view[a], &y = cells.of_view[b];
+    for (size_t i = 0, j = 0; i < x.size() && j < y.size();) {
+        if (x[i] < y[j]) ++i;
+        else if (y[j] < x[i]) ++j;
+        else {
+            const double angle = cells.centroid.empty() ? kFullWeightAngle : pair_angle(cells.centroid[x[i]], images[a].center, images[b].center);
+            out.push_back({(uint32_t)i, (uint32_t)j, (float)std::min(1.0, (angle / kCoverageAngle) * (angle / kCoverageAngle)),
+                           (float)std::min(1.0, (angle / kFullWeightAngle) * (angle / kFullWeightAngle))});
+            ++i; ++j;
+        }
+    }
+    return out;
+}
+
+// Undirected automatic pairing sized by the surface rather than by the number of views: references
+// cover every cell `reference_coverage` times, and each reference takes neighbours until every
+// part of its view is matched against `neighbors` of them, weighted by triangulation angle.
+void coverage_pairs(const std::vector<PairImage>& images, const PairOptions& options, const std::vector<uint32_t>& order,
+                    const std::vector<sfm::Vec3>& points, const std::function<bool(ImagePair)>& publish,
+                    PairStatistics& statistics, const std::function<void()>& check_cancel) {
+    const size_t n = images.size();
+    if (n < 2) return;
+    const Cells cells = surface_cells(images, points, check_cancel);
+    statistics.cells = cells.count();
+    const std::vector<uint32_t> references = options.reference_coverage > 0 ?
+        cover_references(cells, options.reference_coverage, order, check_cancel) : order;
+    statistics.references = references.size();
+    std::vector<int32_t> slot(n, -1);
+    std::vector<std::vector<float>> got(references.size());
+    for (size_t k = 0; k < references.size(); ++k) {
+        slot[references[k]] = (int32_t)k;
+        got[k].assign(cells.of_view[references[k]].size(), 0.f);
+    }
+    const double target = options.neighbors;
+    const int cap = 2 * options.neighbors;
+    auto identity = [&](uint32_t i) { return std::make_pair(images[i].source_image, images[i].face); };
+    auto better = [&](const RankedPair& a, const RankedPair& b) {
+        if (a.score != b.score) return a.score > b.score;
+        if (a.common != b.common) return a.common > b.common;
+        if (a.affinity != b.affinity) return a.affinity > b.affinity;
+        return std::minmax(identity(a.pair.first), identity(a.pair.second)) <
+               std::minmax(identity(b.pair.first), identity(b.pair.second));
+    };
+    auto allowed = [&](ImagePair pair) {
+        return eligible_pair(images, pair) && (options.max_baseline <= 0 ||
+            (images[pair.first].center - images[pair.second].center).norm() <= options.max_baseline);
+    };
+    sfm::Vec3 mean{};
+    for (const auto& image : images) mean = mean + image.center * (1.0 / n);
+    std::vector<float> centers(n * 3);
+    for (size_t i = 0; i < n; ++i) {
+        const auto c = images[i].center - mean;
+        centers[i * 3] = (float)c.x; centers[i * 3 + 1] = (float)c.y; centers[i * 3 + 2] = (float)c.z;
+    }
+    const knn::KdTree3 tree(centers.data(), (int64_t)n);
+    const int nearest_count = (int)std::min<size_t>(n - 1, kPoseCandidates);
+    std::vector<float> nearest_distance((size_t)nearest_count);
+    std::vector<int32_t> nearest((size_t)nearest_count);
+    std::vector<int> degree(n, 0);
+    std::unordered_set<uint64_t> paired;
+    auto pair_key = [](uint32_t a, uint32_t b) { return ((uint64_t)std::min(a, b) << 32) | std::max(a, b); };
+    std::vector<double> score(n, 0);
+    std::vector<uint64_t> common(n, 0);
+    std::vector<uint32_t> touched;
+    struct Candidate { uint32_t b; std::vector<Shared> shared; double quality = 0, bound = 0; bool open = true; };
+    for (const uint32_t r : references) {
+        if (check_cancel) check_cancel();
+        const auto& mine = cells.of_view[r];
+        for (uint32_t c : mine) {
+            const uint64_t begin = cells.begin[c], end = cells.begin[c + 1];
+            const uint64_t step = std::max<uint64_t>(1, (end - begin) / kScoredTrack);
+            for (uint64_t o = begin; o < end; o += step) {
+                const uint32_t b = cells.views[o];
+                if (b == r || images[b].source_image == images[r].source_image) continue;
+                if (!common[b]++) touched.push_back(b);
+                score[b] += cells.centroid.empty() ? 1 : angle_weight(cells.centroid[c], images[r].center, images[b].center);
+            }
+        }
+        std::vector<RankedPair> ranked;
+        for (uint32_t b : touched) {
+            const ImagePair pair = std::minmax(r, b);
+            if (allowed(pair) && !paired.count(pair_key(r, b))) ranked.push_back({pair, common[b], pose_affinity(images[r], images[b]), score[b]});
+        }
+        if (ranked.size() < (size_t)options.neighbors && !images[r].shared_points_only) {
+            const int found = tree.query(&centers[(size_t)r * 3], (int32_t)r, nearest_count, nearest_distance.data(), nearest.data());
+            for (int i = 0; i < found; ++i) {
+                const uint32_t b = (uint32_t)nearest[(size_t)i];
+                if (common[b] || images[b].shared_points_only || paired.count(pair_key(r, b))) continue;
+                const ImagePair pair = std::minmax(r, b);
+                if (allowed(pair) && sees_same_region(images[r], images[b])) ranked.push_back({pair, 0, pose_affinity(images[r], images[b]), 0});
+            }
+        }
+        for (uint32_t b : touched) { common[b] = 0; score[b] = 0; }
+        touched.clear();
+        std::sort(ranked.begin(), ranked.end(), better);
+        if (ranked.size() > kCandidates) ranked.resize(kCandidates);
+        std::vector<Candidate> candidates;
+        for (const auto& item : ranked) {
+            const uint32_t b = item.pair.first == r ? item.pair.second : item.pair.first;
+            Candidate c{b, shared_cells(cells, r, b, images)};
+            for (const auto& s : c.shared) c.quality += s.weight / (double)c.shared.size();
+            candidates.push_back(std::move(c));
+        }
+        auto gain = [&](const Candidate& c) {
+            double g = 0;
+            const auto& own = got[(size_t)slot[r]];
+            const int32_t other = slot[c.b];
+            for (const auto& s : c.shared) {
+                g += std::min<double>(s.unit, std::max(0.0, target - own[s.at_a]));
+                if (other >= 0) g += std::min<double>(s.unit, std::max(0.0, target - got[(size_t)other][s.at_b]));
+            }
+            return g;
+        };
+        bool stopped = false;
+        auto accept = [&](Candidate& c) {
+            c.open = false;
+            paired.insert(pair_key(r, c.b));
+            ++degree[r]; ++degree[c.b];
+            const int32_t other = slot[c.b];
+            for (const auto& s : c.shared) {
+                got[(size_t)slot[r]][s.at_a] += s.unit;
+                if (other >= 0) got[(size_t)other][s.at_b] += s.unit;
+            }
+            if (!publish(std::minmax(r, c.b))) stopped = true;
+        };
+        // Coverage decides whether a partner is worth a pair; among those, wider angles go first.
+        auto priority = [](const Candidate& c, double g) { return g * (0.5 + 0.5 * c.quality); };
+        for (auto& c : candidates) c.bound = priority(c, gain(c));
+        const double minimum = kMinNeighbourGain * (double)std::max<size_t>(1, mine.size());
+        while (!stopped && degree[r] < cap) {
+            Candidate* best = nullptr;
+            for (auto& c : candidates)
+                if (c.open && (!best || c.bound > best->bound)) best = &c;
+            if (!best || best->bound < 0.5 * minimum) break;
+            const double g = gain(*best);
+            if (g < minimum || degree[best->b] >= cap) { best->open = false; continue; }
+            const double p = priority(*best, g);
+            bool still_best = true;
+            for (const auto& c : candidates)
+                if (c.open && &c != best && c.bound > p) { still_best = false; break; }
+            best->bound = p;
+            if (still_best) accept(*best);
+        }
+        // Three-image support needs two neighbours, whatever they add.
+        for (auto& c : candidates) {
+            if (stopped || degree[r] >= std::min(2, options.neighbors)) break;
+            if (c.open) accept(c);
+        }
+        if (stopped) return;
+    }
+}
+
+// Directed (source-image) pairing: each given reference keeps its best-ranked neighbours.
+// Candidates come from the sparse tracks and the nearest camera centres, never from a scan
+// over every other view.
+void directed_pairs(const std::vector<PairImage>& images, const PairOptions& options, const std::vector<uint32_t>& order,
+                    const std::vector<sfm::Vec3>& points, const std::function<bool(ImagePair)>& publish,
+                    PairStatistics& statistics, const std::function<void()>& check_cancel) {
     const size_t n = images.size();
     if (n < 2) return;
     const size_t k = std::min<size_t>((size_t)options.neighbors, n - 1);
@@ -98,52 +412,11 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
     const int nearest_count = (int)std::min<size_t>(n - 1, kPoseCandidates);
     std::vector<float> nearest_distance((size_t)nearest_count);
     std::vector<int32_t> nearest((size_t)nearest_count);
-    std::vector<char> reference(n, 1);
-    if (options.directed && !options.references.empty()) {
-        std::fill(reference.begin(), reference.end(), 0);
-        for (uint32_t r : options.references) if (r < n) reference[r] = 1;
-    } else if (options.reference_coverage > 0 && !options.directed) {
-        // A view whose points earlier references already cover adds nothing of its own; one
-        // with almost no points might see untextured surface, so it always stays a reference.
-        // Coverage is kept per small cell of space, since SfM breaks one surface into many short tracks.
-        std::fill(reference.begin(), reference.end(), 0);
-        std::vector<uint64_t> cell(track_points.size());
-        for (size_t i = 0; i < track_points.size(); ++i) cell[i] = track_points[i];
-        if (!points.empty()) {
-            std::vector<double> depths;
-            for (uint32_t a : order) {
-                const auto& visible = images[a].visible_points;
-                if (!visible.empty()) depths.push_back((points[visible[visible.size() / 2]] - images[a].center).norm());
-            }
-            std::nth_element(depths.begin(), depths.begin() + depths.size() / 2, depths.end());
-            const double size = depths.empty() ? 0 : kCoverageCell * depths[depths.size() / 2];
-            if (size > 0)
-                for (size_t i = 0; i < track_points.size(); ++i) {
-                    const auto& x = points[track_points[i]];
-                    uint64_t key = 1469598103934665603ull;
-                    for (double v : {x.x, x.y, x.z}) { key ^= (uint64_t)(int64_t)std::floor(v / size); key *= 1099511628211ull; }
-                    cell[i] = key;
-                }
-        }
-        std::unordered_map<uint64_t, uint8_t> coverage;
-        std::vector<uint64_t> cells;
-        for (uint32_t a : order) {
-            if (check_cancel) check_cancel();
-            cells.clear();
-            for (uint64_t point : images[a].visible_points)
-                cells.push_back(cell[(size_t)(std::lower_bound(track_points.begin(), track_points.end(), point) - track_points.begin())]);
-            std::sort(cells.begin(), cells.end());
-            cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
-            size_t fresh = 0;
-            for (uint64_t c : cells) { const auto it = coverage.find(c); fresh += it == coverage.end() || it->second < options.reference_coverage; }
-            reference[a] = cells.size() < kFewPoints || fresh >= kFreshShare * cells.size();
-            if (reference[a]) for (uint64_t c : cells) { auto& count = coverage[c]; if (count < 255) ++count; }
-        }
-    }
+    std::vector<char> reference(n, options.references.empty());
+    for (uint32_t r : options.references) if (r < n) reference[r] = 1;
     std::vector<double> score(n, 0);
     std::vector<uint64_t> common(n, 0);
     std::vector<uint32_t> touched;
-    std::vector<std::vector<RankedPair>> chosen(n);
     std::vector<RankedPair> candidates;
     for (uint32_t a : order) {
         if (!reference[a]) continue;
@@ -159,13 +432,7 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
             for (size_t j = begin; j < end; j += track_step) {
                 const uint32_t b = observations[j].second;
                 if (b == a || images[b].source_image == images[a].source_image) continue;
-                double weight = 1;
-                if (!points.empty()) {
-                    const auto ra = points[point] - images[a].center, rb = points[point] - images[b].center;
-                    const double norms = ra.norm() * rb.norm();
-                    const double angle = norms > 0 ? std::acos(std::clamp(ra.dot(rb) / norms, -1.0, 1.0)) : 0;
-                    weight = std::min(1.0, (angle / kFullWeightAngle) * (angle / kFullWeightAngle));
-                }
+                const double weight = points.empty() ? 1 : angle_weight(points[point], images[a].center, images[b].center);
                 if (!common[b]++) touched.push_back(b);
                 score[b] += weight;
             }
@@ -177,13 +444,12 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
             if (at != best.end() || best.size() < k) best.insert(at, item);
             if (best.size() > k) best.pop_back();
         };
-        auto pair_with = [&](uint32_t b) { return options.directed ? ImagePair{a, b} : ImagePair(std::minmax(a, b)); };
         auto allowed = [&](ImagePair pair) {
             return eligible_pair(images, pair) && (options.max_baseline <= 0 ||
                 (images[pair.first].center - images[pair.second].center).norm() <= options.max_baseline);
         };
         for (uint32_t b : touched) {
-            const ImagePair pair = pair_with(b);
+            const ImagePair pair{a, b};
             if (allowed(pair)) offer({pair, common[b], pose_affinity(images[a], images[b]), score[b]});
         }
         if (best.size() < k && !images[a].shared_points_only) {
@@ -191,50 +457,22 @@ void automatic_pairs(const std::vector<PairImage>& images, const PairOptions& op
             for (int i = 0; i < found; ++i) {
                 const uint32_t b = (uint32_t)nearest[(size_t)i];
                 if (common[b] || images[b].shared_points_only) continue;
-                const ImagePair pair = pair_with(b);
+                const ImagePair pair{a, b};
                 if (allowed(pair) && sees_same_region(images[a], images[b]))
                     offer({pair, 0, pose_affinity(images[a], images[b]), 0});
             }
         }
         for (uint32_t b : touched) { common[b] = 0; score[b] = 0; }
         touched.clear();
-        if (options.directed && !options.max_pairs) {
+        if (!options.max_pairs) {
             for (const auto& item : best) if (!publish(item.pair)) return;
-        } else {
-            candidates.insert(candidates.end(), best.begin(), best.end());
-            chosen[a] = std::move(best);
-        }
+        } else candidates.insert(candidates.end(), best.begin(), best.end());
     }
-    if (options.directed && !options.max_pairs) return;
+    if (!options.max_pairs) return;
     std::sort(candidates.begin(), candidates.end(), better);
-    candidates.erase(std::unique(candidates.begin(), candidates.end(), [](const RankedPair& a, const RankedPair& b) {
-        return a.pair == b.pair;
-    }), candidates.end());
-    // With every view a reference both ends are capped, as before reference spacing existed;
-    // otherwise only references are, and a neighbour-only view may serve several of them.
-    const bool subset = std::find(reference.begin(), reference.end(), 0) != reference.end();
-    std::vector<int> degrees(n, 0);
-    std::set<ImagePair> emitted;
-    auto full = [&](uint32_t view) { return (!subset || reference[view]) && degrees[view] >= options.neighbors; };
-    auto accept = [&](ImagePair pair) {
-        if (!emitted.insert(pair).second) return true;
-        if (!publish(pair)) return false;
-        ++degrees[pair.first]; if (!options.directed) ++degrees[pair.second];
-        return true;
-    };
-    for (const auto& candidate : candidates) {
-        const auto pair = candidate.pair;
-        if (full(pair.first) || (!options.directed && full(pair.second))) continue;
-        if (!accept(pair)) return;
-    }
-    if (!subset) return;
-    // A reference whose picks all filled up still gets the two neighbours three-view support needs.
-    for (uint32_t a : order)
-        for (const auto& candidate : chosen[a]) {
-            if (degrees[a] >= std::min(2, options.neighbors)) break;
-            if (!accept(candidate.pair)) return;
-        }
+    for (const auto& candidate : candidates) if (!publish(candidate.pair)) return;
 }
+
 }  // namespace
 
 void PairOptions::validate() const {
@@ -342,7 +580,8 @@ PairStatistics select_pairs(const std::vector<PairImage>& images, const PairOpti
             if (pair.first > pair.second) std::swap(pair.first, pair.second);
         }
     } else {
-        automatic_pairs(images, options, order, points, publish, statistics, check_cancel);
+        if (options.directed) directed_pairs(images, options, order, points, publish, statistics, check_cancel);
+        else coverage_pairs(images, options, order, points, publish, statistics, check_cancel);
         return statistics;
     }
     std::sort(pairs.begin(), pairs.end());
@@ -353,6 +592,45 @@ PairStatistics select_pairs(const std::vector<PairImage>& images, const PairOpti
     });
     for (const auto& pair : pairs) if (!publish(pair)) break;
     return statistics;
+}
+
+SurfaceCoverage measure_coverage(const std::vector<PairImage>& images, const std::vector<ImagePair>& pairs,
+                                 const std::vector<sfm::Vec3>& points, bool directed) {
+    SurfaceCoverage out;
+    const Cells cells = surface_cells(images, points, {});
+    out.cells = cells.count();
+    std::vector<std::vector<uint32_t>> partners(images.size());
+    for (const auto& pair : pairs) {
+        partners[pair.first].push_back(pair.second);
+        if (!directed) partners[pair.second].push_back(pair.first);
+    }
+    std::vector<uint32_t> reconstructions(cells.count(), 0);
+    std::vector<uint32_t> per_reference;
+    for (size_t v = 0; v < images.size(); ++v) {
+        if (partners[v].size() < 2) continue;
+        for (uint32_t c : cells.of_view[v]) {
+            uint32_t seen = 0;
+            for (uint32_t u : partners[v])
+                seen += std::binary_search(cells.of_view[u].begin(), cells.of_view[u].end(), c);
+            if (seen >= 2) { ++reconstructions[c]; per_reference.push_back(seen); }
+        }
+    }
+    std::vector<uint32_t> per_cell;
+    for (size_t c = 0; c < cells.count(); ++c)
+        if (cells.begin[c + 1] - cells.begin[c] >= 3) per_cell.push_back(reconstructions[c]);
+    auto median = [](std::vector<uint32_t>& v) {
+        if (v.empty()) return 0.0;
+        std::nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        return (double)v[v.size() / 2];
+    };
+    auto mean = [](const std::vector<uint32_t>& v) {
+        return v.empty() ? 0.0 : std::accumulate(v.begin(), v.end(), 0.0) / (double)v.size();
+    };
+    out.covered = per_cell.size() - (size_t)std::count(per_cell.begin(), per_cell.end(), 0u);
+    out.mean_references = mean(per_cell); out.mean_neighbors = mean(per_reference);
+    out.references = median(per_cell); out.neighbors = median(per_reference);
+    out.reconstructable = per_cell.size();
+    return out;
 }
 
 double resolve_max_baseline(const std::vector<PairImage>& images, const PairOptions& options, double setting,

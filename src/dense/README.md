@@ -31,7 +31,7 @@ fails with `LNK1104`. The portable tests need no GPU or model:
 dense_geometry_test  dense_reconstruction_test  dense_panorama_test
 dense_config_test    dense_pair_selection_test  dense_fusion_test
 dense_artifact_test  dense_spill_test           dense_memory_report_test
-dense_filter_test
+dense_filter_test    dense_visibility_test
 ```
 
 `dense_camera_test`, `dense_field_compare_test` and `dense_live_preview_test`
@@ -75,7 +75,8 @@ message in `i18n/catalog/Dense.h`, a round trip in
 | `src/dense/Geometry.h/.cpp` | Views (rectified face or original calibrated camera), observations, two-view triangulation, robust point-only refinement, depth consistency. |
 | `src/dense/Reconstruction.h/.cpp` | Turns pair predictions into disk observation tiles, completes one reference at a time, samples, groups, refines, publishes filtered checkpoints, then fusion and export. |
 | `src/dense/ReferenceSampling.h` | Deterministic coverage plus confidence-weighted sampling, in-memory and external. |
-| `src/dense/PairSelection.h/.cpp` | Automatic, sequential, exhaustive and explicit pairing; pose-coverage reference selection for source mode. |
+| `src/dense/PairSelection.h/.cpp` | Automatic (surface-coverage), sequential, exhaustive and explicit pairing; pose-coverage reference selection for source mode. |
+| `src/dense/Visibility.h/.cpp` | Which surface samples each view sees, by projection with a coarse depth test; the input to automatic pairing. |
 | `src/dense/Fusion.h/.cpp` | Disk-partitioned neighbouring-cell fusion with deterministic boundary ownership. |
 | `src/dense/Filters.h/.cpp` | Two-image admission and its free-space grid, the depth-precision bar, far isolated points, the baseline limit, the written-cloud reprojection summary. |
 | `src/dense/DiskArray.h`, `DiskTable.h`, `ExternalSort.h` | Spill-to-disk arrays, a paged read-only table, stable external merge sort. |
@@ -126,14 +127,25 @@ never count as independent support.
 
 **Pairs.** Rectified automatic mode pairs *views*: every face of a split lens
 is a `PairImage` of its own (`face` > 0), faces of one image are never paired,
-and split faces pair only through shared sparse points. A reference's
-candidates come from the inverted track index, each shared point weighted by
-`min(1, (angle/10°)²)` of the angle the two centres see it from, and from a
-kd-tree over camera centres when tracks run short, so nothing loops over all
-view pairs. `reference_coverage` (C) walks views in capture order and keeps a
-view as a reference only while a tenth of its sparse-point cells (2% of the
-median view depth) are seen by fewer than C earlier references; views with
-under 32 cells always stay. Source automatic
+and split faces pair only through shared surface samples. `Visibility.cpp`
+samples the sparse points one per cell (5% of the nearest-camera distance,
+floored at its median; at most 32,768), or places samples on each view's rays
+when there are none, and projects them into every view behind a 24 × 24
+nearest-depth grid. `PairSelection.cpp` groups visible samples into cells (4%
+of their median distance from the views that see them), then:
+
+- references, greedily: the view seeing the most cells still short of
+  `reference_coverage` (R) references next, until none adds a tenth of a
+  typical view's cells (`cover_references`);
+- partners per reference, greedily, until each of its cells is seen by
+  `neighbors` (S) of them, a partner counting `min(1, (angle/3°)²)` for a cell
+  and ordered among equals by the `min(1, (angle/10°)²)` weight; at most 2S,
+  at least two (`coverage_pairs`).
+
+Candidates come from the inverted cell index and, when it runs short, a
+kd-tree over camera centres, so nothing loops over all view pairs.
+`measure_coverage` reports how often a plan sees each cell; the manifest's
+`pairing` block and `SS_DENSE_PLAN_ONLY` carry it. Source automatic
 mode picks `reference_fraction` of the images by farthest-point coverage in
 pose space and emits directed reference→neighbour jobs. Its sequential,
 exhaustive and explicit modes emit both directed jobs, and in rectified mode
@@ -275,25 +287,35 @@ duplicates across a boundary.
 
 ## Memory model
 
-The run sizes everything from one host budget,
-`B = image_cache_bytes` (auto: `min(physical/8, available/2)`). During
-matching, these coexist:
+The run sizes everything from one host budget, `B = image_cache_bytes` (auto:
+the smallest of physical RAM / 8, available RAM / 3 and available commit / 5).
+During matching, these coexist:
 
 | Working set | Bound |
 |---|---|
-| Decoded view pixels (LRU) | B |
-| Queued predictions awaiting reconstruction | B |
-| Warp plans (rectified only) | B |
+| Decoded view pixels (LRU) | B/2 |
+| Queued predictions awaiting reconstruction | B/4 |
+| Warp plans (rectified only) | B/4 |
 | Pending observation tiles | B/8 |
 | Reference workers, together | B/4 |
 | Paged job table | B/32 |
 
-`planned_host_bytes(B, rectified)` is that sum: `2.406·B`, or `3.406·B`
+`planned_host_bytes(B, rectified)` is that sum: `1.156·B`, or `1.406·B`
 rectified. The reporter adds the process size at start, giving the **planned
 host ceiling**. On the device, RoMa preflights `weights + planned scratch`
 against 80% of VRAM and lets its feature cache grow to a limit inside the
 driver budget. The **planned device ceiling** is current use plus the cache's
 remaining headroom.
+
+Windows charges Vulkan device memory to the system commit limit, exactly like
+host memory: on a 16 GB laptop with a small page file, the process's commit
+minus its working set tracked its VRAM to within a few MB. The feature cache,
+which only saves recomputing descriptors, was what ran the commit out. So on
+Windows (and on Apple, whose device memory is the same RAM) every pair caps the
+cache at the available commit, less 1 GB and the host plan's remaining growth;
+commit is also why `B` is held to a fifth of it. A completed reference's
+observation tiles are deleted as soon as it is refined, so disk use follows
+the references in flight rather than every pair matched.
 
 `MemoryReporter` (`DenseProcessing.cpp`) writes `dense/progress/memory.json`
 twice a second, atomically. The GUI's `DenseMemoryView` reads it and draws it in
@@ -341,6 +363,7 @@ file holds the final cloud.
 | `dense_panorama_test` | Calibrated panorama reconstruction of a sphere, periodic colour/mask sampling, wrapped cycle interpolation. |
 | `dense_config_test` | Defaults, presets, source-workflow setup, validation. |
 | `dense_pair_selection_test` | Ranking, bounded degree, sequences, explicit/exhaustive modes, cancellation. |
+| `dense_visibility_test` | Occlusion, samples without points, ten times the views not ten times the pairs, wide views needing fewer pairs than narrow ones. |
 | `dense_fusion_test` | Cell and partition boundaries, normals, depth layers, chain bounds, parallel/spilled equality. |
 | `dense_artifact_test` | Locking, cleanup, generations, interrupted publication, legacy adoption, checksums. |
 | `dense_spill_test` | Spill arrays, external merge, sampler equivalence. |
@@ -364,5 +387,11 @@ file holds the final cloud.
 - `dense_live_preview_test PROGRESS_DIR POINT_RECORDS OUT_PNG [DATASET]`
   renders a checkpoint through the shared renderer, and with a dataset compares
   it against the published PLY from the same viewpoint.
-- On Windows the executable manifest opts into long paths, so nested
-  prediction cache paths can exceed `MAX_PATH` where the OS policy allows.
+- `dense/cache` is opened in extended-length form (`core/LongPath.h`): a
+  prediction nests two 64-digit names under it, past `MAX_PATH` below a long
+  dataset path, and Windows honours the executable's long-path manifest only
+  where the machine's `LongPathsEnabled` policy is set. `dense_artifact_test`,
+  built without that manifest, writes and cleans up a 300-character cache path.
+- `SS_DENSE_PLAN_ONLY=FILE` writes the pair plan (views, references, surface
+  cells, pairs and the coverage below) to `FILE` and stops before loading the
+  model, for tuning pairing without matching.

@@ -183,6 +183,11 @@ struct TrainerProgress {
     std::map<std::string, float> losses;
 };
 
+struct EvalProgress {
+    int64_t completed = 0;
+    int64_t total = 0;
+};
+
 struct TrainerCallbacks {
     // Called after every completed step, engine mutex released.
     std::function<void(const TrainerProgress&)> on_step;
@@ -294,7 +299,7 @@ public:
     // Reports l1/psnr/ssim and the cc_ variants of each (computed on the
     // colour-corrected render). LPIPS is not computed here -- pass
     // --save-eval-images and run reference/python/eval_lpips.py over the PNGs.
-    void eval();
+    void eval(const std::function<void(const EvalProgress&)>& on_progress = {});
 
     // The seeds setup_engine() hands the engine, from the point cloud and/or
     // cfg.init_ply.

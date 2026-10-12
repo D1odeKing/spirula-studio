@@ -46,12 +46,29 @@ void WeightStore::stage(const std::string& name, std::vector<int64_t> shape,
     staged_.push_back(Staged{name, std::move(shape), std::move(data), f16});
 }
 
+void WeightStore::stage_f16(const std::string& name, std::vector<int64_t> shape,
+                            std::vector<uint16_t> data) {
+    NN_CHECK(shape.size() <= 4, "weight '%s' has rank %zu; nn::Tensor holds 4", name.c_str(),
+             shape.size());
+    int64_t n = 1;
+    for (int64_t d : shape) n *= d;
+    NN_CHECK(n == (int64_t)data.size(), "weight '%s': shape holds %lld, data %zu",
+             name.c_str(), (long long)n, data.size());
+    Staged staged{name, std::move(shape), {}, true, std::move(data)};
+    for (Staged& s : staged_)
+        if (s.name == name) {
+            s = std::move(staged);
+            return;
+        }
+    staged_.push_back(std::move(staged));
+}
+
 void WeightStore::upload(const char* tag) {
     std::vector<uint64_t> chunk_sizes;
     std::vector<std::pair<uint32_t, uint64_t>> placement(staged_.size());
     uint64_t used = 0;
     for (size_t i = 0; i < staged_.size(); ++i) {
-        const uint64_t bytes = align_up((uint64_t)staged_[i].data.size() *
+        const uint64_t bytes = align_up((uint64_t)staged_[i].count() *
                                             (staged_[i].f16 ? 2u : 4u), 4);
         used = align_up(used, kAlign);
         if (used != 0 && used + bytes > kChunkBytes) {
@@ -74,7 +91,8 @@ void WeightStore::upload(const char* tag) {
         t.ndim = (int32_t)std::max<size_t>(s.shape.size(), 1);
         for (size_t d = 0; d < s.shape.size(); ++d) t.shape[d] = s.shape[d];
         if (s.shape.empty()) t.shape[0] = 1;
-        tensor_from_host(t, s.data.data(), (int64_t)s.data.size());
+        if (!s.packed.empty()) vk::Stream::get().upload(t.ptr, s.packed.data(), s.packed.size() * 2);
+        else tensor_from_host(t, s.data.data(), (int64_t)s.data.size());
         tensors_[s.name] = t;
     }
     vk::Stream::get().sync();

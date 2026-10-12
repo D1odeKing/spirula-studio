@@ -62,6 +62,9 @@ struct DenseConfig {
     void apply_preset(const std::string& name);
     // True while every setting a preset controls still holds that preset's value.
     bool matches_preset(const std::string& name) const;
+    // A preset's neighbours and reference coverage from before pairing followed the surface
+    // become its current ones, so saved settings still read, and plan, as that preset.
+    bool migrate_pairing();
     void apply_source_workflow();
     GeometryOptions resolved_geometry() const;
     void validate() const;

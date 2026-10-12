@@ -1889,7 +1889,7 @@ std::vector<uint8_t> to_png_bytes(const std::vector<float>& rgb) {
 
 }  // namespace
 
-void TrainerSession::eval() {
+void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_progress) {
     // eval_mode "all" trains on every frame, so nothing is held out.
     if (cfg.eval_mode == "all") return;
 
@@ -1975,6 +1975,7 @@ void TrainerSession::eval() {
     }
 
     log(lfmt(lmsg::eval_views, {(long long)epost.n_post}));
+    if (on_progress) on_progress({0, epost.n_post});
 
     // Rendering is serial (one process-global engine), but scoring a view --
     // colour correction, the metrics, and the PNG encode -- is pure host work
@@ -2008,10 +2009,18 @@ void TrainerSession::eval() {
     std::deque<ViewJob> queue;
     std::vector<ViewScore> scores;
     std::mutex qmu, smu;
+    std::mutex progress_mu;
     std::condition_variable qcv, spacecv;
     bool producing = true;
     std::atomic<bool> worker_failed = false;
     std::exception_ptr worker_error;
+
+    int64_t completed = 0;
+    auto report_progress = [&] {
+        if (!on_progress) return;
+        std::lock_guard<std::mutex> lk(progress_mu);
+        on_progress({++completed, epost.n_post});
+    };
 
     auto score_view = [&](ViewJob& j) {
         const int64_t view_px = (int64_t)j.H * j.W * j.C;
@@ -2048,6 +2057,7 @@ void TrainerSession::eval() {
             png("gt", j.gt);
             png("render", j.pred);
         }
+        report_progress();
     };
 
     std::vector<std::thread> workers;

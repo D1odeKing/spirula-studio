@@ -826,6 +826,22 @@ void verify_dense_reuse(DatasetPlan& plan, const std::string& dataset, const std
     }
 }
 
+// A record from before pairing followed the surface holds a preset's old neighbour and
+// reference counts; read through the same migration as saved settings, its cloud stays current.
+StepFields migrated_dense_record(StepFields fields) {
+    spirula::dense::DenseConfig config;
+    for (const auto& field : fields)
+        try { spirula::dense::assign_config_field(config, field.key, json_parse(field.value)); }
+        catch (const std::exception&) {}
+    if (!config.migrate_pairing()) return fields;
+    auto value = [](int number) { JsonWriter writer; json_write(writer, json_parse(json_field::emit(number))); return writer.str(); };
+    for (auto& field : fields) {
+        if (field.key == "neighbors") field.value = value(config.pairs.neighbors);
+        if (field.key == "reference_coverage") field.value = value(config.pairs.reference_coverage);
+    }
+    return fields;
+}
+
 StepFields dense_fields(const DenseJob& job) {
     StepFields fields;
     const auto object = json_parse(spirula::dense::config_json(job.config));
@@ -1056,7 +1072,7 @@ DatasetPlan plan_dataset(const PlanJob& job, const WorkspaceState& ws,
     else if (req.redo_dense || dc.rebuild) set(dense, Act::Redo, Why::Requested);
     else if (!rd.present) set(dense, Act::Run, Why::Unrecorded);
     else if (rd.frames_id != rf.id || rd.model_id != rr.id || (dense_masks && rd.masks_id != rm.id)) set(dense, Act::Redo, Why::Stale);
-    else compare(dense, rd, diff(rd.fields, dense_fields(job.dense)));
+    else compare(dense, rd, diff(migrated_dense_record(rd.fields), dense_fields(job.dense)));
 
     StepPlan& g = p[Step::Geometry];
     if (fixed(Step::Geometry)) {

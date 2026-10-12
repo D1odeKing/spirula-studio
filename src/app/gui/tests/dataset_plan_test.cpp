@@ -563,6 +563,21 @@ int main() {
             StepRecorder again(ws.string(), read_dataset_record(ws.string()));
             again.begin(Step::Dense, dense_fields(j.dense), {"roma.ply"}); again.finish(Step::Dense);
         }
+        {
+            // Balanced's pairing before neighbours and references measured the surface.
+            auto before = j;
+            before.dense.config.apply_preset("balanced");
+            before.dense.config.pairs.neighbors = 6; before.dense.config.pairs.reference_coverage = 3;
+            auto now = j;
+            now.dense.config.apply_preset("balanced");
+            StepRecorder old(ws.string(), read_dataset_record(ws.string()));
+            old.begin(Step::Dense, dense_fields(before.dense), {"roma.ply"}); old.finish(Step::Dense);
+            expect(plan(now)[Step::Dense].act == Act::Reuse, "a cloud from a preset's old pairing is not reused under that preset");
+            now.dense.config.pairs.neighbors = 4;
+            expect(plan(now)[Step::Dense].act == Act::Redo, "a neighbour change after migration did not invalidate dense output");
+            StepRecorder again(ws.string(), read_dataset_record(ws.string()));
+            again.begin(Step::Dense, dense_fields(j.dense), {"roma.ply"}); again.finish(Step::Dense);
+        }
         std::atomic<bool> verification_cancel{false};
         auto verified = plan(j); verify_dense_reuse(verified,ws.string(),verification_cancel);
         expect(verified[Step::Dense].act == Act::Reuse,"dense reuse verifies source contents and cloud checksum");

@@ -28,9 +28,11 @@ struct PairImage {
 
 struct PairOptions {
     PairMode mode = PairMode::Automatic;
+    // Undirected automatic mode: each part of a reference's view is matched against about this
+    // many neighbours, up to twice as many in all. Directed mode: neighbours per reference.
     int neighbors = 8, sequence_window = 8;
-    // Automatic mode: in capture order, a view is a reference only while a tenth of its sparse
-    // point cells are seen by fewer than this many earlier references; 0 makes every view one.
+    // Undirected automatic mode: references are added until every surface cell is seen by this
+    // many of them; 0 makes every view one.
     int reference_coverage = 0;
     uint64_t max_pairs = 0;
     std::vector<ImagePair> explicit_pairs;
@@ -42,19 +44,29 @@ struct PairOptions {
 };
 
 struct PairStatistics {
-    uint64_t emitted = 0, rejected_baseline = 0, references = 0;
+    uint64_t emitted = 0, rejected_baseline = 0, references = 0, cells = 0;
+};
+
+// How often planned pairs see each surface cell. A view reconstructs a cell when two or more of
+// its partners see it too; medians and means are over cells that three or more views see.
+struct SurfaceCoverage {
+    uint64_t cells = 0, reconstructable = 0, covered = 0;
+    double references = 0, mean_references = 0, neighbors = 0, mean_neighbors = 0;
 };
 
 bool shares_points(const std::vector<uint64_t>& a, const std::vector<uint64_t>& b);
 std::vector<uint32_t> select_references(const std::vector<PairImage>& images, double fraction, uint64_t seed,
                                       const std::function<void()>& check_cancel = {});
 
-// Exhaustive emits incrementally; automatic stores at most N*neighbors candidates and, given
-// the sparse point positions, prefers neighbours that see shared points from a wider angle.
+// Exhaustive emits incrementally. Automatic pairs views by the sparse points they share and,
+// given the points' positions, prefers neighbours that see them from a wider angle.
 PairStatistics select_pairs(const std::vector<PairImage>& images, const PairOptions& options,
                                const std::function<void(ImagePair)>& emit,
                                const std::function<void()>& check_cancel = {},
                                const std::vector<sfm::Vec3>& points = {});
+
+SurfaceCoverage measure_coverage(const std::vector<PairImage>& images, const std::vector<ImagePair>& pairs,
+                                 const std::vector<sfm::Vec3>& points, bool directed);
 
 // The automatic-mode baseline limit: `setting` when positive, 3x the median planned
 // baseline when 0 on a metric model, else none (0). `refused` counts planned pairs over it.
