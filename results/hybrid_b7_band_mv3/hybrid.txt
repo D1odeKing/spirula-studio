@@ -1,0 +1,4 @@
+# images image_size features pairs verified putative guided_kept inliers seconds
+hybrid 676 2400 8192 11434 11358 23420370 6872255 6803633 195.06
+# model images sift restored points_before points_after error_before error_after points_learned error_combined
+model 0 676 676 0 606882 127514 3.01459 1.7782 0 0
