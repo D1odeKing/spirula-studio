@@ -308,3 +308,46 @@ total of 23 min has no matching time. Both exit 0, and all runs placed 676/678.
 - The hybrid stage stays cheap at extreme: 179 s for 11,581 pairs and 43M
   putative matches.
 - LoMa's feature pass 1 ran out of GPU memory again, as in every extreme run.
+
+## Build 7 (00ed48f9): the lost structure
+
+Build 7 passes the five sfm tests and `preset_roundtrip_test`.
+`results/tools/hybrid_diag.py` fits each model's camera centres onto the LoMa
+model's (Sim3, by image name). It then counts the points that land within 1%
+of the scene extent of some LoMa point. Full output is in
+`diag_b7/existing.txt` and `diag_b7/runs.txt`. The GUI model is the user's,
+read only, from `H:\Hershy Site GS\GS runs\a7iii_inside\sparse\0`.
+
+| model | points | 2-view share | near, all | near, 2-view | near, 3-view | near, 4+ |
+|---|---|---|---|---|---|---|
+| loma_prog (reference) | 606,874 | 63.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| hybrid_b4_gate | 494,221 | 73.2% | 97.0% | 96.0% | 99.7% | 100.0% |
+| hybrid_b6 (band) | 1,455,018 | 91.2% | 80.8% | 79.3% | 95.1% | 99.7–100% |
+| sift_prog | 273,451 | 69.0% | 99.0% | 98.8% | 99.2% | 99.6–99.8% |
+| GUI model | 1,451,313 | 91.3% | 80.4% | 78.8% | 95.2% | 99.7–100% |
+| hybrid_b7_band_mv3 | 127,514 | — | 97.1% | — | 95.1% | 99.7–100% |
+| hybrid_b7_gate_mv3 | 132,399 | — | 99.9% | — | 99.8% | 100.0% |
+
+| run | env | points | observations | mean px | median px | dropped (< 3 views) | `[hybrid] … kept X of Y` | stage s |
+|---|---|---|---|---|---|---|---|---|
+| hybrid_b7_band_mv3 | MIN_VIEWS=3 | 127,514 | 499,536 | 1.778 | 1.577 | 1,326,983 | band 6,872,255 of 23,420,370 | 195 |
+| hybrid_b7_gate_mv3 | MATCH=gate, MIN_VIEWS=3 | 132,399 | 555,958 | 1.817 | 1.563 | 361,596 | gate 2,059,981 of 34,893,981 | 64 |
+
+Both placed 676/678; SIFT kept all 676.
+
+- **The theory holds.** The band models' extra points are almost all 2-view
+  tracks (91%), and 21% of those sit off the structure: about 275k misplaced
+  points in b6 and the GUI model alike. The GUI model is b6's profile exactly.
+  The cameras are not the problem: b6 agrees with LoMa to a median
+  0.0000 of extent and 0.007°.
+- **Band matching adds almost no multi-view structure.** b6 has 127k points
+  in 3+ views, against b4_gate's 132k. With 2-view tracks removed, band and
+  gate are about the same size (128k against 132k), and the gate's are
+  cleaner (99.9% against 97.1%). Even band's 3-view tracks are only 95% near.
+- **Dropping 2-view tracks is too blunt.** It leaves fewer points than SIFT
+  alone (273k at 99.0%), and the mean error rises to about 1.8 px, because
+  longer tracks carry the larger residuals. b4_gate's 2-view tracks are 96%
+  near. Those are worth keeping; band's 79% are not.
+- So the cleanest dense default here is still gate matching with every track
+  (b4_gate: 494k points, 97% near, 1.74 px). Band density would need a
+  per-track check against the other views, not a blanket view count.

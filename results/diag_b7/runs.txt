@@ -1,0 +1,26 @@
+reference ../hybrid_tests/ws_loma_prog/sparse/0: 676 images, 606874 points, extent 2.18
+
+== ../hybrid_tests/ws_loma_prog/sparse/0
+  676 common images; centre error / extent: median 0.0000, 90% 0.0000, max 0.0000
+  rotation error deg: median 0.000, 90% 0.000, max 0.000
+  606874 points, 100.0% near the reference structure
+    track    2:    382179 points ( 63.0%), 100.0% near
+    track    3:     98252 points ( 16.2%), 100.0% near
+    track  4-5:     72424 points ( 11.9%), 100.0% near
+    track   6+:     54019 points (  8.9%), 100.0% near
+
+== ../hybrid_tests/ws_hybrid_b7_band_mv3/sparse/0
+  676 common images; centre error / extent: median 0.0000, 90% 0.0001, max 0.0009
+  rotation error deg: median 0.008, 90% 0.023, max 0.371
+  127514 points, 97.1% near the reference structure
+    track    3:     73206 points ( 57.4%),  95.1% near
+    track  4-5:     36687 points ( 28.8%),  99.7% near
+    track   6+:     17621 points ( 13.8%), 100.0% near
+
+== ../hybrid_tests/ws_hybrid_b7_gate_mv3/sparse/0
+  676 common images; centre error / extent: median 0.0002, 90% 0.0006, max 0.0774
+  rotation error deg: median 0.042, 90% 0.107, max 1.998
+  132399 points, 99.9% near the reference structure
+    track    3:     67938 points ( 51.3%),  99.8% near
+    track  4-5:     42304 points ( 32.0%), 100.0% near
+    track   6+:     22157 points ( 16.7%), 100.0% near
