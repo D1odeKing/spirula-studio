@@ -267,7 +267,6 @@ ModelPart field_part(const std::string& key) {
         "progressive_error_end", "progressive_error_steps",
         "progressive_features", "progressive_max_features_end", "progressive_image_size_end",
         "progressive_feature_steps", "progressive_patience", "progressive_time",
-        "hybrid_sift",
     };
     for (const char* k : matching)
         if (key == k) return ModelPart::Matching;
@@ -496,7 +495,6 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
     job.progressive_feature_steps = 3;
     job.progressive_patience = 2;
     job.progressive_time = 0.0f;
-    job.hybrid_sift = false;
     job.metric_gps = 0;
     job.sensor_gauge = job.exif_attitude = 2;
     job.distortion_refine = 0;
@@ -537,7 +535,6 @@ void apply_legacy_recon(const std::vector<std::string>& a, const std::string& im
             job.progressive_feature_steps = (int)to_float(take());
         else if (flag == "--progressive-patience") job.progressive_patience = (int)to_float(take());
         else if (flag == "--progressive-time") job.progressive_time = to_float(take());
-        else if (flag == "--hybrid-sift") job.hybrid_sift = true;
         else if (flag == "--focal") job.init_focal_px = to_float(take());
         else if (flag == "--distortion") job.init_distortion = take();
         else if (flag == "--no-refine-extra-params")
@@ -739,7 +736,6 @@ StepFields model_fields(const SfmJob& job) {
                 add(f, "progressive_time", "", num(job.progressive_time));
         }
     }
-    if (job.hybrid_sift && job.features != 0) add(f, "hybrid_sift", "", "on");
     if (job.init_focal_px > 0) add(f, "focal_px", "", num(job.init_focal_px));
     if (!job.init_distortion.empty()) add(f, "distortion", "", job.init_distortion);
     add(f, "distortion_refine", "", num(job.distortion_refine));
