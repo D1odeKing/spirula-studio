@@ -664,7 +664,7 @@ struct EngineState {
     // shaders/region.slang reads it, and the per-splat draw weight the test
     // writes at every refine step. Empty program = no region.
     struct Region {
-        DeviceVector<float4> program, field_bvh, field_seeds, camera_bvh, camera_seeds;
+        DeviceVector<float4> program, field_bvh, field_seeds, camera_bvh, camera_seeds, pattern;
         DeviceVector<float>  weight;    // [max_N]
         float inside = 1.0f, outside = 1e-4f;
         float opacity_decay = 1.0f;   // kept share of opacity outside, per refine step

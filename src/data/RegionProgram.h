@@ -5,6 +5,7 @@
 // data/RegionProgram.cpp also evaluates it on the host, which is what the
 // parity test compares the kernel against.
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,5 +57,15 @@ bool program_contains(const RegionProgram& p, const double point[3], const doubl
 // in shaders/region.slang: quat (w, x, y, z), log scales.
 void splat_normal(const float quat[4], const float log_scale[3], const double toward[3],
                   double out[3]);
+
+// The points region_contains_splat tries after a splat's centre, in units of
+// its axes: [num_samples - 1, 4], docs/notes/roi-editor.md. 1 is the centre alone.
+constexpr int kMaxRegionSamples = 64;
+std::vector<float> region_sample_pattern(int num_samples);
+
+// Host mirror of region_contains_splat in shaders/region.slang, in float as there.
+bool splat_contains(const RegionProgram& p, const float mean[3], const float quat[4],
+                    const float log_scale[3], const double* normal,
+                    const std::vector<float>& pattern, uint32_t index, uint32_t seed);
 
 }  // namespace spirula

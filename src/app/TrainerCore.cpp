@@ -790,7 +790,7 @@ void TrainerSession::load_region() {
 
 void TrainerSession::setup_region() {
     if (!roi) {
-        engine_set_region({}, {}, {}, {}, {}, 1.0f);
+        engine_set_region({}, {}, {}, {}, {}, {}, 1.0f);
         return;
     }
     // The region is in the dataset's frame, the splats in the training frame.
@@ -812,9 +812,10 @@ void TrainerSession::setup_region() {
         if (v.empty()) return {};
         return {(uint64_t)(uintptr_t)v.data(), (uint32_t)sizeof(float), {(int64_t)v.size() / 4, 4}};
     };
+    const std::vector<float> pattern = region_sample_pattern(cfg.roi_splat_samples);
     engine_set_region(tv(prog.nodes), tv(prog.field ? prog.field->nodes : none),
                       tv(prog.field ? prog.field->seeds : none), tv(cams.nodes), tv(cams.seeds),
-                      cfg.roi_outside_weight, cfg.roi_outside_opacity_decay);
+                      tv(pattern), cfg.roi_outside_weight, cfg.roi_outside_opacity_decay);
     log(lfmt(lmsg::region_applied, {prog.num_nodes(), cfg.roi_outside_weight}));
 }
 

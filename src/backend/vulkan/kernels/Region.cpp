@@ -9,12 +9,14 @@ namespace {
 
 // Mirrors RegionWeightParams in shaders/region.slang.
 struct RegionWeightParams {
-    uint64_t means, quats, scales, camera_bvh, camera_seeds, program, field_bvh, field_seeds, weight;
+    uint64_t means, quats, scales, camera_bvh, camera_seeds, pattern, program, field_bvh,
+        field_seeds, weight;
     float inside, outside;
     uint32_t num_camera_nodes, num_prog, num_field_nodes, use_normal;
+    uint32_t num_pattern, seed;
     uint32_t num_splats, wgs_per_row;
 };
-static_assert(sizeof(RegionWeightParams) == 9 * 8 + 8 * 4, "params layout must match the slang struct");
+static_assert(sizeof(RegionWeightParams) == 10 * 8 + 10 * 4, "params layout must match the slang struct");
 
 // Mirrors ScaleScoreParams.
 struct ScaleScoreParams {
@@ -36,18 +38,20 @@ static_assert(sizeof(DecayOpacityParams) == 2 * 8 + 4 * 4, "params layout must m
 
 void region_weight_tensor(int64_t num_splats, DeviceVector<float3> means, DeviceVector<float4> quats,
                           DeviceVector<float3> scales, DeviceVector<float4> camera_bvh,
-                          DeviceVector<float4> camera_seeds, DeviceVector<float4> program,
+                          DeviceVector<float4> camera_seeds, DeviceVector<float4> pattern,
+                          uint32_t seed, DeviceVector<float4> program,
                           DeviceVector<float4> field_bvh, DeviceVector<float4> field_seeds,
                           float inside, float outside, DeviceVector<float> weight) {
     if (num_splats <= 0 || program.data_ptr() == nullptr) return;
-    const bool orient = quats.data_ptr() && scales.data_ptr() && camera_bvh.data_ptr() &&
-                        camera_seeds.data_ptr();
+    const bool splats = quats.data_ptr() && scales.data_ptr();
+    const bool orient = splats && camera_bvh.data_ptr() && camera_seeds.data_ptr();
     RegionWeightParams p{};
     p.means = (uint64_t)means.data_ptr();
     p.quats = vkk::or_fallback(quats.data_ptr());
     p.scales = vkk::or_fallback(scales.data_ptr());
     p.camera_bvh = vkk::or_fallback(camera_bvh.data_ptr());
     p.camera_seeds = vkk::or_fallback(camera_seeds.data_ptr());
+    p.pattern = vkk::or_fallback(pattern.data_ptr());
     p.program = (uint64_t)program.data_ptr();
     p.field_bvh = vkk::or_fallback(field_bvh.data_ptr());
     p.field_seeds = vkk::or_fallback(field_seeds.data_ptr());
@@ -58,6 +62,8 @@ void region_weight_tensor(int64_t num_splats, DeviceVector<float3> means, Device
     p.num_prog = (uint32_t)(program.size() / 6);
     p.num_field_nodes = field_bvh.data_ptr() ? (uint32_t)(field_bvh.size() / 2) : 0u;
     p.use_normal = orient ? 1u : 0u;
+    p.num_pattern = splats && pattern.data_ptr() ? (uint32_t)pattern.size() : 0u;
+    p.seed = seed;
     p.num_splats = (uint32_t)num_splats;
     vkk::dispatch_flat("region.region_weight", {}, num_splats, 256, &p, sizeof(p), &p.wgs_per_row);
 }

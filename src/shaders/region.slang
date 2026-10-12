@@ -184,16 +184,72 @@ bool region_contains(float3 p, float3 n, bool has_n, float4* program, uint num_p
     return sp > 0 ? stack[sp - 1] : false;
 }
 
+// The columns of the rotation of `quat` (w, x, y, z), normalized here.
+void quat_columns(float4 quat, out float3 c0, out float3 c1, out float3 c2) {
+    float w = quat.x, x = quat.y, y = quat.z, z = quat.w;
+    float inv = rsqrt(max(w * w + x * x + y * y + z * z, 1e-20));
+    w *= inv; x *= inv; y *= inv; z *= inv;
+    c0 = float3(1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 2.0 * (x * z - y * w));
+    c1 = float3(2.0 * (x * y - z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + x * w));
+    c2 = float3(2.0 * (x * z + y * w), 2.0 * (y * z - x * w), 1.0 - 2.0 * (x * x + y * y));
+}
+
+// Wellons' lowbias32; data/RegionProgram.cpp mirrors it bit for bit.
+uint region_hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+// Whether the splat is inside: its centre, else any of `pattern` (offsets in
+// units of its axes, region_sample_pattern) under a uniform random turn drawn
+// from (index, seed), so a splat straddling the boundary is not left out.
+[CudaDeviceExport]
+bool region_contains_splat(float3 mean, float4 quat, float3 log_scale, float3 n, bool has_n,
+                           float4* pattern, uint num_pattern, uint index, uint seed,
+                           float4* program, uint num_prog, float4* bvh, float4* seeds,
+                           uint num_field_nodes) {
+    float3 a0 = float3(0.0), a1 = float3(0.0), a2 = float3(0.0);
+    // One region_contains call site: CUDA inlines each one, label field and all.
+    for (uint k = 0; k <= num_pattern; k++) {
+        float3 p = mean;
+        if (k == 1) {
+            // Shoemake's uniform quaternion from three 24-bit uniforms.
+            uint h0 = region_hash(index ^ region_hash(seed));
+            uint h1 = region_hash(h0 + 0x9e3779b9u);
+            uint h2 = region_hash(h1 + 0x9e3779b9u);
+            float u = float(h0 >> 8) * (1.0 / 16777216.0);
+            float a = float(h1 >> 8) * (6.2831853 / 16777216.0);
+            float b = float(h2 >> 8) * (6.2831853 / 16777216.0);
+            float ra = sqrt(1.0 - u), rb = sqrt(u);
+            float3 t0, t1, t2, c0, c1, c2;
+            quat_columns(float4(ra * sin(a), ra * cos(a), rb * sin(b), rb * cos(b)), t0, t1, t2);
+            quat_columns(quat, c0, c1, c2);
+            float3 s = exp(log_scale);
+            c0 *= s.x; c1 *= s.y; c2 *= s.z;
+            a0 = c0 * t0.x + c1 * t0.y + c2 * t0.z;
+            a1 = c0 * t1.x + c1 * t1.y + c2 * t1.z;
+            a2 = c0 * t2.x + c1 * t2.y + c2 * t2.z;
+        }
+        if (k > 0) {
+            float3 z = pattern[k - 1].xyz;
+            p = mean + a0 * z.x + a1 * z.y + a2 * z.z;
+        }
+        if (region_contains(p, n, has_n, program, num_prog, bvh, seeds, num_field_nodes))
+            return true;
+    }
+    return false;
+}
+
 // The splat's short axis, the column of its rotation with the smallest
 // scale, pointed toward `toward` (a camera the splat was trained from).
 [CudaDeviceExport]
 float3 splat_normal(float4 quat, float3 log_scale, float3 mean, float3 toward) {
-    float w = quat.x, x = quat.y, y = quat.z, z = quat.w;
-    float inv = rsqrt(max(w * w + x * x + y * y + z * z, 1e-20));
-    w *= inv; x *= inv; y *= inv; z *= inv;
-    float3 c0 = float3(1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 2.0 * (x * z - y * w));
-    float3 c1 = float3(2.0 * (x * y - z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z + x * w));
-    float3 c2 = float3(2.0 * (x * z + y * w), 2.0 * (y * z - x * w), 1.0 - 2.0 * (x * x + y * y));
+    float3 c0, c1, c2;
+    quat_columns(quat, c0, c1, c2);
     float3 axis = c0;
     if (log_scale.y < log_scale.x && log_scale.y <= log_scale.z) axis = c1;
     else if (log_scale.z < log_scale.x && log_scale.z < log_scale.y) axis = c2;

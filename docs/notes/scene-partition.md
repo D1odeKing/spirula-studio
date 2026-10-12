@@ -199,11 +199,13 @@ matches the full model.
    label region to the engine (`engine_set_region`), and `--roi-region` hands
    any region JSON -- by default the first one the ROI editor saved in the
    dataset's `roi/` (docs/notes/roi-editor.md), intersected with the part's. At every refine step `region_weight_tensor` evaluates the
-   compiled program at every splat centre -- normal oriented by the nearest
-   training camera -- and a splat outside draws for relocation and growth
-   with `--roi-outside-weight` (1e-4) instead of 1, in both the revised and
-   the MCMC path. `--roi-outside-opacity-decay` would also scale their
-   opacity at every refine step; it is off (1), because the pixels those
+   compiled program at every splat centre and, when that is outside, at
+   points spread over the splat's Gaussian (`--roi-splat-samples`) -- normal
+   oriented by the nearest training camera -- and a splat with none inside
+   draws for relocation and growth with `--roi-outside-weight` (1e-4)
+   instead of 1, in both the revised and the MCMC path.
+   `--roi-outside-opacity-decay` would also scale their opacity at every
+   refine step; it is off (1), because the pixels those
    splats explained still had to be explained, and the parts grew splats in
    front of their cameras to do it (-2 dB after the merge, table above).
    What does work is not supervising those pixels at all: with

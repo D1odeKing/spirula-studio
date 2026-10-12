@@ -136,6 +136,7 @@ enum class SaveClass : uint8_t {
   X(EngRegionFieldSeeds            , "eng.region.field_seeds",            Other    , Never) \
   X(EngRegionCameraBvh             , "eng.region.camera_bvh",             Other    , Never) \
   X(EngRegionCameraSeeds           , "eng.region.camera_seeds",           Other    , Never) \
+  X(EngRegionPattern               , "eng.region.pattern",                Other    , Never) \
   X(EngVisitCamSum                 , "eng.visit.cam_sum",                 Other    , Never) \
   X(EngVisitCamCnt                 , "eng.visit.cam_cnt",                 Other    , Never) \
   /* ---- sub-batch scratch ---- */ \

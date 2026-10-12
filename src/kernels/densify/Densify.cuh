@@ -338,10 +338,12 @@ void robust_canny_residual_tensor(
 void region_weight_tensor(
     int64_t num_splats,
     DeviceVector<float3> means,
-    DeviceVector<float4> quats,          // optional with scales + cameras: orients the test
-    DeviceVector<float3> scales,
+    DeviceVector<float4> quats,          // optional with scales: the cameras orient the
+    DeviceVector<float3> scales,         // test, the pattern samples it
     DeviceVector<float4> camera_bvh,     // a label field over the cameras, index as label
     DeviceVector<float4> camera_seeds,
+    DeviceVector<float4> pattern,        // region_sample_pattern, or empty: centre only
+    uint32_t seed,                       // turns the pattern, per call
     DeviceVector<float4> program,        // [num_prog * 6]
     DeviceVector<float4> field_bvh,      // the program's label field, or empty
     DeviceVector<float4> field_seeds,

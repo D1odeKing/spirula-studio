@@ -2,8 +2,8 @@
 // shaders/region.slang) against its host mirror (data/RegionProgram.cpp,
 // data/LabelField.cpp): the same random splats, the same field of labelled
 // seeds and the same program must answer the same on every one of them, with
-// and without the normal, and so must the leaf shapes the ROI editor draws.
-// Self-checking, both backends.
+// and without the normal, by centre and by sample pattern, and so must the
+// leaf shapes the ROI editor draws. Self-checking, both backends.
 
 #include <kernels/densify/Densify.cuh>
 
@@ -192,19 +192,25 @@ int main() {
     float4* d_quats = (float4*)upload(quats);
     float3* d_scales = (float3*)upload(scales);
     float* d_w = (float*)backend::device_malloc((size_t)N * sizeof(float));
+    const std::vector<float> pattern = region_sample_pattern(8);
+    check(pattern.size() == 7 * 4, "eight samples: the centre and seven offsets");
+    void* k_pattern;
+    DeviceVector<float4> d_pattern = dv4(pattern, k_pattern);
+    const uint32_t seed = 12345;
 
-    for (int pass = 0; pass < 3; pass++) {
-        const bool orient = pass == 1;
-        const RegionProgram& hp = pass == 2 ? shapes : prog;
+    for (int pass = 0; pass < 6; pass++) {
+        const bool orient = pass % 3 == 1, sampled = pass >= 3;
+        const RegionProgram& hp = pass % 3 == 2 ? shapes : prog;
         region_weight_tensor(N, dv<float3>(d_means, N),
-                             orient ? dv<float4>(d_quats, N) : DeviceVector<float4>(),
+                             orient || sampled ? dv<float4>(d_quats, N) : DeviceVector<float4>(),
                              dv<float3>(d_scales, N), orient ? d_cbvh : DeviceVector<float4>(),
-                             d_cseeds, pass == 2 ? d_shapes : d_prog, d_bvh, d_seeds, 1.0f, 1e-4f,
+                             d_cseeds, sampled ? d_pattern : DeviceVector<float4>(), seed,
+                             pass % 3 == 2 ? d_shapes : d_prog, d_bvh, d_seeds, 1.0f, 1e-4f,
                              dv<float>(d_w, N));
         backend::device_synchronize();
         std::vector<float> w((size_t)N);
         backend::memcpy_sync(w.data(), d_w, (size_t)N * sizeof(float), MemcpyKind::DeviceToHost);
-        int64_t mismatches = 0, inside = 0;
+        int64_t mismatches = 0, inside = 0, widened = 0, lost = 0;
         for (int64_t i = 0; i < N; i++) {
             const double p[3] = {means[i * 3], means[i * 3 + 1], means[i * 3 + 2]};
             double n[3] = {0, 0, 0};
@@ -217,17 +223,88 @@ int main() {
                 splat_normal(&quats[i * 4], &scales[i * 3], to, n);
                 np = n;
             }
-            const bool host = program_contains(hp, p, np);
+            const bool centre = program_contains(hp, p, np);
+            const bool host = sampled ? splat_contains(hp, &means[i * 3], &quats[i * 4],
+                                                       &scales[i * 3], np, pattern,
+                                                       (uint32_t)i, seed)
+                                      : centre;
+            const bool device = w[(size_t)i] > 0.5f;
             inside += host;
-            if (host != (w[(size_t)i] > 0.5f)) mismatches++;
+            widened += host && !centre;
+            lost += centre && !device;
+            if (host != device) mismatches++;
         }
-        const char* what = pass == 2 ? "shapes" : orient ? "oriented" : "plain";
-        std::printf("pass %d (%s): inside %lld of %lld, mismatches %lld\n", pass, what,
-                    (long long)inside, (long long)N, (long long)mismatches);
+        const std::string what = std::string(pass % 3 == 2 ? "shapes" : orient ? "oriented" : "plain") +
+                                 (sampled ? " sampled" : "");
+        std::printf("pass %d (%s): inside %lld of %lld, by samples only %lld, mismatches %lld\n",
+                    pass, what.c_str(), (long long)inside, (long long)N, (long long)widened,
+                    (long long)mismatches);
         // Ties at floating-point precision differ across compilers; a handful
         // out of twenty thousand is that, more is a real divergence.
-        check(mismatches <= 5, std::string(what) + ": device matches host");
+        check(mismatches <= 5, what + ": device matches host");
         check(inside > N / 10 && inside < N * 9 / 10, "both answers occur");
+        if (sampled) {
+            check(lost <= 5, what + ": a splat whose centre is inside stays inside");
+            check(widened > N / 100, what + ": splats straddling the boundary are added");
+        }
+    }
+
+    // Against the analytic share of a splat's mass across the plane x = 0,
+    // f = Phi(-d / sigma_n): at 8 samples every splat with f >= 19.9% counts
+    // (the pattern's smallest reach, 0.846 sigma), none past its 2.68 sigma.
+    {
+        HalfSpaceRegion half;
+        half.normal[0] = 1; half.normal[1] = 0; half.normal[2] = 0;
+        RegionProgram hp;
+        check(compile_region(half, hp, err), "half-space compiles");
+        std::vector<float> hm((size_t)N * 3), hq((size_t)N * 4), hs((size_t)N * 3);
+        std::vector<double> reach((size_t)N);   // d / sigma_n
+        for (int64_t i = 0; i < N; i++) {
+            float q[4] = {g(rng), g(rng), g(rng), g(rng)};
+            const float nq = std::sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+            for (int k = 0; k < 4; k++) hq[i * 4 + k] = q[k] / nq;
+            for (int k = 0; k < 3; k++) hs[i * 3 + k] = -2.f + 1.5f * g(rng);
+            // sigma_n^2 = sum_k (s_k * R[0][k])^2, the x row of R diag(s).
+            const float w = hq[i * 4], x = hq[i * 4 + 1], y = hq[i * 4 + 2], z = hq[i * 4 + 3];
+            const double row[3] = {1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)};
+            double var = 0;
+            for (int k = 0; k < 3; k++) var += std::pow(std::exp(hs[i * 3 + k]) * row[k], 2);
+            reach[(size_t)i] = 3.5 * (i + 0.5) / N;
+            hm[i * 3] = (float)(-reach[(size_t)i] * std::sqrt(var));
+            hm[i * 3 + 1] = u(rng);
+            hm[i * 3 + 2] = u(rng);
+        }
+        void* k_half;
+        DeviceVector<float4> d_half = dv4(hp.nodes, k_half);
+        float3* d_hm = (float3*)upload(hm);
+        float4* d_hq = (float4*)upload(hq);
+        float3* d_hs = (float3*)upload(hs);
+        region_weight_tensor(N, dv<float3>(d_hm, N), dv<float4>(d_hq, N), dv<float3>(d_hs, N),
+                             DeviceVector<float4>(), DeviceVector<float4>(), d_pattern, seed,
+                             d_half, DeviceVector<float4>(), DeviceVector<float4>(), 1.0f, 1e-4f,
+                             dv<float>(d_w, N));
+        backend::device_synchronize();
+        std::vector<float> w((size_t)N);
+        backend::memcpy_sync(w.data(), d_w, (size_t)N * sizeof(float), MemcpyKind::DeviceToHost);
+        int64_t near_total = 0, near_out = 0, far_in = 0, mid_total = 0, mid_in = 0;
+        for (int64_t i = 0; i < N; i++) {
+            const double r = reach[(size_t)i];
+            const bool in = w[(size_t)i] > 0.5f;
+            if (r < 0.84) { near_total++; near_out += !in; }
+            if (r > 2.7) far_in += in;
+            if (r > 1.6 && r < 1.7) { mid_total++; mid_in += in; }
+        }
+        std::printf("half-space: f >= 20%% outside %lld of %lld, f < 0.35%% inside %lld, "
+                    "f ~ 5%% inside %lld of %lld\n", (long long)near_out, (long long)near_total,
+                    (long long)far_in, (long long)mid_in, (long long)mid_total);
+        check(near_out == 0, "every splat with a fifth of its mass across counts");
+        check(far_in == 0, "no splat with all samples short of the plane counts");
+        check(mid_in > mid_total / 5 && mid_in < mid_total * 7 / 10,
+              "about half of the splats with 5% across count");
+        backend::device_free(d_hm);
+        backend::device_free(d_hq);
+        backend::device_free(d_hs);
+        backend::device_free(k_half);
     }
 
     // The wall itself: a thin splat on the wall facing room B belongs to B

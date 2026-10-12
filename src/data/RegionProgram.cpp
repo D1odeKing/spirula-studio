@@ -5,9 +5,11 @@
 #include "data/LabelField.h"
 #include "data/Region.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <numeric>
 
 namespace spirula {
 
@@ -239,6 +241,114 @@ void splat_normal(const float quat[4], const float log_scale[3], const double to
     for (int k = 0; k < 3; k++) out[k] = cols[a][k];
     if (out[0] * toward[0] + out[1] * toward[1] + out[2] * toward[2] < 0)
         for (int k = 0; k < 3; k++) out[k] = -out[k];
+}
+
+// ---- splat sampling ---------------------------------------------------------
+
+namespace {
+
+void quat_columns(const float quat[4], float c[3][3]) {
+    float w = quat[0], x = quat[1], y = quat[2], z = quat[3];
+    const float inv = 1.0f / std::sqrt(std::max(w * w + x * x + y * y + z * z, 1e-20f));
+    w *= inv; x *= inv; y *= inv; z *= inv;
+    const float cols[3][3] = {
+        {1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w)},
+        {2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)},
+        {2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)}};
+    std::memcpy(c, cols, sizeof(cols));
+}
+
+uint32_t region_hash(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    x ^= x >> 16;
+    return x;
+}
+
+}  // namespace
+
+std::vector<float> region_sample_pattern(int num_samples) {
+    const int m = std::clamp(num_samples, 1, kMaxRegionSamples) - 1;
+    std::vector<float> out((size_t)m * 4, 0.0f);
+    if (m == 0) return out;
+    // Radii at the stratum midpoints of chi(3), the length of a 3D standard
+    // normal, dealt to the directions in golden-ratio order.
+    const double pi = 3.14159265358979323846;
+    auto chi3_quantile = [&](double q) {
+        double lo = 0, hi = 10;
+        for (int it = 0; it < 60; it++) {
+            const double r = 0.5 * (lo + hi);
+            const double cdf = std::erf(r / std::sqrt(2.0)) -
+                               std::sqrt(2.0 / pi) * r * std::exp(-0.5 * r * r);
+            (cdf < q ? lo : hi) = r;
+        }
+        return 0.5 * (lo + hi);
+    };
+    std::vector<int> order((size_t)m);
+    std::iota(order.begin(), order.end(), 0);
+    auto key = [](int k) { return std::fmod(k * 0.6180339887498949, 1.0); };
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return key(a) < key(b); });
+    std::vector<double> radius((size_t)m);
+    for (int i = 0; i < m; i++) radius[(size_t)order[(size_t)i]] = chi3_quantile((i + 0.5) / m);
+    std::vector<double> pts((size_t)m * 3);
+    double mean[3] = {0, 0, 0};
+    for (int k = 0; k < m; k++) {
+        const double z = 1.0 - (2.0 * k + 1.0) / m, phi = k * pi * (3.0 - std::sqrt(5.0));
+        const double rho = std::sqrt(std::max(0.0, 1.0 - z * z)), r = radius[(size_t)k];
+        const double p[3] = {r * rho * std::cos(phi), r * rho * std::sin(phi), r * z};
+        for (int a = 0; a < 3; a++) {
+            pts[(size_t)k * 3 + a] = p[a];
+            mean[a] += p[a] / m;
+        }
+    }
+    // Centred, and scaled so the m + 1 points with the splat's centre have the
+    // Gaussian's mean and E|z|^2 = 3: the midpoints shorten the tail. Centring
+    // lifts the planar guarantee at 8 points from 25% of the mass inside to 20%.
+    double sum_r2 = 0;
+    for (int k = 0; k < m; k++)
+        for (int a = 0; a < 3; a++) {
+            if (m >= 2) pts[(size_t)k * 3 + a] -= mean[a];
+            sum_r2 += pts[(size_t)k * 3 + a] * pts[(size_t)k * 3 + a];
+        }
+    const double scale = std::sqrt(3.0 * (m + 1) / sum_r2);
+    for (int k = 0; k < m; k++)
+        for (int a = 0; a < 3; a++) out[(size_t)k * 4 + a] = (float)(scale * pts[(size_t)k * 3 + a]);
+    return out;
+}
+
+bool splat_contains(const RegionProgram& p, const float mean[3], const float quat[4],
+                    const float log_scale[3], const double* normal,
+                    const std::vector<float>& pattern, uint32_t index, uint32_t seed) {
+    const double centre[3] = {mean[0], mean[1], mean[2]};
+    if (program_contains(p, centre, normal)) return true;
+    const size_t num_pattern = pattern.size() / 4;
+    if (num_pattern == 0) return false;
+    const uint32_t h0 = region_hash(index ^ region_hash(seed));
+    const uint32_t h1 = region_hash(h0 + 0x9e3779b9u);
+    const uint32_t h2 = region_hash(h1 + 0x9e3779b9u);
+    const float u = (float)(h0 >> 8) * (1.0f / 16777216.0f);
+    const float a = (float)(h1 >> 8) * (6.2831853f / 16777216.0f);
+    const float b = (float)(h2 >> 8) * (6.2831853f / 16777216.0f);
+    const float ra = std::sqrt(1.0f - u), rb = std::sqrt(u);
+    const float turn[4] = {ra * std::sin(a), ra * std::cos(a), rb * std::sin(b), rb * std::cos(b)};
+    float t[3][3], c[3][3], axes[3][3];
+    quat_columns(turn, t);
+    quat_columns(quat, c);
+    for (int i = 0; i < 3; i++)
+        for (int r = 0; r < 3; r++) c[i][r] *= std::exp(log_scale[i]);
+    for (int j = 0; j < 3; j++)
+        for (int r = 0; r < 3; r++)
+            axes[j][r] = c[0][r] * t[j][0] + c[1][r] * t[j][1] + c[2][r] * t[j][2];
+    for (size_t k = 0; k < num_pattern; k++) {
+        const float* z = &pattern[k * 4];
+        double q[3];
+        for (int r = 0; r < 3; r++)
+            q[r] = mean[r] + axes[0][r] * z[0] + axes[1][r] * z[1] + axes[2][r] * z[2];
+        if (program_contains(p, q, normal)) return true;
+    }
+    return false;
 }
 
 }  // namespace spirula

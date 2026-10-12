@@ -50,8 +50,8 @@ void set_data_3dgs(
 
 void engine_set_region(TorchTensorView program, TorchTensorView field_bvh,
                        TorchTensorView field_seeds, TorchTensorView camera_bvh,
-                       TorchTensorView camera_seeds, float outside_weight,
-                       float outside_opacity_decay) {
+                       TorchTensorView camera_seeds, TorchTensorView pattern,
+                       float outside_weight, float outside_opacity_decay) {
     auto& r = engine().region;
     r = EngineState::Region{};
     if (std::get<0>(program) == 0) return;
@@ -67,6 +67,7 @@ void engine_set_region(TorchTensorView program, TorchTensorView field_bvh,
     r.field_seeds = _hv_to_dv<float4>(PoolSlot::EngRegionFieldSeeds, as_float4(field_seeds));
     r.camera_bvh = _hv_to_dv<float4>(PoolSlot::EngRegionCameraBvh, as_float4(camera_bvh));
     r.camera_seeds = _hv_to_dv<float4>(PoolSlot::EngRegionCameraSeeds, as_float4(camera_seeds));
+    r.pattern = _hv_to_dv<float4>(PoolSlot::EngRegionPattern, as_float4(pattern));
     r.outside = outside_weight;
     r.opacity_decay = outside_opacity_decay;
 }

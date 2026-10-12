@@ -88,6 +88,47 @@ preview, and a preset context field (`SS_PRESET_CONTEXT_FIELDS`), so no saved
 preset carries one dataset's region to another. Opening a different dataset
 resets it to automatic.
 
+## Which splats are inside
+
+At every refine step `region_contains_splat` (shaders/region.slang) decides
+each splat. Its centre is tried first, so a splat whose centre is inside is
+never affected. Otherwise the other `--roi-splat-samples` - 1 points (7 by
+default) are tried, and the splat is inside if any of them is. Their offsets
+are fixed per run (`region_sample_pattern`): spherical-Fibonacci directions at
+the stratum midpoints of the chi(3) radius, centred and scaled so that with
+the centre they have the Gaussian's mean and second moment, then turned by a
+uniform random rotation hashed from the splat's index and the step and mapped
+through the splat's axes. A turned fixed set gives a much sharper threshold
+than independent draws, and centring it sharpens it again.
+
+What that means at a planar boundary, simulated over random turns: the chance
+a splat with mass fraction f inside counts as inside.
+
+| samples | f = 2% | 5% | 10% | 15% | 20% | 25% | always from |
+|---|---|---|---|---|---|---|---|
+| 4 | 0.07 | 0.24 | 0.49 | 0.67 | 0.80 | 0.88 | -- |
+| 8 | 0.12 | 0.44 | 0.80 | 0.97 | 1.00 | 1.00 | 19.9% |
+| 16 | 0.23 | 0.56 | 0.96 | 1.00 | 1.00 | 1.00 | 14.0% |
+
+"Always from" is the pattern's smallest reach over all directions, which no
+rotation can undercut; below five samples the points cannot surround the
+centre. The rotation is redrawn every refine step, so a splat under that is
+inside some steps and not others. The furthest sample sits at 2.7 sigma for 8
+and 3.5 for 64, the cap, so a splat with under 0.4% (0.02%) of its mass across
+a planar boundary never counts.
+
+Measured at 12k steps, two runs a side, PSNR inside the region on the
+held-out views (every 8th), 8 samples against 1: Mip-NeRF 360 garden with a
+sphere of radius 1 around the vase +0.12 dB (15 of 24 views better, standard
+error 0.05); a hand-held pine cone with a box around its core +0.08 dB
+(+-0.10). The price is splats wholly outside, children of straddlers that land
+beyond the boundary: 41k to 63k of the pine cone's 1M. Run time is unchanged.
+
+Merging a partition still assigns each splat by its centre
+(docs/notes/scene-partition.md). Testing the Gaussian against a signed
+distance instead was rejected: a label field has none, and the CSG of
+ellipsoids and outlines only an approximate one.
+
 The training screen's dataset section has a row for it once the dataset has a
 saved region (or the setting names one by path): each saved region, the first
 shown as chosen while the setting is unset, or None, and "Edit Region". Until

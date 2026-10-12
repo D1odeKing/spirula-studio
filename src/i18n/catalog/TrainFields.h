@@ -3595,34 +3595,34 @@ SS_MSG(roi_region_help,
        "region (boxes, ellipsoids, cylinders, outlines, half-spaces, a partition's "
        "label field, combined with union, intersection and difference). Unset, the "
        "first file in <dataset>/roi is used; `off` trains the whole scene; a bare "
-       "name picks that file there. Splats whose centre lies outside it are drawn "
-       "for relocation and growth with --roi-outside-weight instead of 1, so the "
+       "name picks that file there. Splats outside it (see --roi-splat-samples) are "
+       "drawn for relocation and growth with --roi-outside-weight instead of 1, so the "
        "model stops growing there. A partitioned run keeps to where its part and "
        "the region overlap."),
     JA("領域 JSON。ROI エディタがデータセットの roi フォルダに保存するもの、または任"
        "意の領域（ボックス、楕円体、円柱、輪郭、半空間、分割のラベルフィールドを和・"
        "積・差で組み合わせたもの）。未設定なら <dataset>/roi の先頭のファイルを使い、"
        "`off` ならシーン全体を学習し、名前だけならそこにあるそのファイルを選びます。"
-       "中心が領域外にあるスプラットは、再配置と成長の抽選で 1 の代わりに "
+       "領域外のスプラット（判定は --roi-splat-samples）は、再配置と成長の抽選で 1 の代わりに "
        "--roi-outside-weight の重みになり、そこではモデルが成長しなくなります。分割"
        "学習ではパートと領域の重なりだけが使われます。"),
     ZH_HANS("区域 JSON：ROI 编辑器保存在数据集 roi 文件夹中的文件，或任意区域（盒、椭"
             "球、圆柱、轮廓、半空间、分区的标签场，用并、交、差组合）。未设置时使用 "
             "<dataset>/roi 中的第一个文件；`off` 训练整个场景；只写名称则选取该文件"
-            "夹中的同名文件。中心在区域外的泼溅在重定位与增长抽样中以 "
+            "夹中的同名文件。区域外的泼溅（判定见 --roi-splat-samples）在重定位与增长抽样中以 "
             "--roi-outside-weight 而非 1 为权重，模型因此不再在那里增长。分区训练只使"
             "用其分区与该区域的交集。"),
     ZH_HANT("區域 JSON：ROI 編輯器儲存在資料集 roi 資料夾中的檔案，或任意區域（盒、橢"
             "球、圓柱、輪廓、半空間、分區的標籤場，用聯集、交集、差集組合）。未設定時"
             "使用 <dataset>/roi 中的第一個檔案；`off` 訓練整個場景；只寫名稱則選取該"
-            "資料夾中的同名檔案。中心在區域外的潑濺在重定位與增長抽樣中以 "
+            "資料夾中的同名檔案。區域外的潑濺（判定見 --roi-splat-samples）在重定位與增長抽樣中以 "
             "--roi-outside-weight 而非 1 為權重，模型因此不再在那裡增長。分區訓練只使"
             "用其分區與該區域的交集。"),
     KO("영역 JSON: ROI 편집기가 데이터셋의 roi 폴더에 저장한 파일, 또는 임의의 영역"
        "(상자, 타원체, 원기둥, 윤곽, 반공간, 분할의 라벨 필드를 합집합·교집합·차집합"
        "으로 결합). 비워 두면 <dataset>/roi의 첫 번째 파일을 쓰고, `off`이면 장면 "
-       "전체를 학습하며, 이름만 쓰면 그 폴더의 해당 파일을 고릅니다. 중심이 영역 밖인 "
-       "스플랫은 재배치와 성장 추첨에서 1 대신 --roi-outside-weight 가중치를 받아 "
+       "전체를 학습하며, 이름만 쓰면 그 폴더의 해당 파일을 고릅니다. 영역 밖의 스플랫"
+       "(판정은 --roi-splat-samples)은 재배치와 성장 추첨에서 1 대신 --roi-outside-weight 가중치를 받아 "
        "그곳에서 모델이 더 자라지 않습니다. 분할 학습은 파트와 이 영역이 겹치는 부분"
        "만 씁니다."),
     DE("Eine Regions-JSON: was der ROI-Editor im roi-Ordner des Datensatzes "
@@ -3630,7 +3630,7 @@ SS_MSG(roi_region_help,
        "Halbräume, das Labelfeld einer Partition, verknüpft mit Vereinigung, Schnitt "
        "und Differenz). Leer wird die erste Datei in <dataset>/roi verwendet; `off` "
        "trainiert die ganze Szene; ein bloßer Name wählt die gleichnamige Datei dort. "
-       "Splats mit Zentrum außerhalb ziehen bei Verlagerung und Wachstum mit "
+       "Splats außerhalb (siehe --roi-splat-samples) ziehen bei Verlagerung und Wachstum mit "
        "--roi-outside-weight statt 1, das Modell wächst dort also nicht weiter. Ein "
        "partitionierter Lauf nutzt nur die Schnittmenge seines Teils mit der Region."),
     FR("Un JSON de région : ce que l'éditeur de ROI enregistre dans le dossier roi du "
@@ -3638,7 +3638,7 @@ SS_MSG(roi_region_help,
        "contours, demi-espaces, le champ d'étiquettes d'une partition, combinés par "
        "union, intersection et différence). Vide, le premier fichier de "
        "<dataset>/roi est utilisé ; `off` entraîne toute la scène ; un simple nom y "
-       "choisit ce fichier. Les splats dont le centre est en dehors tirent, pour la "
+       "choisit ce fichier. Les splats en dehors (voir --roi-splat-samples) tirent, pour la "
        "relocalisation et la croissance, avec --roi-outside-weight au lieu de 1 : le "
        "modèle cesse d'y croître. Un entraînement partitionné n'en garde que "
        "l'intersection avec sa partie."),
@@ -3647,7 +3647,7 @@ SS_MSG(roi_region_help,
        "contornos, semiespacios, el campo de etiquetas de una partición, combinados "
        "con unión, intersección y diferencia). Vacío, se usa el primer archivo de "
        "<dataset>/roi; `off` entrena toda la escena; un nombre solo elige ese "
-       "archivo allí. Los splats con el centro fuera sortean, para reubicación y "
+       "archivo allí. Los splats fuera (ver --roi-splat-samples) sortean, para reubicación y "
        "crecimiento, con --roi-outside-weight en vez de 1, así que el modelo deja de "
        "crecer ahí. Una ejecución particionada usa solo su intersección con su parte."),
     PT("Um JSON de região: o que o editor de ROI guarda na pasta roi do conjunto de "
@@ -3655,7 +3655,7 @@ SS_MSG(roi_region_help,
        "semiespaços, o campo de rótulos de uma partição, combinados por união, "
        "interseção e diferença). Vazio, usa-se o primeiro ficheiro de <dataset>/roi; "
        "`off` treina a cena inteira; um nome simples escolhe esse ficheiro lá. Os "
-       "splats com o centro fora sorteiam, para realocação e crescimento, com "
+       "splats fora (ver --roi-splat-samples) sorteiam, para realocação e crescimento, com "
        "--roi-outside-weight em vez de 1, pelo que o modelo deixa de crescer aí. Um "
        "treino particionado usa apenas a interseção com a sua parte."),
     IT("Un JSON di regione: ciò che l'editor di ROI salva nella cartella roi del "
@@ -3663,22 +3663,23 @@ SS_MSG(roi_region_help,
        "semispazi, il campo di etichette di una partizione, combinati con unione, "
        "intersezione e differenza). Se vuoto si usa il primo file in <dataset>/roi; "
        "`off` addestra l'intera scena; un nome semplice sceglie quel file lì. Gli "
-       "splat con il centro fuori estraggono, per ricollocazione e crescita, con "
+       "splat fuori (vedi --roi-splat-samples) estraggono, per ricollocazione e crescita, con "
        "--roi-outside-weight invece di 1, così il modello smette di crescere lì. Un "
        "addestramento partizionato usa solo l'intersezione con la sua parte."),
     NL("Een regio-JSON: wat de ROI-editor in de roi-map van de dataset opslaat, of "
        "elk ander gebied (dozen, ellipsoïden, cilinders, omtrekken, halfruimten, het "
        "labelveld van een partitie, gecombineerd met vereniging, doorsnede en "
        "verschil). Leeg wordt het eerste bestand in <dataset>/roi gebruikt; `off` "
-       "traint de hele scène; een losse naam kiest dat bestand daar. Splats met het "
-       "middelpunt erbuiten loten bij verplaatsing en groei met --roi-outside-weight "
+       "traint de hele scène; een losse naam kiest dat bestand daar. Splats erbuiten "
+       "(zie --roi-splat-samples) loten bij verplaatsing en groei met --roi-outside-weight "
        "in plaats van 1, zodat het model daar niet verder groeit. Een "
        "gepartitioneerde run gebruikt alleen de doorsnede met zijn deel."),
     RU("JSON области: то, что редактор ROI сохраняет в папку roi набора данных, или "
        "любая область (коробки, эллипсоиды, цилиндры, контуры, полупространства, "
        "поле меток разбиения, объединённые операциями объединения, пересечения и "
        "разности). Если пусто, берётся первый файл из <dataset>/roi; `off` обучает "
-       "всю сцену; одно имя выбирает этот файл там. Сплаты с центром снаружи "
+       "всю сцену; одно имя выбирает этот файл там. Сплаты снаружи (см. "
+       "--roi-splat-samples) "
        "участвуют в выборке для перемещения и роста с весом --roi-outside-weight "
        "вместо 1, так что модель там не растёт. Разбитый запуск использует только "
        "пересечение своей части с областью."),
@@ -3687,7 +3688,7 @@ SS_MSG(roi_region_help,
        "ana hatlar, yarı uzaylar, bir bölümlemenin etiket alanı; birleşim, kesişim ve "
        "farkla birleştirilmiş). Boş bırakılırsa <dataset>/roi içindeki ilk dosya "
        "kullanılır; `off` tüm sahneyi eğitir; yalnızca bir ad oradaki o dosyayı "
-       "seçer. Merkezi dışarıda kalan splatlar yer değiştirme ve büyüme çekilişine 1 "
+       "seçer. Dışarıda kalan splatlar (bkz. --roi-splat-samples) yer değiştirme ve büyüme çekilişine 1 "
        "yerine --roi-outside-weight ile girer; model orada büyümeyi bırakır. "
        "Bölümlenmiş bir eğitim yalnızca parçasıyla kesişimini kullanır."));
 SS_MSG(roi_outside_weight,
@@ -3835,6 +3836,85 @@ SS_MSG(roi_outside_weight_help,
     TR("Yoğunlaştırma nereye taşıyacağını ya da ekleyeceğini seçerken ilgi "
        "bölgesi dışındaki bir splatın içerideki 1'e göre kaça sayıldığı. 1 "
        "bölgeyi kapatır."));
+SS_MSG(roi_splat_samples,
+    EN("Points per splat tested against the region"), JA("スプラットごとの領域判定点数"),
+    ZH_HANS("每个泼溅的区域判定点数"), ZH_HANT("每個潑濺的區域判定點數"),
+    KO("스플랫당 영역 판정 점 수"), DE("Geprüfte Punkte je Splat"),
+    FR("Points testés par splat"), ES("Puntos probados por splat"),
+    PT("Pontos testados por splat"), IT("Punti verificati per splat"),
+    NL("Geteste punten per splat"), RU("Проверяемых точек на сплат"),
+    TR("Splat başına denenen nokta"));
+SS_MSG(roi_splat_samples_help,
+    EN("How many points of each splat are tested against the region of interest "
+       "at every densification step: its centre, then points spread over its "
+       "Gaussian, turned at random each time. It counts as inside when any of them "
+       "is, so a splat straddling the boundary keeps growing; at 8, nearly every "
+       "splat with a fifth of its mass inside does. 1 tests the centre alone."),
+    JA("密度化のたびに各スプラットのうち関心領域と照合する点の数。中心と、その"
+       "ガウス分布に広がる点（毎回ランダムに回転）を調べます。どれか 1 点でも内側"
+       "なら内側とみなすので、境界をまたぐスプラットも成長し続けます。8 なら質量"
+       "の 5 分の 1 が内側にあるスプラットはほぼすべて内側です。1 なら中心だけを"
+       "調べます。"),
+    ZH_HANS("每次致密化时，每个泼溅拿来与感兴趣区域比对的点数：它的中心，以及分布"
+            "在其高斯上的点（每次随机旋转）。只要有一点在内即算在内，因此跨越边界"
+            "的泼溅仍会继续增长；取 8 时，质量有五分之一在内的泼溅几乎都算在内。"
+            "取 1 只检查中心。"),
+    ZH_HANT("每次緻密化時，每個潑濺拿來與感興趣區域比對的點數：它的中心，以及分布"
+            "在其高斯上的點（每次隨機旋轉）。只要有一點在內即算在內，因此跨越邊界"
+            "的潑濺仍會繼續增長；取 8 時，質量有五分之一在內的潑濺幾乎都算在內。"
+            "取 1 只檢查中心。"),
+    KO("밀집화할 때마다 각 스플랫에서 관심 영역과 대조하는 점의 수: 중심과, 그 "
+       "가우시안에 퍼진 점들(매번 무작위로 회전). 한 점이라도 안에 있으면 안으로 "
+       "치므로 경계에 걸친 스플랫도 계속 자랍니다. 8이면 질량의 5분의 1이 안에 "
+       "있는 스플랫은 거의 모두 안으로 칩니다. 1이면 중심만 검사합니다."),
+    DE("Wie viele Punkte jedes Splats bei jedem Verdichtungsschritt gegen den "
+       "Interessenbereich geprüft werden: sein Zentrum, dann über seine "
+       "Gauß-Verteilung gestreute Punkte, jedes Mal zufällig gedreht. Er zählt als "
+       "innen, sobald einer davon innen liegt, sodass ein Splat auf der Grenze "
+       "weiterwächst; bei 8 gilt das für fast jeden Splat mit einem Fünftel seiner "
+       "Masse innen. 1 prüft nur das Zentrum."),
+    FR("Le nombre de points de chaque splat testés contre la région d'intérêt à "
+       "chaque densification : son centre, puis des points répartis sur sa "
+       "gaussienne, tournés au hasard à chaque fois. Il compte comme intérieur dès "
+       "que l'un d'eux l'est, si bien qu'un splat à cheval sur le bord continue de "
+       "croître ; à 8, c'est le cas de presque tout splat ayant un cinquième de sa "
+       "masse dedans. 1 ne teste que le centre."),
+    ES("Cuántos puntos de cada splat se prueban contra la región de interés en "
+       "cada densificación: su centro y luego puntos repartidos por su gaussiana, "
+       "girados al azar cada vez. Cuenta como dentro en cuanto uno de ellos lo "
+       "está, así que un splat a caballo del borde sigue creciendo; con 8 ocurre "
+       "con casi todo splat que tenga una quinta parte de su masa dentro. 1 prueba "
+       "solo el centro."),
+    PT("Quantos pontos de cada splat são testados contra a região de interesse "
+       "em cada densificação: o seu centro e depois pontos espalhados pela sua "
+       "gaussiana, rodados ao acaso de cada vez. Conta como dentro logo que um "
+       "deles esteja, pelo que um splat sobre a fronteira continua a crescer; com "
+       "8 isso acontece a quase todo o splat com um quinto da massa dentro. 1 "
+       "testa só o centro."),
+    IT("Quanti punti di ogni splat vengono confrontati con la regione di "
+       "interesse a ogni densificazione: il suo centro, poi punti sparsi sulla sua "
+       "gaussiana, ruotati a caso ogni volta. Conta come dentro appena uno di essi "
+       "lo è, così uno splat a cavallo del bordo continua a crescere; con 8 vale "
+       "per quasi ogni splat con un quinto della massa dentro. 1 controlla solo il "
+       "centro."),
+    NL("Hoeveel punten van elke splat bij elke verdichting tegen het "
+       "interessegebied worden getest: het middelpunt, dan punten verspreid over "
+       "de gaussiaan, elke keer willekeurig gedraaid. De splat telt als binnen "
+       "zodra één punt dat is, dus een splat op de rand blijft groeien; bij 8 geldt "
+       "dat voor bijna elke splat met een vijfde van zijn massa binnen. 1 test "
+       "alleen het middelpunt."),
+    RU("Сколько точек каждого сплата проверяется по области интереса на каждом "
+       "шаге уплотнения: его центр, затем точки, распределённые по его гауссиане и "
+       "каждый раз случайно повёрнутые. Сплат считается внутри, если внутри хоть "
+       "одна из них, поэтому сплат на границе продолжает расти; при 8 так почти с "
+       "каждым сплатом, у которого внутри пятая часть массы. 1 проверяет только "
+       "центр."),
+    TR("Her yoğunlaştırma adımında her splat'in ilgi bölgesine karşı denenen "
+       "nokta sayısı: merkezi, ardından Gauss dağılımına yayılmış ve her seferinde "
+       "rastgele döndürülmüş noktalar. Bunlardan biri içerideyse splat içeride "
+       "sayılır; böylece sınırı aşan bir splat büyümeye devam eder. 8 ile "
+       "kütlesinin beşte biri içeride olan hemen her splat içeride sayılır. 1 "
+       "yalnızca merkezi dener."));
 
 SS_MSG(scale_init,
     EN("Initial splat size"), JA("スプラットの初期サイズ"),
