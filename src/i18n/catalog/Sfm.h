@@ -2641,6 +2641,141 @@ SS_MSG(progressive_detect_stopped,
     RU("обнаружение признаков остановлено; причина в строке [extract] выше"),
     TR("öznitelik algılama durdu; nedeni yukarıdaki [extract] satırında"));
 
+SS_MSG(hybrid_extract,
+    EN("hybrid: SIFT on the registered images -- images: {0}, size: {1} px, features per "
+       "image: {2}"),
+    JA("ハイブリッド: 配置済み画像で SIFT -- 画像: {0}、サイズ: {1} px、画像あたりの特徴点: {2}"),
+    ZH_HANS("混合：在已放置的图像上运行 SIFT —— 图像：{0}，尺寸：{1} px，每张图像特征数：{2}"),
+    ZH_HANT("混合：在已放置的影像上執行 SIFT —— 影像：{0}，尺寸：{1} px，每張影像特徵數：{2}"),
+    KO("하이브리드: 배치된 이미지에 SIFT -- 이미지: {0}, 크기: {1} px, 이미지당 특징점: {2}"),
+    DE("Hybrid: SIFT auf den platzierten Bildern -- Bilder: {0}, Größe: {1} px, Merkmale je "
+       "Bild: {2}"),
+    FR("hybride : SIFT sur les images placées -- images : {0}, taille : {1} px, points par "
+       "image : {2}"),
+    ES("híbrido: SIFT en las imágenes colocadas -- imágenes: {0}, tamaño: {1} px, rasgos "
+       "por imagen: {2}"),
+    PT("híbrido: SIFT nas imagens posicionadas -- imagens: {0}, tamanho: {1} px, traços por "
+       "imagem: {2}"),
+    IT("ibrido: SIFT sulle immagini posizionate -- immagini: {0}, dimensione: {1} px, punti "
+       "per immagine: {2}"),
+    NL("hybride: SIFT op de geplaatste beelden -- beelden: {0}, formaat: {1} px, kenmerken "
+       "per beeld: {2}"),
+    RU("гибрид: SIFT на размещённых снимках — снимков: {0}, размер: {1} px, признаков на "
+       "снимок: {2}"),
+    TR("hibrit: yerleşen görüntülerde SIFT -- görüntü: {0}, boyut: {1} px, görüntü başına "
+       "öznitelik: {2}"));
+
+SS_MSG(hybrid_matched,
+    EN("hybrid: pairs: {0}/{1} verified under the learned poses, inliers: {2}, {3}"),
+    JA("ハイブリッド: ペア: 学習済みのポーズの下で {0}/{1} 検証済み、インライア: {2}、{3}"),
+    ZH_HANS("混合：像对：{0}/{1} 按学习型位姿通过验证，内点：{2}，{3}"),
+    ZH_HANT("混合：影像對：{0}/{1} 按學習型位姿通過驗證，內點：{2}，{3}"),
+    KO("하이브리드: 쌍: 학습형 포즈 아래에서 {0}/{1} 검증됨, 인라이어: {2}, {3}"),
+    DE("Hybrid: Paare: {0}/{1} unter den gelernten Posen geprüft, Inlier: {2}, {3}"),
+    FR("hybride : paires : {0}/{1} vérifiées sous les poses apprises, inliers : {2}, {3}"),
+    ES("híbrido: pares: {0}/{1} verificados bajo las poses aprendidas, inliers: {2}, {3}"),
+    PT("híbrido: pares: {0}/{1} verificados sob as poses aprendidas, inliers: {2}, {3}"),
+    IT("ibrido: coppie: {0}/{1} verificate sotto le pose apprese, inlier: {2}, {3}"),
+    NL("hybride: paren: {0}/{1} geverifieerd onder de geleerde poses, inliers: {2}, {3}"),
+    RU("гибрид: пары: {0}/{1} проверено при обученных позах, инлайеры: {2}, {3}"),
+    TR("hibrit: çiftler: öğrenilmiş pozlar altında {0}/{1} doğrulandı, iç noktalar: {2}, {3}"));
+
+SS_MSG(hybrid_model,
+    EN("hybrid model {0}: images: {1}, kept by SIFT: {2}, restored without points: {3}; "
+       "points {4} -> {5}, mean error {6} -> {7} px"),
+    JA("ハイブリッドモデル {0}: 画像: {1}、SIFT で維持: {2}、点なしで復元: {3}。"
+       "点 {4} -> {5}、平均誤差 {6} -> {7} px"),
+    ZH_HANS("混合模型 {0}：图像：{1}，SIFT 保留：{2}，无点恢复：{3}；点 {4} -> {5}，平均误差 {6} -> {7} px"),
+    ZH_HANT("混合模型 {0}：影像：{1}，SIFT 保留：{2}，無點恢復：{3}；點 {4} -> {5}，平均誤差 {6} -> {7} px"),
+    KO("하이브리드 모델 {0}: 이미지: {1}, SIFT 로 유지: {2}, 점 없이 복원: {3}; "
+       "점 {4} -> {5}, 평균 오차 {6} -> {7} px"),
+    DE("Hybridmodell {0}: Bilder: {1}, von SIFT gehalten: {2}, ohne Punkte "
+       "wiederhergestellt: {3}; Punkte {4} -> {5}, mittlerer Fehler {6} -> {7} px"),
+    FR("modèle hybride {0} : images : {1}, gardées par SIFT : {2}, rétablies sans "
+       "points : {3} ; points {4} -> {5}, erreur moyenne {6} -> {7} px"),
+    ES("modelo híbrido {0}: imágenes: {1}, conservadas por SIFT: {2}, restauradas sin "
+       "puntos: {3}; puntos {4} -> {5}, error medio {6} -> {7} px"),
+    PT("modelo híbrido {0}: imagens: {1}, mantidas pelo SIFT: {2}, restauradas sem "
+       "pontos: {3}; pontos {4} -> {5}, erro médio {6} -> {7} px"),
+    IT("modello ibrido {0}: immagini: {1}, tenute da SIFT: {2}, ripristinate senza "
+       "punti: {3}; punti {4} -> {5}, errore medio {6} -> {7} px"),
+    NL("hybride model {0}: beelden: {1}, door SIFT behouden: {2}, zonder punten "
+       "hersteld: {3}; punten {4} -> {5}, gemiddelde fout {6} -> {7} px"),
+    RU("гибридная модель {0}: изображения: {1}, сохранено SIFT: {2}, восстановлено "
+       "без точек: {3}; точки {4} -> {5}, средняя ошибка {6} -> {7} px"),
+    TR("hibrit model {0}: görüntüler: {1}, SIFT ile tutulan: {2}, noktasız geri "
+       "yüklenen: {3}; noktalar {4} -> {5}, ortalama hata {6} -> {7} px"));
+
+SS_MSG(hybrid_too_few,
+    EN("it needs at least two registered images"),
+    JA("配置済みの画像が少なくとも 2 枚必要です"),
+    ZH_HANS("至少需要两张已放置的图像"),
+    ZH_HANT("至少需要兩張已放置的影像"),
+    KO("배치된 이미지가 적어도 두 장 필요합니다"),
+    DE("es braucht mindestens zwei platzierte Bilder"),
+    FR("il faut au moins deux images placées"),
+    ES("necesita al menos dos imágenes colocadas"),
+    PT("precisa de pelo menos duas imagens posicionadas"),
+    IT("servono almeno due immagini posizionate"),
+    NL("er zijn minstens twee geplaatste beelden nodig"),
+    RU("нужно не меньше двух размещённых снимков"),
+    TR("en az iki yerleşmiş görüntü gerekir"));
+
+SS_MSG(hybrid_kept_too_few,
+    EN("SIFT held too few of the largest model's images -- kept: {0} of {1}"),
+    JA("SIFT が最大モデルの画像を十分に保てませんでした -- 保持: {0} / {1}"),
+    ZH_HANS("SIFT 保留的最大模型图像太少 —— 保留：{0} / {1}"),
+    ZH_HANT("SIFT 保留的最大模型影像太少 —— 保留：{0} / {1}"),
+    KO("SIFT가 가장 큰 모델의 이미지를 너무 적게 유지했습니다 -- 유지: {0} / {1}"),
+    DE("SIFT hielt zu wenige Bilder des größten Modells -- behalten: {0} von {1}"),
+    FR("SIFT a gardé trop peu d'images du plus grand modèle -- gardées : {0} sur {1}"),
+    ES("SIFT conservó muy pocas imágenes del modelo mayor -- conservadas: {0} de {1}"),
+    PT("o SIFT manteve poucas imagens do maior modelo -- mantidas: {0} de {1}"),
+    IT("SIFT ha tenuto troppe poche immagini del modello più grande -- tenute: {0} su {1}"),
+    NL("SIFT hield te weinig beelden van het grootste model -- behouden: {0} van {1}"),
+    RU("SIFT удержал слишком мало снимков крупнейшей модели — удержано: {0} из {1}"),
+    TR("SIFT en büyük modelin çok az görüntüsünü tuttu -- tutulan: {0} / {1}"));
+
+SS_MSG(hybrid_not_restored,
+    EN("hybrid model {0}: the learned and SIFT frames could not be tied, so its dropped "
+       "images were not put back -- images: {1}"),
+    JA("ハイブリッドのモデル {0}: 学習済みと SIFT の座標系を結び付けられなかったため、外れた画像を戻せませんでした -- 画像: {1}"),
+    ZH_HANS("混合模型 {0}：无法将学习特征与 SIFT 的坐标系对应起来，因此掉出的图像没有放回 —— 图像：{1}"),
+    ZH_HANT("混合模型 {0}：無法將學習特徵與 SIFT 的座標系對應起來，因此掉出的影像沒有放回 —— 影像：{1}"),
+    KO("하이브리드 모델 {0}: 학습 특징과 SIFT의 좌표계를 연결할 수 없어 빠진 이미지를 되돌리지 못했습니다 -- 이미지: {1}"),
+    DE("Hybridmodell {0}: die Rahmen der gelernten Merkmale und von SIFT ließen sich nicht "
+       "verbinden, daher wurden herausgefallene Bilder nicht zurückgelegt -- Bilder: {1}"),
+    FR("modèle hybride {0} : les repères appris et SIFT n'ont pas pu être reliés, les "
+       "images perdues n'ont donc pas été remises -- images : {1}"),
+    ES("modelo híbrido {0}: no se pudieron enlazar los marcos aprendido y SIFT, así que las "
+       "imágenes perdidas no se repusieron -- imágenes: {1}"),
+    PT("modelo híbrido {0}: não foi possível ligar os referenciais aprendido e SIFT, então "
+       "as imagens perdidas não foram repostas -- imagens: {1}"),
+    IT("modello ibrido {0}: impossibile collegare i riferimenti appreso e SIFT, quindi le "
+       "immagini perse non sono state rimesse -- immagini: {1}"),
+    NL("hybride model {0}: de geleerde en SIFT-assenstelsels konden niet worden verbonden, "
+       "dus weggevallen beelden zijn niet teruggezet -- beelden: {1}"),
+    RU("гибридная модель {0}: не удалось связать системы координат обученных признаков и "
+       "SIFT, поэтому выпавшие снимки не возвращены — снимков: {1}"),
+    TR("hibrit model {0}: öğrenilmiş ve SIFT çerçeveleri bağlanamadı, bu yüzden düşen "
+       "görüntüler geri konmadı -- görüntü: {1}"));
+
+SS_MSG(hybrid_failed,
+    EN("the hybrid SIFT stage failed; the learned frontend's model is kept: {0}"),
+    JA("ハイブリッド SIFT 段階が失敗しました。学習済みフロントエンドのモデルを使います: {0}"),
+    ZH_HANS("混合 SIFT 阶段失败；保留学习型前端的模型：{0}"),
+    ZH_HANT("混合 SIFT 階段失敗；保留學習型前端的模型：{0}"),
+    KO("하이브리드 SIFT 단계가 실패했습니다. 학습형 프런트엔드의 모델을 유지합니다: {0}"),
+    DE("die hybride SIFT-Stufe ist fehlgeschlagen; das Modell des gelernten Frontends "
+       "bleibt: {0}"),
+    FR("l'étape SIFT hybride a échoué ; le modèle du frontal appris est conservé : {0}"),
+    ES("la etapa SIFT híbrida falló; se conserva el modelo del frontal aprendido: {0}"),
+    PT("a etapa SIFT híbrida falhou; o modelo do frontal aprendido é mantido: {0}"),
+    IT("la fase SIFT ibrida non è riuscita; resta il modello del frontend appreso: {0}"),
+    NL("de hybride SIFT-stap is mislukt; het model van de geleerde frontend blijft: {0}"),
+    RU("гибридный этап SIFT не удался; сохранена модель обученного фронтенда: {0}"),
+    TR("hibrit SIFT aşaması başarısız oldu; öğrenilmiş ön ucun modeli korunuyor: {0}"));
+
 SS_MSG(progressive_feature_failed,
     EN("feature pass {0}/{1} failed and was undone; the model from before it is kept: {2}"),
     JA("特徴点パス {0}/{1} が失敗したため取り消しました。その前のモデルを使います: {2}"),

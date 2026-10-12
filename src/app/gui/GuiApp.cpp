@@ -6420,9 +6420,15 @@ void GuiApp::poll_sfm_progress() {
     if (dataset_busy() && dataset_steps()->current() == Stage::Features) {
         std::string fdir = _sfm.features_dir();
         if (dataset_steps()->stage(Stage::Mapping).status == StageStatus::Running) {
-            const std::string pass =
-                newest_pass_dir(fs::path(fdir).parent_path() / "features.progressive");
+            const fs::path ws = fs::path(fdir).parent_path();
+            const std::string pass = newest_pass_dir(ws / "features.progressive");
             if (!pass.empty()) fdir = pass;
+            // The hybrid stage detects SIFT into features.sift after every pass.
+            std::error_code ec;
+            const fs::path sift = ws / "features.sift";
+            if (fs::is_directory(sift, ec) &&
+                (pass.empty() || fs::last_write_time(sift, ec) >= fs::last_write_time(pass, ec)))
+                fdir = sift.string();
         }
         if (fdir != _features_shown) {
             _features.stop();
@@ -8096,6 +8102,11 @@ void GuiApp::draw_sfm_advanced() {
         ui::help_on_hover(learned ? dmsg::matcher_help
                                   : dmsg::matcher_needs_learned);
         if (learned) draw_feature_download();
+        ImGui::BeginDisabled(!learned);
+        bool hybrid = learned && _sfm_job.hybrid_sift;
+        if (ui::Checkbox(dmsg::hybrid_sift, &hybrid) && learned) _sfm_job.hybrid_sift = hybrid;
+        ImGui::EndDisabled();
+        ui::help_on_hover(dmsg::hybrid_sift_help);
     }
 
     ImGui::SetNextItemWidth(px(260.0f));

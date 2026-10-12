@@ -1830,6 +1830,34 @@ SS_MSG(progressive_min_matches_help,
     TR("Hizalanmamış bir görüntünün işlenmesi için gereken doğrulanmış eşleşme "
        "sayısı; altında aykırı sayılır ve bırakılır"));
 
+SS_MSG(hybrid_sift_help,
+    EN("After a learned frontend has placed the cameras, detect SIFT on its images, "
+       "match it under those poses, then triangulate and bundle-adjust with SIFT"),
+    JA("学習済みフロントエンドがカメラを配置した後、その画像で SIFT を検出し、"
+       "そのポーズの下で照合して、SIFT で三角測量とバンドル調整を行います"),
+    ZH_HANS("学习型前端放置好相机后，在其图像上检测 SIFT，按这些位姿匹配，再用 SIFT 三角化并做光束法平差"),
+    ZH_HANT("學習型前端放置好相機後，在其影像上偵測 SIFT，按這些位姿匹配，再用 SIFT 三角化並做光束法平差"),
+    KO("학습형 프런트엔드가 카메라를 배치한 뒤, 그 이미지에서 SIFT 를 검출하고 "
+       "그 포즈 아래에서 매칭한 다음 SIFT 로 삼각측량과 번들 조정을 합니다"),
+    DE("Nachdem ein gelerntes Frontend die Kameras platziert hat, SIFT auf seinen "
+       "Bildern erkennen, unter diesen Posen zuordnen, dann mit SIFT triangulieren "
+       "und ausgleichen"),
+    FR("Après le placement des caméras par un frontal appris, détecter SIFT sur ses "
+       "images, l'apparier sous ces poses, puis trianguler et ajuster avec SIFT"),
+    ES("Tras colocar las cámaras con un frontal aprendido, detectar SIFT en sus "
+       "imágenes, emparejarlo bajo esas poses y triangular y ajustar con SIFT"),
+    PT("Depois de um frontal aprendido posicionar as câmeras, detectar SIFT nas suas "
+       "imagens, emparelhá-lo sob essas poses e triangular e ajustar com SIFT"),
+    IT("Dopo che un frontend appreso ha posizionato le camere, rilevare SIFT sulle sue "
+       "immagini, abbinarlo sotto quelle pose, poi triangolare e regolare con SIFT"),
+    NL("Nadat een geleerde frontend de camera's heeft geplaatst, SIFT detecteren op "
+       "zijn beelden, koppelen onder die poses en daarna trianguleren en vereffenen "
+       "met SIFT"),
+    RU("После того как обученный фронтенд расставил камеры, найти SIFT на его "
+       "изображениях, сопоставить при этих позах, затем триангулировать и уравнять с SIFT"),
+    TR("Öğrenilmiş bir ön uç kameraları yerleştirdikten sonra görüntülerinde SIFT bul, "
+       "bu pozlar altında eşle, sonra SIFT ile üçgenle ve demet ayarı yap"));
+
 SS_MSG(progressive_time_help,
     EN("Minutes into progressive alignment after which no further feature pass "
        "starts; 0 is no limit"),

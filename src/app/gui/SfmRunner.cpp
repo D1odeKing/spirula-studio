@@ -752,6 +752,7 @@ std::vector<std::string> SfmRunner::recon_args(const SfmJob& job,
             }
         }
     }
+    if (job.hybrid_sift && job.features != 0) argv.push_back("--hybrid-sift");
     if (job.init_focal_px > 0) {
         char buf[32];
         std::snprintf(buf, sizeof buf, "%g", job.init_focal_px);
