@@ -351,3 +351,18 @@ Both placed 676/678; SIFT kept all 676.
 - So the cleanest dense default here is still gate matching with every track
   (b4_gate: 494k points, 97% near, 1.74 px). Band density would need a
   per-track check against the other views, not a blanket view count.
+
+## Build 8 (a27330db): the gate is the default again
+
+Build 8 passes the five sfm tests and `preset_roundtrip_test`. `hybrid_b8`
+has hybrid_b3's command over A's LoMa matches, with no `SS_SFM_HYBRID_*`.
+Structure check in `diag_b7/b8.txt`.
+
+| run | SIFT kept / restored | points | observations | mean px | median px | inliers | `[hybrid] … kept X of Y` | stage s | near, all / 2-view |
+|---|---|---|---|---|---|---|---|---|---|
+| hybrid_b4_gate | 676 / 0 | 494,221 | 1,264,760 | 1.744 | 1.428 | 1,949,622 | gate 2,060,901 of 34,921,988 | 68 | 97.0% / 96.0% |
+| hybrid_b8 | 676 / 0 | 493,903 | 1,264,170 | 1.745 | 1.429 | 1,948,831 | gate 2,059,898 of 34,894,634 | 66 | 97.0% / 96.0% |
+
+hybrid_b8 reproduces b4_gate in points, error and structure, with 676/678
+placed and exit 0. Its cameras agree with LoMa to a median 0.0002 of extent
+and 0.043°.
