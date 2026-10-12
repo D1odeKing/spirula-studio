@@ -30,3 +30,4 @@ hybrid_b6_extreme exit=0 seconds=1391
 b6 queue done Sun Oct 11 16:45:24 EDT 2026
 b7 queue start Mon, Oct 12, 2026  7:49:58 AM
 hybrid_b7_band_mv3 exit=0 seconds=1620
+hybrid_b7_gate_mv3 exit=0 seconds=1366
