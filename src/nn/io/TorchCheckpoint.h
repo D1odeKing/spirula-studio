@@ -33,7 +33,23 @@ public:
     // "model_config.refiner.model_channels"; None list entries are NaN. Empty
     // when absent.
     std::vector<double> config(const std::string& key) const;
+    // Opens the archive for this one read; a thread reading many tensors keeps a Reader.
     OnnxTensor read(const std::string& name) const;
+
+    // One open archive, for one thread at a time; separate Readers may read concurrently.
+    class Reader {
+    public:
+        explicit Reader(const TorchCheckpoint& checkpoint);
+        ~Reader();
+        Reader(const Reader&) = delete;
+        Reader& operator=(const Reader&) = delete;
+        OnnxTensor read(const std::string& name);
+
+    private:
+        const TorchCheckpoint& checkpoint_;
+        struct Archive;
+        std::unique_ptr<Archive> archive_;
+    };
 
 private:
     struct Impl;

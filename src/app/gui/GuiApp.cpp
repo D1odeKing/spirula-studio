@@ -57,6 +57,7 @@
 #include "core/Env.h"
 #include "core/LicenseConsent.h"
 #include "core/LicenseFamilies.h"
+#include "core/LongPath.h"
 #if defined(SS_BUILD_SAM) || defined(SS_TOOL_SFM) || defined(SS_BACKEND_VULKAN)
 #include "core/VulkanDeviceSelection.h"
 #endif
@@ -7416,7 +7417,7 @@ void GuiApp::draw_clear_project_modal() {
         reset_dataset_preview();
         for (const std::string& path : _clear_targets) {
             std::error_code ec;
-            fs::remove_all(path, ec);
+            fs::remove_all(spirula::long_path(path), ec);
             if (ec) log(i18n::format(dmsg::clear_project_failed,
                                      {path, ec.message()}));
         }
@@ -11671,8 +11672,16 @@ void GuiApp::draw_status_strip() {
                         msg::status_preparing);
         ui::TextDisabledRaw(" ");
     } else if (ph == TrainRunner::Phase::Evaluating) {
-        ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0),
-                        msg::status_evaluating);
+        const spirula::EvalProgress p = _runner.latest_eval_progress();
+        if (p.total > 0) {
+            const float frac = std::clamp((float)p.completed / (float)p.total,
+                                          0.0f, 1.0f);
+            ui::ProgressBar(frac, ImVec2(-8, 0), msg::status_eval_views,
+                            {p.completed, p.total, (int)(frac * 100.0f)});
+        } else {
+            ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0),
+                            msg::status_evaluating);
+        }
         ui::TextDisabledRaw(" ");
     } else if (ph == TrainRunner::Phase::Ready) {
         ui::ProgressBar(0.0f, ImVec2(-8, 0), msg::status_ready);

@@ -100,10 +100,10 @@ float funmap_ordered(uint u) {
 
 // ---------------------------------------------------------------------------
 // Frustum geometry fill: one workgroup (64 threads = 4*kNumFrustumSegments)
-// per camera. Mirrors fill_frustum_segments_kernel.
+// per camera, folded like dispatch_flat. Mirrors fill_frustum_segments_kernel.
 // ---------------------------------------------------------------------------
 
-struct VisFrustumParams {  // 84 -> 88 bytes: pushed directly
+struct VisFrustumParams {  // 88 bytes: pushed directly
     float4* intrins;         // [N]
     int* widths;             // [N]
     int* heights;            // [N]
@@ -115,7 +115,7 @@ struct VisFrustumParams {  // 84 -> 88 bytes: pushed directly
     float4* tri_buffer;      // [N, 4*kNumFrustumFaces^2, 4]
     float size;
     uint32_t N;
-    uint32_t _pad0;
+    uint32_t wgs_per_row;
 };
 
 groupshared float3 _vis_polylines[4 * kNumFrustumSegments];
@@ -145,7 +145,7 @@ float3 frustum_ray(float2 uv, int camera_model, int tier,
 [numthreads(64, 1, 1)]
 void vis_fill_frustum(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                       uniform VisFrustumParams p) {
-    uint bid = wg.x;
+    uint bid = wg.y * p.wgs_per_row + wg.x;
     if (bid >= p.N) return;
 
     float4 intrin = p.intrins[bid];

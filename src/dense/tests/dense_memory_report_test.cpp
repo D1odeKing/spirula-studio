@@ -17,8 +17,8 @@ void check(bool valid, const char* message) {
 int main() {
     try {
         constexpr uint64_t GiB = 1ull << 30;
-        check(planned_host_bytes(32 * GiB, false) == 32 * GiB * 2 + 4 * GiB + 8 * GiB + GiB, "source plan does not add the matching budgets");
-        check(planned_host_bytes(32 * GiB, true) == planned_host_bytes(32 * GiB, false) + 32 * GiB, "rectified plan omits the warp cache");
+        check(planned_host_bytes(32 * GiB, false) == 16 * GiB + 8 * GiB + 4 * GiB + 8 * GiB + GiB, "source plan does not add the matching budgets");
+        check(planned_host_bytes(32 * GiB, true) == planned_host_bytes(32 * GiB, false) + 8 * GiB, "rectified plan omits the warp cache");
 
         MemoryReport r;
         r.host_process = 4 * GiB; r.host_available = 12 * GiB; r.host_total = 32 * GiB; r.host_planned = 8 * GiB;

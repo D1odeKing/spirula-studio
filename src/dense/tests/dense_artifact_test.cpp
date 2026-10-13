@@ -1,5 +1,7 @@
 #include "dense/Artifact.h"
+#include "core/AtomicFile.h"
 #include "core/FileLock.h"
+#include "core/LongPath.h"
 #include "core/OwnedDirectory.h"
 #include "core/Env.h"
 
@@ -17,7 +19,7 @@ void require(bool value, const char* message) {
 struct Fixture {
     fs::path root = fs::canonical(fs::temp_directory_path()) /
         ("spirula-generations-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    ~Fixture() { std::error_code error; fs::remove_all(root, error); }
+    ~Fixture() { std::error_code error; fs::remove_all(spirula::long_path(root), error); }
 
     ArtifactFiles stage(const std::string& name, const std::string& text) {
         const auto directory = root / name;
@@ -145,6 +147,27 @@ int main() {
                     fs::exists(cache / "fingerprints.txt") && fs::exists(outside / "keep.txt"),
                     "abandoned run sweep removed predictions or unowned data, or kept abandoned work");
             cleanup_abandoned_runs(fixture.root / "missing-cache");
+        }
+        {
+            // Issue 178: a prediction nests two 64-digit names past MAX_PATH. Test executables carry no
+            // long-path manifest, so this process reaches such a path only in extended-length form.
+            auto deep = fixture.root;
+            while (deep.native().size() < 200) deep /= "a-long-dataset-folder-name";
+            const auto cache = spirula::long_path(deep / "dense" / "cache");
+            require(spirula::long_path(cache) == cache, "long_path is not idempotent");
+            const auto run = cache / std::string(64, 'c') / "run-7";
+            const auto prediction = cache / "pairs-v4" / std::string(64, 'd') / (std::string(64, 'e') + ".roma");
+            require(prediction.native().size() > 300, "the long-path fixture is not long enough");
+            fs::create_directories(run / "nested"); fs::create_directories(prediction.parent_path());
+            { std::ofstream(run / "nested" / "observations-0-0.bin") << "tile"; }
+            auto part = prediction; part += ".part";
+            { std::ofstream output(part, std::ios::binary); output << "prediction"; output.flush(); require((bool)output, "cannot write a prediction past MAX_PATH"); }
+            spirula::replace_file(part, prediction);
+            require(spirula::sha256_file(prediction.string()).size() == 64, "cannot hash a prediction past MAX_PATH");
+            cleanup_abandoned_runs(cache);
+            require(!fs::exists(run) && fs::exists(prediction), "abandoned-run cleanup failed past MAX_PATH");
+            spirula::remove_owned_directory(deep / "dense", deep, "dense");
+            require(!fs::exists(spirula::long_path(deep / "dense")), "owned cleanup failed past MAX_PATH");
         }
         require(artifact_files(fixture.root.string()).generation == "second" && artifact_complete(fixture.root.string()),
                 "successful generation did not become current");

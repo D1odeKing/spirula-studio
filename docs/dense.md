@@ -84,17 +84,23 @@ source-workflow setup to restore the default.
 `spirula dense --help` lists every editable setting and its starting value.
 Boolean flags take `true`/`false` or `1`/`0`. Set a preset before overriding
 its individual settings. The three presets set matching size, direction,
-neighbours, reference coverage and sampling stride together:
+neighbours, reference coverage and sampling stride together. Neighbours and
+reference coverage are per surface, not per image (see
+[automatic pairing](#automatic-pairing)):
 
 | Preset | Matching grid | Refinement grid | Both directions | Neighbors | Reference coverage | Stride |
 |---|---:|---:|---|---:|---:|---:|
-| Fast | 512 × 512 | Disabled | No | 4 | 2 | 2 |
-| Balanced (default) | 640 × 640 | Disabled | No | 6 | 3 | 2 |
-| High quality (`high`) | 800 × 800 | 1280 × 1280 | Yes | 8 | 0 (all) | 1 |
+| Fast | 512 × 512 | Disabled | No | 2 | 12 | 2 |
+| Balanced (default) | 640 × 640 | Disabled | No | 3 | 12 | 2 |
+| High quality (`high`) | 800 × 800 | 1280 × 1280 | Yes | 4 | 16 | 1 |
 
-Measured on an RTX 5070 (12 GB), each cloud then seeding 7,000 training steps
-scored on every eighth image. A 160-image 1920 × 1080 object capture with
-masks:
+Settings saved with a preset's earlier values (4 and 2, 6 and 3, 8 and 0)
+load as that preset, and a dataset whose cloud was made with them does not
+count as stale.
+
+Measured on an RTX 5070 (12 GB) with the earlier pairing, a fixed number of
+neighbours per image; each cloud then seeded 7,000 training steps scored on
+every eighth image. A 160-image 1920 × 1080 object capture with masks:
 
 | Preset | Pairs | References | Time | Points | Peak device memory | Training PSNR |
 |---|---:|---:|---:|---:|---:|---:|
@@ -113,12 +119,13 @@ masks:
 | (sparse SfM seed) | | 139k | 25.60 / 0.818 |
 
 Stride 1 at Balanced's grid made garden take 586 s for 23.6M points, almost
-all of it CPU refinement and fusion, with about 60 GB of temporary tiles, for
-25.75 / 0.842; on the object capture it scored 36.61. Training subsamples a
-seed to its splat cap, so the extra points seldom pay for themselves.
+all of it CPU refinement and fusion, for 25.75 / 0.842; on the object capture
+it scored 36.61. Training subsamples a seed to its splat cap, so the extra
+points seldom pay for themselves.
 
 Device memory beyond the weights and matcher scratch is the view feature cache,
-which grows into whatever the card has free: with all but 5.5 GB of the card
+which grows into whatever the card has free (on Windows, whatever the commit
+limit allows, see below): with all but 5.5 GB of the card
 held by another process, Balanced peaked at 3.3 GB and High quality at 4.0 GB.
 The weights and scratch alone take 1.6 GB for Balanced and 3.5 GB for High
 quality (2.5 and 4.4 GB on a GPU without cooperative-matrix support, which runs
@@ -287,7 +294,7 @@ The dense step runs as a separate `spirula dense` process, so the GUI cannot
 measure it directly. The child writes `dense/progress/memory.json` twice a
 second, and the GUI reads it. The host ceiling is the process size at start
 plus the matching stage's budgets, all shares of **CPU image cache**:
-about 2.4 times the cache in original-image mode and 3.4 times in rectified
+about 1.16 times the cache in original-image mode and 1.41 times in rectified
 mode. The device ceiling is RoMa's weights and planned scratch plus its feature
 cache's remaining room. Risk is the ceiling over what the machine can supply:
 low below 80%, medium below 95%, high above. If it is high before matching
@@ -349,32 +356,80 @@ The manifest reports resolved precision. Mixed pair predictions have a separate
 cache identity; FP32 continues to reuse the existing cache. Feature eviction
 does not change precision, resolution, or support thresholds.
 
+### Automatic pairing
+
 Automatic pairing works on views: an ordinary photo is one view, and each
 pinhole face split from a wide lens is a view of its own. Views split from the
-same image are never paired with each other. A view's neighbours are the views
-that share its sparse points, each shared point weighted by the angle the two
-camera centres see it from: a full weight from 10 degrees up, falling with the
-square of the angle below that, so near-duplicate frames with almost no
-baseline rank behind partners that triangulate well. Views without enough
-track partners fall back to the nearest camera centres whose views overlap.
-Faces split from a wide lens are paired only through shared points while
-`--sparse-face-pairs` is on (the default). Every step uses the track index and
-a nearest-neighbour search over camera centres, so planning is close to linear
-in the number of views and observations.
+same image are never paired with each other.
 
-`--reference-coverage` thins densely captured scenes. Sparse points are
-counted in small cells of space (2% of the median camera-to-point distance),
-because SfM breaks one surface into many short tracks: on an every-frame
-video the median track spans four frames. In capture order, a view becomes a
-reference only while at least a tenth of its cells are seen by fewer than
-that many earlier references; otherwise it is matched only as some
-reference's neighbour. A view with fewer than 32 sparse points always
-stays a reference, since it may be looking at untextured surface. A turntable
-or an every-frame video then costs about as much as the scene needs rather
-than as many frames as were shot, while a sparse capture keeps every view as
-a reference. `0` makes every view a reference. `--neighbors` caps the pairs of
-each reference; with every view a reference both ends of a pair are capped,
-as before.
+Pairs follow the surface the cameras see, not the number of images. The
+sparse points (the COLMAP model's, a Nerfstudio dataset's point cloud or a
+Metashape project's; without any, points along each view's rays at the depth
+where its optical axis meets its neighbours') are sampled one per small cell
+of space, 5% of the distance to the nearest camera but never less than 5% of
+the median such distance, at most 32,768 samples. Each sample is projected
+into every view, and counts as hidden there when it lies more than 15% behind
+the nearest sample in the 3 × 3 cells around it of a 24 × 24 grid over the
+frame. SfM tracks do not decide what a view sees: on an every-frame video a
+sparse point is tracked through about four frames, far fewer than the views
+that see its surface, and pairing by tracks gave every frame of a dense
+capture references of its own.
+
+Visible samples are grouped into cells 4% of their distance from the cameras
+that see them. `--reference-coverage` (R): references are added one at a time,
+the view that sees the most cells still short of R references first, until no
+view would add a tenth of a typical view's cells. `--neighbors` (S): each
+reference then takes partners until every cell of its view is seen by S of
+them. A partner counts fully for a cell it sees from 3 degrees or more apart,
+and by the angle squared below that, so a distant cell that no pair sees
+widely does not draw partners without end. Among partners that cover as much,
+wider angles go first (full weight from 10 degrees, as in Goesele et al.
+2007). A reference takes at most 2S partners, and at least two whatever they
+add, which three-image support needs. A pair between two references counts
+for both. `0` reference coverage makes every view a reference. Faces split
+from a wide lens are paired only through samples they share while
+`--sparse-face-pairs` is on (the default).
+
+The presets' values reproduce, on the nine Mip-NeRF 360 scenes at quarter
+resolution, how often the earlier pairing saw each surface: reconstructions
+per cell and partners per reconstructing view are within 7% of it on average,
+for about as many pairs (Fast ×1.02, Balanced ×0.96, High ×0.98, geometric
+mean over the scenes). Denser captures then stop adding pairs once every
+surface has its references, and sparse ones keep every view. Pairs planned,
+earlier pairing against this one, Fast / Balanced / High:
+
+| Capture | Views | Earlier | Surface-driven |
+|---|---:|---:|---:|
+| Mip-NeRF 360 garden | 185 | 297 / 508 / 678 | 227 / 343 / 577 |
+| garden, every 2nd image | 93 | 176 / 265 / 355 | 178 / 268 / 366 |
+| garden, every 4th image | 47 | 86 / 131 / 179 | 93 / 138 / 182 |
+| Dual-fisheye room walk | 5,730 | 9,433 / 13,545 / 16,738 | 3,462 / 5,406 / 9,420 |
+| the same, every 2nd frame | 2,865 | 4,807 / 6,696 / 8,341 | 3,060 / 4,687 / 7,607 |
+| the same, every 4th frame | 1,435 | 2,371 / 3,234 / 4,136 | 2,369 / 3,547 / 5,070 |
+| the same, every 8th frame | 720 | 1,166 / 1,530 / 2,058 | 1,360 / 2,028 / 2,705 |
+| Dual-fisheye outdoor walk | 5,970 | 6,914 / 10,386 / 13,563 | 3,038 / 4,652 / 7,596 |
+| the same, every 8th frame | 750 | 976 / 1,381 / 1,767 | 1,180 / 1,751 / 2,411 |
+| 707 photos, three cameras | 707 | 933 / 1,680 / 2,378 | 689 / 1,043 / 1,700 |
+| Dual-fisheye building walk, no tracks | 31,292 | 53,752 / 83,935 / 113,788 | 7,073 / 11,351 / 20,168 |
+
+Views are faces: a fisheye frame is five. The thinned captures keep the full
+capture's point cloud, so only the camera density changes. Where the earlier
+pairing planned fewer pairs on a thinned capture it also left more of the
+surface unreconstructed: on the room walk at every 8th frame, 59% of the
+cells three or more views see had a view with two partners seeing them,
+against 76%. The building walk is a Nerfstudio dataset with a point cloud but
+no tracks, so the earlier pairing made every face a reference with pose
+neighbours; at the 0.9 s a pair garden matched in, that is 21 hours against 3.
+
+The Balanced clouds train to the same quality, 7,000 steps scored on every
+eighth image (RTX 3070 laptop). Garden: 25.76 / 0.840 from the earlier
+pairing's 508 pairs, 25.79 / 0.842 from this one's 343, and 25.75 / 0.840 from
+253 pairs at reference coverage 8. The 160-image object capture above: 36.45 /
+0.993 from 191 pairs in 253 s, 36.53 / 0.993 from 147 pairs in 170 s.
+
+Planning is close to linear in views and samples: the building walk's 31,292
+views, hashing its 5,908 images included, planned in 21 to 25 s with 775 MB
+committed at the peak.
 
 Sequential pairing respects camera folders. Exhaustive pairing streams all
 unique pairs. Explicit pairing reads two registered image names per line from
@@ -382,7 +437,9 @@ unique pairs. Explicit pairing reads two registered image names per line from
 
 Source automatic mode selects references by deterministic pose coverage,
 normalizing translation by scene scale. It plans directed reference-to-neighbor
-jobs and ranks neighbors through the existing overlap/affinity implementation.
+jobs and ranks neighbors through the existing overlap/affinity implementation;
+`--neighbors` there is the number of neighbours of each reference, and
+reference coverage does not apply.
 `reference_fraction` controls this automatic reference selection; sequential,
 explicit, and exhaustive source modes retain their requested pairs and process
 both reference directions. Coverage selection does not allocate an image-by-image
@@ -457,9 +514,11 @@ doubles. This optional pass must fit the host cache budget and otherwise
 fails with an actionable error. It does not silently disable filtering.
 `cpu_workers` bounds fingerprinting, view planning, reference refinement,
 and the outlier queries; zero chooses the hardware thread count.
-`image_cache_bytes=0` uses the smaller of one eighth of physical RAM and
-half of currently available RAM; a positive value is an explicit byte
-budget. The decoder worker count follows the CPU thread count and that budget
+`image_cache_bytes=0` uses the smallest of one eighth of physical RAM, a
+third of currently available RAM and a fifth of the available commit (what the
+operating system will still promise; on Windows a small page file puts it well
+below free RAM, and device memory counts against it too); a positive value is
+an explicit byte budget. The decoder worker count follows the CPU thread count and that budget
 divided by the largest source image's estimated working memory, with at least
 one worker. Decoded source RGB and masks are shared across all of its faces;
 source images and rectified views share one LRU budget. Calibration plans use
@@ -482,6 +541,13 @@ allocations, and reserved scratch within `memory_budget_bytes` (or the
 default 80% device budget). There is no fixed byte or view-count cap.
 When the driver exposes `VK_EXT_memory_budget`, its changing budget and usage
 also constrain the cache. The device's allocation-count limit is respected.
+Windows charges device memory to the system commit limit as it does host
+memory, and Apple's device memory is the same RAM, so there the cache also
+leaves the available commit 1 GB plus the host plan's remaining growth. On a
+16 GB laptop with an RTX 3070 and a small page file, Balanced on Mip-NeRF 360
+garden failed with "bad allocation" at pair 194 of 508 (6.45 GB committed, of
+which 4 GB was the card's memory); it now completes with a 4.7 GB peak and
+the cache still answering 806 of 1,016 descriptor requests.
 Least recently used views are evicted. If a view
 cannot fit, inference computes it normally; resolution, precision, pairing,
 and filtering stay as configured. Pair-dependent matching and VGG refinement
@@ -619,7 +685,12 @@ checksum before reporting success. An exclusive workspace writer lock prevents
 two dense processes from publishing to the same dataset concurrently.
 
 Each run keeps its temporary observation tiles and sorting files in a
-`dense/cache/<settings>/run-<number>` folder and removes it when it finishes.
+`dense/cache/<settings>/run-<number>` folder and removes it when it finishes;
+a reference's tiles go as soon as it is refined, so the folder holds the
+references still in progress rather than every pair matched so far. The cache
+folder is opened in Windows' extended-length form, so its nested names work
+past the 260-character limit whether or not the machine enables long paths
+(issue 178).
 Cancelling from the GUI ends the child process immediately, so that removal
 cannot run, and a crash has the same effect. Each run therefore starts, while
 holding the writer lock, by deleting every leftover `run-<number>` folder and

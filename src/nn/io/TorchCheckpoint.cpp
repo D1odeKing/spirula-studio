@@ -240,14 +240,14 @@ private:
     }
 };
 
-struct Archive {
+struct Zip {
     mz_zip_archive zip{};
-    explicit Archive(const std::string& path) {
+    explicit Zip(const std::string& path) {
         NN_CHECK(mz_zip_reader_init_file(&zip, path.c_str(), 0), "%s: cannot open checkpoint ZIP", path.c_str());
     }
-    ~Archive() { mz_zip_reader_end(&zip); }
-    Archive(const Archive&) = delete;
-    Archive& operator=(const Archive&) = delete;
+    ~Zip() { mz_zip_reader_end(&zip); }
+    Zip(const Zip&) = delete;
+    Zip& operator=(const Zip&) = delete;
     std::vector<uint8_t> read(mz_uint index, uint64_t limit, const std::string& path) {
         mz_zip_archive_file_stat st{};
         NN_CHECK(mz_zip_reader_file_stat(&zip, index, &st) && st.m_uncomp_size <= limit &&
@@ -261,16 +261,45 @@ struct Archive {
 
 template<class T> T raw_value(const uint8_t* p) { T v; std::memcpy(&v, p, sizeof v); return v; }
 
-float decode(const uint8_t* p, const std::string& type) {
-    if (type == "FloatStorage") return raw_value<float>(p);
-    if (type == "HalfStorage") return half_to_float(raw_value<uint16_t>(p));
-    if (type == "BFloat16Storage") { const uint32_t bits = (uint32_t)raw_value<uint16_t>(p) << 16; return raw_value<float>((const uint8_t*)&bits); }
-    if (type == "DoubleStorage") return (float)raw_value<double>(p);
-    if (type == "LongStorage") return (float)raw_value<int64_t>(p);
-    if (type == "IntStorage") return (float)raw_value<int32_t>(p);
-    if (type == "ShortStorage") return (float)raw_value<int16_t>(p);
-    if (type == "CharStorage") return (float)raw_value<int8_t>(p);
-    return (float)*p;
+enum class Storage { Float, Half, BFloat16, Double, Long, Int, Short, Char, Byte };
+
+Storage storage_kind(const std::string& dtype) {
+    if (dtype == "FloatStorage") return Storage::Float;
+    if (dtype == "HalfStorage") return Storage::Half;
+    if (dtype == "BFloat16Storage") return Storage::BFloat16;
+    if (dtype == "DoubleStorage") return Storage::Double;
+    if (dtype == "LongStorage") return Storage::Long;
+    if (dtype == "IntStorage") return Storage::Int;
+    if (dtype == "ShortStorage") return Storage::Short;
+    if (dtype == "CharStorage") return Storage::Char;
+    return Storage::Byte;
+}
+
+template<class F> void decode_run(const uint8_t* p, uint64_t step, float* out, uint64_t n, F value) {
+    for (uint64_t i = 0; i < n; ++i) out[i] = value(p + i * step);
+}
+
+// `n` values `step` bytes apart.
+void decode(Storage kind, const uint8_t* p, uint64_t step, float* out, uint64_t n) {
+    switch (kind) {
+    case Storage::Float:
+        if (step == sizeof(float)) std::memcpy(out, p, (size_t)n * sizeof(float));
+        else decode_run(p, step, out, n, [](const uint8_t* q) { return raw_value<float>(q); });
+        return;
+    case Storage::Half: decode_run(p, step, out, n, [](const uint8_t* q) { return half_to_float(raw_value<uint16_t>(q)); }); return;
+    case Storage::BFloat16:
+        decode_run(p, step, out, n, [](const uint8_t* q) {
+            const uint32_t bits = (uint32_t)raw_value<uint16_t>(q) << 16;
+            return raw_value<float>((const uint8_t*)&bits);
+        });
+        return;
+    case Storage::Double: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)raw_value<double>(q); }); return;
+    case Storage::Long: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)raw_value<int64_t>(q); }); return;
+    case Storage::Int: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)raw_value<int32_t>(q); }); return;
+    case Storage::Short: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)raw_value<int16_t>(q); }); return;
+    case Storage::Char: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)raw_value<int8_t>(q); }); return;
+    case Storage::Byte: decode_run(p, step, out, n, [](const uint8_t* q) { return (float)*q; }); return;
+    }
 }
 
 // The numbers of a config dict beside the weights, by dotted path. A list keeps
@@ -309,7 +338,7 @@ struct TorchCheckpoint::Impl {
 
 TorchCheckpoint::TorchCheckpoint(const std::string& path) : impl_(new Impl) {
     impl_->path = path;
-    Archive archive(path);
+    Zip archive(path);
     std::string prefix;
     mz_uint pickle_index = 0;
     bool found = false;
@@ -382,23 +411,39 @@ std::vector<std::string> TorchCheckpoint::names() const {
     for (const auto& e : impl_->entries) out.push_back(e.first);
     return out;
 }
-OnnxTensor TorchCheckpoint::read(const std::string& name) const {
-    const Entry& e = entry(name);
+OnnxTensor TorchCheckpoint::read(const std::string& name) const { return Reader(*this).read(name); }
+
+struct TorchCheckpoint::Reader::Archive : Zip { using Zip::Zip; };
+
+TorchCheckpoint::Reader::Reader(const TorchCheckpoint& checkpoint)
+    : checkpoint_(checkpoint), archive_(std::make_unique<Archive>(checkpoint.path())) {}
+TorchCheckpoint::Reader::~Reader() = default;
+
+OnnxTensor TorchCheckpoint::Reader::read(const std::string& name) {
+    const Entry& e = checkpoint_.entry(name);
+    const std::string& path = checkpoint_.path();
     const uint64_t n = elements(e.shape);
-    NN_CHECK(n <= std::numeric_limits<size_t>::max() / sizeof(float), "%s: tensor too large for host", path().c_str());
+    NN_CHECK(n <= std::numeric_limits<size_t>::max() / sizeof(float), "%s: tensor too large for host", path.c_str());
     const uint32_t width = storage_width(e.dtype);
-    Archive archive(path());
-    const auto bytes = archive.read(impl_->storages.at(e.storage), e.storage_elements * width, path());
+    const auto bytes = archive_->read(checkpoint_.impl_->storages.at(e.storage), e.storage_elements * width, path);
     OnnxTensor out;
     out.name = name; out.shape = e.shape; out.was_f16 = e.dtype == "HalfStorage";
     out.data.resize((size_t)n);
-    for (uint64_t i = 0; i < n; ++i) {
-        uint64_t index = e.offset, remaining = i;
-        for (size_t axis = e.shape.size(); axis-- > 0;) {
-            index += (remaining % (uint64_t)e.shape[axis]) * (uint64_t)e.stride[axis];
-            remaining /= (uint64_t)e.shape[axis];
+    if (!n) return out;
+    // The innermost axis decodes as one strided run; the outer axes step like an odometer.
+    const Storage kind = storage_kind(e.dtype);
+    const size_t rank = e.shape.size();
+    const uint64_t inner = rank ? (uint64_t)e.shape[rank - 1] : 1, step = rank ? (uint64_t)e.stride[rank - 1] * width : width;
+    std::vector<uint64_t> index(rank ? rank - 1 : 0, 0);
+    uint64_t base = e.offset;
+    for (uint64_t done = 0; done < n; done += inner) {
+        decode(kind, bytes.data() + (size_t)(base * width), step, out.data.data() + done, inner);
+        for (size_t axis = index.size(); axis-- > 0;) {
+            base += (uint64_t)e.stride[axis];
+            if (++index[axis] < (uint64_t)e.shape[axis]) break;
+            base -= (uint64_t)e.stride[axis] * (uint64_t)e.shape[axis];
+            index[axis] = 0;
         }
-        out.data[(size_t)i] = decode(bytes.data() + (size_t)(index * width), e.dtype);
     }
     return out;
 }

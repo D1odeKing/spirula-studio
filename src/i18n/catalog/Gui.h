@@ -2582,6 +2582,21 @@ SS_MSG(status_evaluating,
     ES("evaluando"),      PT("avaliando"),      IT("valutazione in corso"),
     NL("bezig met evalueren"), RU("оценка"),     TR("değerlendiriliyor"));
 
+SS_MSG(status_eval_views,
+    EN("evaluating {0}/{1} views ({2}%)"),
+    JA("評価中 {0}/{1} 視点 ({2}%)"),
+    ZH_HANS("正在评估 {0}/{1} 个视角 ({2}%)"),
+    ZH_HANT("正在評估 {0}/{1} 個視角 ({2}%)"),
+    KO("평가 중 {0}/{1} 뷰 ({2}%)"),
+    DE("Auswertung {0}/{1} Ansichten ({2}%)"),
+    FR("évaluation {0}/{1} vues ({2}%)"),
+    ES("evaluando {0}/{1} vistas ({2}%)"),
+    PT("avaliando {0}/{1} vistas ({2}%)"),
+    IT("valutazione {0}/{1} viste ({2}%)"),
+    NL("bezig met evalueren {0}/{1} weergaven ({2}%)"),
+    RU("оценка: {0}/{1} ракурсов ({2}%)"),
+    TR("{0}/{1} görüntü değerlendiriliyor (%{2})"));
+
 SS_MSG(status_ready,
     EN("ready"),         JA("準備完了"),      ZH_HANS("就绪"),     ZH_HANT("就緒"),
     KO("준비됨"),         DE("bereit"),       FR("prêt"),         ES("listo"),

@@ -285,8 +285,8 @@ bool record_dispatch(Stream stream, const char* entry_name,
                   "params-ring indirection for this kernel)", VK_SUCCESS);
         return false;
     }
-    // Vulkan guarantees only 65535 workgroups per dimension; kernels that
-    // can exceed it must fold their grid (none do yet — fail loudly).
+    // Vulkan guarantees only 65535 workgroups per dimension; a kernel that
+    // can exceed it must fold its grid (vkk::fold_1d).
     if (groups_x > 65535 || groups_y > 65535 || groups_z > 65535) {
         set_error("dispatch: workgroup count exceeds 65535 (kernel needs a "
                   "folded grid)", VK_SUCCESS);

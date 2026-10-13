@@ -17,8 +17,12 @@ code is MIT except for DINOv3, which has its own license:
 
 The native checkpoint reader validates a fixed container/tensor pickle
 whitelist and streams one tensor storage at a time. The model loader validates
-the complete RoMa architecture before uploading and bounds host staging to
-roughly 64 MiB plus the current tensor. Device weights use chunked allocations.
+the complete RoMa architecture, then decodes, checks and packs tensors on up to
+16 worker threads, each with its own open archive, while the calling thread
+stages them in checkpoint order. Host staging stays near 64 MiB awaiting upload
+plus 256 MiB decoded ahead. The official checkpoint loads in 0.8 s on a
+16-thread laptop (RTX 3070), against 7-8 s on one thread, into identical device
+weights. Device weights use chunked allocations.
 The numerical reference path stores weights and activations as FP32.
 Mixed mode stages GEMM and ordinary convolution weights through `nn::WeightStore`
 as FP16, keeping normalization, biases, depthwise weights, activations and

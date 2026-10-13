@@ -67,11 +67,9 @@ struct VisFrustumParams {
     uint64_t intrins, widths, heights, camera_models, dist_coeffs, distortions,
         camera_to_worlds, lss_buffer, tri_buffer;
     float size;
-    uint32_t N;
-    uint32_t _pad0;
+    uint32_t N, wgs_per_row;
 };
-static_assert(sizeof(VisFrustumParams) == 9 * 8 + 3 * 4 + 4 /*pad*/,
-              "layout");
+static_assert(sizeof(VisFrustumParams) == 9 * 8 + 4 * 4, "layout");
 
 struct VisAabbParams {
     uint64_t buffer, aabb_reduced;
@@ -303,9 +301,10 @@ void fill_frustums(int64_t n, const void* intrins, const void* widths,
     p.tri_buffer = (uint64_t)tri_buffer;
     p.size = size;
     p.N = (uint32_t)n;
-    vkk::dispatch("visualizer.vis_fill_frustum",
-                 backend::vk::SpecList{0u, 0u}, (uint32_t)n, 1, 1, &p,
-                 sizeof(p));
+    vkk::dispatch_flat("visualizer.vis_fill_frustum",
+                       backend::vk::SpecList{0u, 0u},
+                       n * 4 * kNumFrustumSegments, 4 * kNumFrustumSegments,
+                       &p, sizeof(p), &p.wgs_per_row);
 }
 
 // root_aabb: u32[6] mapped; min words init 0xffffffff, max words 0.

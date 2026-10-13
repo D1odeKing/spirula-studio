@@ -89,6 +89,7 @@ public:
 
     // Latest per-step progress (copy).
     spirula::TrainerProgress latest_progress();
+    spirula::EvalProgress latest_eval_progress();
     // Mean over the last 100 steps. A single step's latency swings
     // several-fold with whether a viewer render landed on it, so it is not a
     // number to put on screen.
@@ -129,6 +130,7 @@ private:
     mutable std::mutex _mu;       // guards everything below
     std::string _error;
     spirula::TrainerProgress _latest;
+    spirula::EvalProgress _eval;
     std::deque<double> _latencies;
     std::vector<MetricPoint> _metrics;
     std::vector<std::string> _log;

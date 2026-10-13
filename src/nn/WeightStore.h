@@ -23,6 +23,8 @@ public:
     // matrix. A name staged twice keeps the second.
     void stage(const std::string& name, std::vector<int64_t> shape, std::vector<float> data,
                bool f16);
+    // Halves packed by the caller, so a loader can convert on its own threads.
+    void stage_f16(const std::string& name, std::vector<int64_t> shape, std::vector<uint16_t> data);
     // Chunked upload of everything staged; the host copies are dropped.
     void upload(const char* tag);
     // Frees the device memory and forgets every name.
@@ -40,6 +42,8 @@ private:
         std::vector<int64_t> shape;
         std::vector<float>   data;
         bool                 f16 = false;
+        std::vector<uint16_t> packed;
+        size_t count() const { return packed.empty() ? data.size() : packed.size(); }
     };
     std::vector<Staged>                     staged_;
     std::unordered_map<std::string, Tensor> tensors_;

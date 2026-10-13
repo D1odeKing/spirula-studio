@@ -7,21 +7,27 @@
 
 namespace spirula::dense {
 
+// The matching stage plans about 1.4x the budget (planned_host_bytes), held to under half of
+// free RAM and under a third of free commit, which RoMa's device memory also draws on Windows.
 uint64_t DenseConfig::resolved_image_cache_bytes() const {
     if (image_cache_bytes) return image_cache_bytes;
-    const uint64_t physical = spirula::physicalRamBytes(), available = spirula::availableRamBytes();
-    const uint64_t budget = physical && available ? std::min(physical / 8,available / 2) : physical ? physical / 8 : available / 2;
+    uint64_t budget = 0;
+    for (const uint64_t limit : {(uint64_t)spirula::physicalRamBytes() / 8, (uint64_t)spirula::availableRamBytes() / 3,
+                                 (uint64_t)spirula::availableCommitBytes() / 5})
+        if (limit) budget = budget ? std::min(budget, limit) : limit;
     if (!budget) throw std::runtime_error("cannot determine dense host memory budget; set image_cache_bytes explicitly");
     return budget;
 }
 
 namespace {
 
-struct Preset { const char* name; int low, high; bool bidirectional; int neighbors, stride, coverage; };
+// `neighbors` and `coverage` see each surface of Mip-NeRF 360 about as often as the pairing
+// that `was_neighbors` and `was_coverage` set before pairing followed the surface (docs/dense.md).
+struct Preset { const char* name; int low, high; bool bidirectional; int neighbors, stride, coverage, was_neighbors, was_coverage; };
 constexpr Preset kPresets[] = {
-    {"fast", 512, 0, false, 4, 2, 2},
-    {"balanced", 640, 0, false, 6, 2, 3},
-    {"high", 800, 1280, true, 8, 1, 0},
+    {"fast", 512, 0, false, 2, 2, 12, 4, 2},
+    {"balanced", 640, 0, false, 3, 2, 12, 6, 3},
+    {"high", 800, 1280, true, 4, 1, 16, 8, 0},
 };
 
 const Preset* find_preset(const std::string& name) {
@@ -30,6 +36,17 @@ const Preset* find_preset(const std::string& name) {
 }
 
 }  // namespace
+
+bool DenseConfig::migrate_pairing() {
+    for (const auto& p : kPresets)
+        if (match.low_width == p.low && match.low_height == p.low && match.high_width == p.high && match.high_height == p.high &&
+            match.bidirectional == p.bidirectional && stride == p.stride &&
+            pairs.neighbors == p.was_neighbors && pairs.reference_coverage == p.was_coverage) {
+            pairs.neighbors = p.neighbors; pairs.reference_coverage = p.coverage;
+            return true;
+        }
+    return false;
+}
 
 void DenseConfig::apply_preset(const std::string& name) {
     if (const auto* p = find_preset(name)) {

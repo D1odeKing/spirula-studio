@@ -6,6 +6,7 @@
 #include "app/GeometryWarp.h"
 #include "core/AtomicFile.h"
 #include "core/FileLock.h"
+#include "core/LongPath.h"
 #include "core/OwnedDirectory.h"
 #include "core/DistanceTransform.h"
 #include "core/Env.h"
@@ -16,6 +17,7 @@
 #include "dense/ConfigFields.h"
 #include "dense/DiskTable.h"
 #include "dense/MemoryReport.h"
+#include "dense/Visibility.h"
 #include "external/stb_image.h"
 #include "nn/Device.h"
 #include "nn/io/Fetch.h"
@@ -254,7 +256,7 @@ public:
             return warp;
         }
         auto warp = std::make_shared<const GeometryWarp>(warp_for(camera, config_));
-        while (!entries_.empty() && bytes_ + warp->bytes() > config_.image_cache_bytes) {
+        while (!entries_.empty() && bytes_ + warp->bytes() > config_.image_cache_bytes / 4) {
             bytes_ -= entries_.front().second->bytes();
             entries_.pop_front();
         }
@@ -320,7 +322,7 @@ std::vector<uint8_t> mask(const std::string& path, int& w, int& h) {
     return out;
 }
 
-// Decodes views on worker threads ahead of the GPU, within image_cache_bytes.
+// Decodes views on worker threads ahead of the GPU, within half of image_cache_bytes.
 class Pixels {
 public:
     using Future = std::shared_future<std::shared_ptr<const ViewPixels>>;
@@ -370,7 +372,7 @@ public:
         const std::set<uint32_t> keep(ids.begin(), ids.end());
         std::set<size_t> keep_sources;
         for (uint32_t id : ids) keep_sources.insert(sourceImage(id));
-        while (bytes_ > config_.image_cache_bytes) {
+        while (bytes_ > config_.image_cache_bytes / 2) {
             auto victim = cache_.end();
             for (auto it = cache_.begin(); it != cache_.end(); ++it)
                 if (!keep.count(it->first) && (victim == cache_.end() || it->second.used < victim->second.used)) victim = it;
@@ -768,9 +770,11 @@ bool read_prediction(std::istream& in, roma::Prediction& p, int w, int h, bool p
     return true;
 }
 
+fs::path sibling(fs::path path, const char* suffix) { path += suffix; return path; }
+
 bool cached_prediction(const fs::path& path, const DenseConfig& config, roma::PairPrediction& p) {
     if (!config.resume || config.rebuild || !fs::is_regular_file(path)) return false;
-    std::ifstream checksum(path.string() + ".sha256"); std::string expected;
+    std::ifstream checksum(sibling(path, ".sha256")); std::string expected;
     checksum >> expected;
     if (expected.size() != 64 || spirula::sha256_file(path.string()) != expected) return false;
     std::ifstream in(path, std::ios::binary);
@@ -782,16 +786,16 @@ bool cached_prediction(const fs::path& path, const DenseConfig& config, roma::Pa
 }
 
 void cache_prediction(const fs::path& path, const roma::PairPrediction& p) {
-    const fs::path part = path.string() + ".part";
+    const fs::path part = sibling(path, ".part");
     std::ofstream out(part, std::ios::binary | std::ios::trunc);
     out.write("SSROMA03", 8); write_prediction(out, p.forward); write_prediction(out, p.backward);
     out.flush();
-    if (!out) throw std::runtime_error("cannot cache RoMa pair prediction");
+    if (!out) throw std::runtime_error("cannot cache RoMa pair prediction: " + part.string());
     out.close();
     const auto hash = spirula::sha256_file(part.string());
-    const fs::path hash_part = path.string() + ".sha256.part";
+    const fs::path hash_part = sibling(path, ".sha256.part");
     write_text(hash_part, hash + "\n");
-    replace_file(part, path); replace_file(hash_part, path.string() + ".sha256");
+    replace_file(part, path); replace_file(hash_part, sibling(path, ".sha256"));
 }
 
 }  // namespace
@@ -803,18 +807,22 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     DensePerfLog perf(perf_dir);
     const auto start = std::chrono::steady_clock::now();
     const fs::path root = resolved_dataset(dataset_path);
-    fs::create_directories(root / "dense" / "cache");
+    // Two 64-digit names nest under it, which overruns MAX_PATH below a long dataset path (issue 178).
+    const fs::path cache_root = spirula::long_path(root / "dense" / "cache");
+    fs::create_directories(cache_root);
     FileLock run_lock(root / "dense" / "run.lock");
     cleanup_pending_generations(root.string());
-    cleanup_abandoned_runs(root / "dense" / "cache");
-    Fingerprints fingerprints(root / "dense" / "cache" / "fingerprints.txt");
+    cleanup_abandoned_runs(cache_root);
+    Fingerprints fingerprints(cache_root / "fingerprints.txt");
     std::string checkpoint_hash;
     const auto checkpoint = checkpoint_path(config.checkpoint, fingerprints, checkpoint_hash);
     if (checkpoint_hash.empty()) throw std::runtime_error("cannot read RoMa checkpoint");
     const unsigned workers = worker_count(config);
     DenseConfig resources = config;
     resources.image_cache_bytes = config.resolved_image_cache_bytes();
-    MemoryReporter memory(progress_dir, planned_host_bytes(resources.image_cache_bytes, config.matching_space == "rectified"));
+    const uint64_t host_plan = planned_host_bytes(resources.image_cache_bytes, config.matching_space == "rectified");
+    [[maybe_unused]] const uint64_t process_start = spirula::processRamBytes();
+    MemoryReporter memory(progress_dir, host_plan);
     memory.phase("prepare");
     const DenseProgress progress = [&](const char* stage, uint64_t done, uint64_t total) {
         memory.phase(stage);
@@ -1020,8 +1028,8 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
             pair_options.explicit_pairs.emplace_back(by_name[a], by_name[b]);
         }
     }
-    const fs::path dense = root / "dense", cache = dense / "cache" / match_identity;
-    const fs::path predictions = dense / "cache" / "pairs-v4" / inference_identity;
+    const fs::path dense = root / "dense", cache = cache_root / match_identity;
+    const fs::path predictions = cache_root / "pairs-v4" / inference_identity;
     fs::create_directories(predictions);
     fs::create_directories(cache);
     const fs::path work = cache / ("run-" + std::to_string(start.time_since_epoch().count()));
@@ -1029,7 +1037,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         fs::path work, parent;
         ~WorkCleanup() { try { remove_owned_directory(work, parent, work.filename().string()); } catch (const std::exception&) {} }
     } cleanup{work, cache};
-    Reconstruction reconstruction(work.string(), views, config, cancel, progress_dir);
+    Reconstruction reconstruction(work.string(), views, resources, cancel, progress_dir);
     memory.add_planned(reconstruction.filter_bytes());
     DenseResult result;
     struct PairIndex { uint32_t a = 0, b = 0; };
@@ -1053,13 +1061,20 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         tracks_ready[image] = true;
     };
     PairStatistics pair_stats;
+    SurfaceCoverage coverage;
     uint64_t refused_by_baseline = 0;
     std::vector<ImagePair> planned_pairs;
     if (pair_options.mode == PairMode::Automatic && config.matching_space != "source") {
         // Faces are paired as views of their own, so a wide lens adds only the face pairs that share points.
+        // What a view sees comes from projecting the points, not from SfM tracks: on an every-frame
+        // video a track spans about four frames, far less than the views that see its surface.
+        std::vector<sfm::Vec3> cloud;
+        for (int64_t p = 0; p < ds.points.num(); ++p) cloud.push_back({ds.points.xyz[p * 3], ds.points.xyz[p * 3 + 1], ds.points.xyz[p * 3 + 2]});
+        auto projected = project_visibility(views, cloud, [&] { check_cancel(cancel); });
+        std::vector<sfm::Vec3>().swap(cloud);
+        const std::vector<sfm::Vec3> pairing_points = std::move(projected.points);
         std::vector<PairImage> view_images;
-        for (uint32_t i = 0; i < images.size(); ++i) {
-            if (tracks_aligned && faces[i].size() > 1) prepare_face_tracks(i);
+        for (uint32_t i = 0; i < images.size(); ++i)
             for (size_t f = 0; f < faces[i].size(); ++f) {
                 const View& view = views[faces[i][f]];
                 PairImage v;
@@ -1067,18 +1082,20 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
                 v.forward = sfm::Vec3{view.world_to_camera[6], view.world_to_camera[7], view.world_to_camera[8]}.normalized();
                 v.up = sfm::Vec3{view.world_to_camera[3], view.world_to_camera[4], view.world_to_camera[5]}.normalized();
                 v.half_fov_radians = std::clamp(std::atan(0.5 * std::hypot(view.camera.width / view.camera.fx, view.camera.height / view.camera.fy)), 0.1, 3.14159);
-                v.visible_points = faces[i].size() > 1 ? prepared[faces[i][f]].visible_points : images[i].visible_points;
-                v.shared_points_only = faces[i].size() > 1 && face_tracks;
+                v.visible_points = std::move(projected.visible[faces[i][f]]);
+                v.shared_points_only = faces[i].size() > 1 && config.sparse_face_pairs;
                 view_images.push_back(std::move(v));
             }
-        }
         pair_options.max_baseline = resolve_max_baseline(view_images, pair_options, config.max_baseline, ds.gauge_metric,
-            &refused_by_baseline, [&] { check_cancel(cancel); }, point_positions);
+            &refused_by_baseline, [&] { check_cancel(cancel); }, pairing_points);
+        std::vector<ImagePair> view_pairs;
         pair_stats = select_pairs(view_images, pair_options, [&](ImagePair pair) {
             check_cancel(cancel);
             planned_pairs.push_back(std::minmax((uint32_t)view_images[pair.first].source_image, (uint32_t)view_images[pair.second].source_image));
+            view_pairs.push_back(pair);
             write_disk_record(job_output,PairIndex{pair.first,pair.second});
-        }, [&] { check_cancel(cancel); }, point_positions);
+        }, [&] { check_cancel(cancel); }, pairing_points);
+        coverage = measure_coverage(view_images, view_pairs, pairing_points, false);
     } else {
         pair_options.max_baseline = resolve_max_baseline(images, pair_options, config.max_baseline, ds.gauge_metric,
             &refused_by_baseline, [&] { check_cancel(cancel); }, point_positions);
@@ -1161,6 +1178,20 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     }
     fs::remove(unordered_unique); fs::remove(ordered_unique);
     const double prepare_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    auto pairing_json = [&](JsonWriter& w) {
+        w.key("pairing").object().field("views", (long long)views.size()).field("references", (long long)pair_stats.references);
+        w.field("surface_cells", (long long)pair_stats.cells).field("directed_jobs", (long long)job_count);
+        w.field("unique_image_pairs", (long long)unique_pair_count);
+        w.key("coverage").object().field("cells", (long long)coverage.cells).field("reconstructable", (long long)coverage.reconstructable);
+        w.field("covered", (long long)coverage.covered).field("references_per_cell", coverage.references);
+        w.field("mean_references_per_cell", coverage.mean_references).field("neighbors_per_reference_cell", coverage.neighbors);
+        w.field("mean_neighbors_per_reference_cell", coverage.mean_neighbors).end().end();
+    };
+    if (const char* plan = spirula::env("DENSE_PLAN_ONLY"); plan && *plan) {
+        JsonWriter w; w.object(); pairing_json(w); w.field("prepare_seconds", prepare_seconds).end();
+        write_text(fs::u8path(plan), w.str());
+        throw std::runtime_error("stopped after pair planning (SS_DENSE_PLAN_ONLY)");
+    }
     if (progress) progress("match", 0, job_count);   // model loading is matching's, not preparation's
 
     // Decoding runs ahead on worker threads and reconstruction trails on its own,
@@ -1170,9 +1201,19 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     uint64_t decode_bytes = 0;
     for (size_t i = 0; i < (size_t)ds.num_cameras; ++i)
         decode_bytes = std::max(decode_bytes, (uint64_t)ds.widths[i] * ds.heights[i] * (3 * sizeof(float) + 6));
-    const unsigned decode_workers = (unsigned)std::min<uint64_t>(workers, std::max<uint64_t>(1, resources.image_cache_bytes / std::max<uint64_t>(1, decode_bytes)));
+    const unsigned decode_workers = (unsigned)std::min<uint64_t>(workers, std::max<uint64_t>(1, resources.image_cache_bytes / 2 / std::max<uint64_t>(1, decode_bytes)));
     Pixels pixels(ds, prepared, root.string(), resources, warps, decode_workers);
     LiveSnapshot live(progress_dir, ds);
+    // Windows charges device memory to the commit limit and Apple's is the same RAM, so the feature
+    // cache, which only saves recomputation, leaves room for the host plan's growth and other programs.
+    auto cap_feature_cache = [&] {
+#if defined(_WIN32) || defined(__APPLE__)
+        const uint64_t now = spirula::processRamBytes(), grown = now > process_start ? now - process_start : 0;
+        const uint64_t reserve = (1ull << 30) + (host_plan > grown ? host_plan - grown : 0);
+        const uint64_t room = spirula::availableCommitBytes() + session.featureCacheStatistics().bytes;
+        session.setFeatureCacheBudget(room > reserve ? room - reserve : 0);
+#endif
+    };
     struct Matched { PairJob job; Pixels::Future a, b; roma::PairPrediction prediction; bool store = false; };
     std::mutex mutex;
     std::condition_variable changed;
@@ -1240,7 +1281,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
                 if (std::find(window.begin(), window.end(), id) != window.end()) continue;
                 const bool new_source = !window_sources.count(pixels.sourceImage(id));
                 const uint64_t bytes = pixels.bytes(id) + (new_source ? pixels.sourceBytes(id) : 0);
-                if (j > k && window_bytes + bytes > resources.image_cache_bytes) { full = true; break; }
+                if (j > k && window_bytes + bytes > resources.image_cache_bytes / 2) { full = true; break; }
                 window.push_back(id); window_bytes += bytes;
                 window_sources.insert(pixels.sourceImage(id));
             }
@@ -1269,6 +1310,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
             auto options = config.match;
             const auto previous = options.progress;
             options.progress = [&](const char* stage) { check_cancel(cancel); if (previous) previous(stage); };
+            cap_feature_cache();
             const auto match_start = std::chrono::steady_clock::now();
             item.prediction = session.matchCached(job.a,pa->rgb.data(),pa->width,pa->height,
                                                   job.b,pb->rgb.data(),pb->width,pb->height,options);
@@ -1281,7 +1323,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
         const uint64_t prediction_bytes = (uint64_t)item.prediction.forward.width * item.prediction.forward.height *
                                           6 * sizeof(float) * (config.match.bidirectional ? 2 : 1);
         const uint64_t held_bytes = prediction_bytes + pixels.bytes(job.a) + pixels.bytes(job.b);
-        const uint64_t queue_capacity = std::max<uint64_t>(1,resources.image_cache_bytes / std::max<uint64_t>(1,held_bytes));
+        const uint64_t queue_capacity = std::max<uint64_t>(1,resources.image_cache_bytes / 4 / std::max<uint64_t>(1,held_bytes));
         changed.wait(lock, [&] { return queue.size() < queue_capacity || discard; });
         if (discard) break;
         queue.push_back(std::move(item));
@@ -1328,6 +1370,7 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     manifest.field("source_pairs", (long long)pair_stats.emitted).field("matched_pairs", (long long)result.pairs).field("cached_pairs", (long long)result.cached_pairs);
     manifest.field("reference_images",(long long)reference_count).field("directed_jobs",(long long)job_count);
     manifest.field("selected_reference_views",(long long)pair_stats.references);
+    pairing_json(manifest);
     manifest.field("unique_image_pairs",(long long)unique_pair_count).field("inference_calls",(long long)(result.pairs-result.cached_pairs));
     manifest.field("seconds", result.seconds).field("prepare_seconds", prepare_seconds).field("match_seconds", match_seconds);
     manifest.field("finish_seconds", finish_seconds).field("verification_seconds", verification_seconds);
@@ -1335,7 +1378,8 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     manifest.field("peak_vulkan_buffer_bytes", (long long)peak_vulkan_buffer_bytes);
     manifest.field("peak_matcher_scratch_bytes", (long long)peak_scratch_bytes);
     manifest.field("inference_precision", resolved_precision == roma::InferencePrecision::Mixed ? "mixed" : "float32");
-    manifest.field("sparse_face_pairing", face_tracks).field("rejected_face_pairs", (long long)rejected_face_pairs);
+    const bool automatic_views = pair_options.mode == PairMode::Automatic && config.matching_space != "source";
+    manifest.field("sparse_face_pairing", automatic_views ? config.sparse_face_pairs : face_tracks).field("rejected_face_pairs", (long long)rejected_face_pairs);
     manifest.field("image_cache_bytes", (long long)resources.image_cache_bytes).field("decode_workers", (long long)decode_workers);
     manifest.field("live_checkpoint_error", reconstruction.checkpoint().error);
     manifest.field("refinement_workers", (long long)result.statistics.refinement_workers);
@@ -1403,13 +1447,13 @@ DenseResult run_dense(const std::string& dataset_path, const spirula::dense::Den
     result.cloud = published.cloud.string(); result.manifest = published.manifest.string();
     live.write(reconstruction, true);
     if (!config.keep_cache) {
-        const auto allowed = (dense / "cache").lexically_normal();
+        const auto allowed = cache_root;
         if (cache.lexically_normal().parent_path() != allowed) throw std::runtime_error("invalid dense cache cleanup path");
         std::error_code error;
         for (uint64_t i = 0; i < job_count; ++i) {
             const auto job = job_at(i);
             fs::remove(job.file, error); error.clear();
-            fs::remove(job.file.string() + ".sha256", error); error.clear();
+            fs::remove(sibling(job.file, ".sha256"), error); error.clear();
         }
         jobs.reset();
         try { remove_owned_directory(cache, allowed, match_identity); } catch (const std::exception&) {}

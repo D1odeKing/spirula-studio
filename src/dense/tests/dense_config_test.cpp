@@ -1,3 +1,4 @@
+#include "dense/ConfigFields.h"
 #include "dense/DenseConfig.h"
 
 #include <cstdio>
@@ -41,8 +42,21 @@ int main() {
             require(!preset.matches_preset(name), "an edited preset still reads as unedited");
         }
         config.apply_preset("high");
-        require(config.match.high_width == 1280 && config.effective_cycle_check() && config.pairs.reference_coverage == 0 &&
+        require(config.match.high_width == 1280 && config.effective_cycle_check() && config.pairs.reference_coverage > 0 &&
                 config.stride == 1, "high quality preset is not the full-quality setting");
+        {
+            // Mutant: settings saved with a preset's old pairing load as Custom, or plan with the old counts.
+            const std::pair<const char*, std::pair<int, int>> legacy[] = {{"fast", {4, 2}}, {"balanced", {6, 3}}, {"high", {8, 0}}};
+            for (const auto& [name, counts] : legacy) {
+                spirula::dense::DenseConfig saved; saved.apply_preset(name);
+                saved.pairs.neighbors = counts.first; saved.pairs.reference_coverage = counts.second;
+                spirula::dense::DenseConfig loaded;
+                spirula::dense::read_config(loaded, json_parse(spirula::dense::config_json(saved)));
+                require(loaded.preset == name && loaded.matches_preset(name), "a preset saved with its old pairing did not load as that preset");
+            }
+            spirula::dense::DenseConfig custom; custom.apply_preset("balanced"); custom.pairs.neighbors = 6; custom.pairs.reference_coverage = 4;
+            require(!custom.migrate_pairing() && custom.pairs.neighbors == 6, "a custom pairing was rewritten");
+        }
         config = original;
         config.geometry.min_source_images = 2;
         config.match.memory_budget_bytes = 123456789;

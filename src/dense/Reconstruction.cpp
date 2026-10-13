@@ -515,6 +515,12 @@ struct Reconstruction::Impl {
             for (const auto o : tracks) write_disk_record(track_output,o);
             track_output.flush(); if (!track_output) throw std::runtime_error("cannot write dense point tracks");
         }
+        // A completed reference's tiles are never read again, and they hold every observation of its pairs.
+        for (int t = 0; t * kRows < height; ++t) {
+            std::error_code error;
+            const auto source = tile(v, t);
+            fs::remove(source, error); fs::remove(source.string() + ".ordered", error);
+        }
         result.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         return result;
     }
