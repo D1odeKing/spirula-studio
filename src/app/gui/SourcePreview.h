@@ -64,7 +64,8 @@ public:
         bool clip_changed = false;
         bool want_gpu = false;
     };
-    // `clip_*` point at the selected video's clip, null for anything else.
+    // `clip_*` point at the selected video's clip, null for anything else (and
+    // for a video only looked at: no clip controls then).
     Result draw(float height, double* clip_start, double* clip_end);
     void destroy_gl();
 

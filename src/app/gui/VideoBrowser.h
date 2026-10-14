@@ -75,9 +75,10 @@ public:
         bool want_gpu = false;   // the "decode on the GPU" button was pressed
     };
     // `clip_*` are the input's, `locked` once the run has read them;
-    // `kept_fps` is the rate it extracts at, 0 every frame.
+    // `kept_fps` is the rate it extracts at, 0 every frame. No `clip`: only
+    // the player, for a video that is looked at rather than used.
     Result draw(float height, double& clip_start, double& clip_end, bool locked,
-                float kept_fps);
+                float kept_fps, bool clip = true);
     void destroy_gl();
 
 private:

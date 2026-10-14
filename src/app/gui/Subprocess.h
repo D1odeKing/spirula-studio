@@ -93,4 +93,8 @@ std::vector<std::string> command_argv(const std::string& command,
 // waits for the browser to exit.
 bool open_url(const std::string& url);
 
+// Starts `argv` on its own and returns at once: not waited for, not a child
+// this process has to reap, and it outlives this one.
+bool spawn_detached(const std::vector<std::string>& argv);
+
 }  // namespace gui

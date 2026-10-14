@@ -395,6 +395,21 @@ bool open_url(const std::string& url) {
     return true;
 }
 
+bool spawn_detached(const std::vector<std::string>& argv) {
+    if (argv.empty()) return false;
+    std::string cmd;
+    for (const std::string& a : argv) cmd += (cmd.empty() ? "\"" : " \"") + a + "\"";
+    STARTUPINFOA si{};
+    si.cb = sizeof si;
+    PROCESS_INFORMATION pi{};
+    if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, DETACHED_PROCESS,
+                        nullptr, nullptr, &si, &pi))
+        return false;
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return true;
+}
+
 #else
 
 // ---------------------------------------------------------------------------
@@ -706,6 +721,27 @@ bool open_url(const std::string& url) {
         return true;
     }
     return false;
+}
+
+bool spawn_detached(const std::vector<std::string>& argv) {
+    if (argv.empty()) return false;
+    const pid_t pid = fork();
+    if (pid < 0) return false;
+    if (pid == 0) {
+        // Double fork, as open_url(): reparented to init, never a zombie here.
+        if (fork() == 0) {
+            setsid();
+            std::vector<char*> args;
+            for (const std::string& a : argv) args.push_back(const_cast<char*>(a.c_str()));
+            args.push_back(nullptr);
+            execvp(args[0], args.data());
+            _exit(127);
+        }
+        _exit(0);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return true;
 }
 
 #endif

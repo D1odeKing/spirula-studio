@@ -35,6 +35,36 @@ function(ss_embed_file input output_header symbol)
         PROPERTY CMAKE_CONFIGURE_DEPENDS ${input})
 endfunction()
 
+# ss_embed_bundle(<output_header> <symbol> <base_dir> <relative files...>)
+#
+# Several files in one header, served by path: `k<symbol>[]` is a table of
+# {path relative to <base_dir>, bytes, size}, `k<symbol>Count` its length.
+function(ss_embed_bundle output_header symbol base_dir)
+    set(_arrays "")
+    set(_table "")
+    set(_i 0)
+    foreach(_rel ${ARGN})
+        file(READ ${base_dir}/${_rel} _hex HEX)
+        ss_hex_to_literal("${_hex}" _bytes)
+        string(APPEND _arrays "inline const unsigned char k${symbol}_${_i}[] =\n${_bytes};\n")
+        string(APPEND _table
+            "    {\"${_rel}\", k${symbol}_${_i}, sizeof(k${symbol}_${_i}) - 1},\n")
+        set_property(DIRECTORY ${SS_ROOT} APPEND
+            PROPERTY CMAKE_CONFIGURE_DEPENDS ${base_dir}/${_rel})
+        math(EXPR _i "${_i} + 1")
+    endforeach()
+    file(RELATIVE_PATH _base ${SS_ROOT} ${base_dir})
+    string(CONCAT _text
+        "#pragma once\n"
+        "// AUTO-GENERATED from ${_base}/ -- do not edit.\n"
+        "#include <cstddef>\n"
+        "struct ${symbol}File { const char* path; const unsigned char* data; size_t size; };\n"
+        "${_arrays}"
+        "inline const ${symbol}File k${symbol}[] = {\n${_table}};\n"
+        "inline const size_t k${symbol}Count = sizeof(k${symbol}) / sizeof(k${symbol}[0]);\n")
+    ss_write_if_different(${output_header} "${_text}")
+endfunction()
+
 # ss_cjk_faces()
 #
 # assets/fonts/cjk_faces.txt -> cjk_faces.h (the downloadable full faces) and

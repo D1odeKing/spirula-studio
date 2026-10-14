@@ -13,6 +13,7 @@
 #include "app/gui/DenseMemoryView.h"
 #include "app/gui/Fonts.h"
 #include "app/gui/ConfigUI.h"
+#include "app/gui/FileBrowser.h"
 #include "app/gui/FileDialog.h"
 #include "app/gui/FeatureWatcher.h"
 #include "app/gui/FilmReel.h"
@@ -91,7 +92,10 @@ public:
     void frame();
     // Something is moving without the user touching anything -- a render
     // playing back or being written -- so frames must keep coming.
-    bool animating() const { return _compare.animating() || _mask_editor.animating() || _source_view.animating(); }
+    bool animating() const {
+        return _compare.animating() || _mask_editor.animating() || _source_view.animating() ||
+               _files.animating();
+    }
 
     // What a script needs to know that is not on screen as a widget: the
     // screen, what is running, what is open. A JSON object body without the
@@ -1058,6 +1062,8 @@ private:
     // The region a dataset trains in: the editor, and the training screen's
     // row that picks which saved region a run uses.
     RoiEditor _roi_editor;
+    FileBrowser _files;
+    void draw_files();
     void open_roi_editor(const std::string& dataset, const std::string& file = "");
     void draw_roi_row(bool busy);
     std::vector<std::string> _roi_files;

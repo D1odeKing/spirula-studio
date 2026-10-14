@@ -2,6 +2,9 @@
 
 #include "app/webviewer/HttpServer.h"
 
+#include <algorithm>
+#include <cerrno>
+#include <cctype>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -57,6 +60,21 @@ bool HttpRequest::get_bool(const std::string& key, bool def) const {
     if (it == query.end()) return def;
     const std::string& v = it->second;
     return v == "1" || v == "true" || v == "True" || v == "yes";
+}
+
+std::string HttpRequest::cookie(const std::string& name) const {
+    const std::string all = header("cookie");
+    for (size_t at = 0; at < all.size();) {
+        size_t end = all.find(';', at);
+        if (end == std::string::npos) end = all.size();
+        std::string kv = all.substr(at, end - at);
+        at = end + 1;
+        while (!kv.empty() && kv[0] == ' ') kv.erase(0, 1);
+        const size_t eq = kv.find('=');
+        if (eq != std::string::npos && kv.compare(0, eq, name) == 0 && eq == name.size())
+            return kv.substr(eq + 1);
+    }
+    return {};
 }
 
 namespace {
@@ -121,9 +139,12 @@ bool send_all(socket_t fd, const void* data, size_t len) {
 const char* status_text(int code) {
     switch (code) {
         case 200: return "OK";
+        case 206: return "Partial Content";
         case 400: return "Bad Request";
         case 403: return "Forbidden";
         case 404: return "Not Found";
+        case 409: return "Conflict";
+        case 416: return "Range Not Satisfiable";
         case 500: return "Internal Server Error";
         case 503: return "Service Unavailable";
         default:  return "";
@@ -139,9 +160,9 @@ bool same_secret(const std::string& a, const std::string& b) {
     return d == 0;
 }
 
-// A frame stream to a viewer on another continent is a few long-lived
-// connections at most; more is a page reloading in a loop.
-constexpr size_t kMaxStreams = 4;
+// A remote GUI's page holds a frame stream, a model the web viewer loads, a
+// video's range requests and an upload at once; far more is a page in a loop.
+constexpr size_t kMaxStreams = 16;
 
 }  // namespace
 
@@ -150,13 +171,59 @@ constexpr size_t kMaxStreams = 4;
 // HttpStream
 // ===========================================================================
 
-bool HttpStream::begin(const std::string& content_type) {
+bool HttpStream::begin(const std::string& content_type, int status,
+                       const std::string& extra) {
     const std::string hdr =
-        "HTTP/1.0 200 OK\r\nContent-Type: " + content_type +
+        "HTTP/1.0 " + std::to_string(status) + " " + status_text(status) +
+        "\r\nContent-Type: " + content_type +
         "\r\nCache-Control: no-cache, no-store\r\n" +
-        (_cors ? "Access-Control-Allow-Origin: *\r\n" : "") +
+        (_cors ? "Access-Control-Allow-Origin: *\r\n" : "") + extra +
         "Connection: close\r\n\r\n";
     return send(hdr.data(), hdr.size());
+}
+
+int64_t HttpStream::read(void* buf, size_t cap) {
+    const int64_t left = _body_size - _body_read;
+    if (left <= 0 || cap == 0) return 0;
+    size_t want = (size_t)std::min<int64_t>(left, (int64_t)cap);
+    if (!_pending.empty()) {
+        want = std::min(want, _pending.size());
+        std::memcpy(buf, _pending.data(), want);
+        _pending.erase(0, want);
+        _body_read += (int64_t)want;
+        return (int64_t)want;
+    }
+    // In slices, so stop() is noticed and a client that went quiet without
+    // closing does not hold its stream slot for good.
+    static constexpr int kSliceMs = 200, kIdleMs = 60000;
+    for (int waited = 0;; waited += kSliceMs) {
+        if (!alive() || waited >= kIdleMs) {
+            _ok = false;
+            return -1;
+        }
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET((socket_t)_fd, &readfds);
+        timeval tv{0, kSliceMs * 1000};
+        const int ready = select((int)_fd + 1, &readfds, nullptr, nullptr, &tv);
+        if (ready > 0) break;
+        if (ready < 0 && errno != EINTR) {
+            _ok = false;
+            return -1;
+        }
+    }
+#ifdef _WIN32
+    const int n = recv((socket_t)_fd, (char*)buf, (int)std::min<size_t>(want, 1 << 30), 0);
+#else
+    const ssize_t n = recv((socket_t)_fd, buf, want, 0);
+#endif
+    if (n == 0) return -1;   // the body stopped short; the reply can still go
+    if (n < 0) {
+        _ok = false;
+        return -1;
+    }
+    _body_read += n;
+    return n;
 }
 
 bool HttpStream::send(const void* data, size_t len) {
@@ -208,6 +275,7 @@ void HttpServer::start(const std::string& host, int port) {
     }
 
     _listen_fd = (intptr_t)fd;
+    _port = port;
     _running = true;
     _thread = std::thread(&HttpServer::serve_loop, this);
 }
@@ -246,14 +314,20 @@ void HttpServer::reap_streams(bool all) {
 }
 
 void HttpServer::start_stream(intptr_t client, const HttpRequest& req,
-                              const StreamHandler& h) {
+                              const StreamHandler& h, std::string pending) {
     auto done = std::make_shared<std::atomic<bool>>(false);
     const bool cors = _token.empty();
-    std::thread t([this, client, req, h, done, cors] {
+    int64_t body = 0;
+    if (req.method == "POST") {
+        try { body = std::stoll(req.header("content-length")); } catch (...) { body = 0; }
+    }
+    std::thread t([this, client, req, h, done, cors, body, pending = std::move(pending)] {
         HttpStream stream;
         stream._fd = client;
         stream._cors = cors;
         stream._running = &_running;
+        stream._pending = pending;
+        stream._body_size = std::max<int64_t>(0, body);
         try {
             h(req, stream);
         } catch (const std::exception& e) {
@@ -296,6 +370,10 @@ void HttpServer::serve_loop() {
             close_socket(client);
             continue;
         }
+        // What came after the blank line is the start of a body.
+        const size_t head_end = head.find("\r\n\r\n");
+        std::string pending = head.substr(head_end + 4);
+        head.resize(head_end + 2);
 
         // Request line: METHOD SP target SP version.
         size_t eol = head.find("\r\n");
@@ -325,33 +403,63 @@ void HttpServer::serve_loop() {
                     pos = amp + 1;
                 }
             }
+            for (size_t at = eol + 2; at < head.size();) {
+                const size_t next = head.find("\r\n", at);
+                const std::string h = head.substr(at, next - at);
+                at = next + 2;
+                const size_t colon = h.find(':');
+                if (colon == std::string::npos) continue;
+                std::string name = h.substr(0, colon);
+                for (char& c : name) c = (char)std::tolower((unsigned char)c);
+                size_t v = colon + 1;
+                while (v < h.size() && h[v] == ' ') v++;
+                req.headers[name] = h.substr(v);
+            }
 
-            auto it = _routes.find(req.path);
-            auto stream_it = _streams.find(req.path);
+            const Handler* handler = nullptr;
+            const StreamHandler* stream = nullptr;
+            if (auto it = _routes.find(req.path); it != _routes.end()) handler = &it->second;
+            if (auto it = _streams.find(req.path); it != _streams.end()) stream = &it->second;
+            if (!handler && !stream) {
+                // Longest prefix first: map order puts "/a/b/" after "/a/".
+                for (auto it = _prefix_routes.rbegin(); it != _prefix_routes.rend(); ++it)
+                    if (req.path.compare(0, it->first.size(), it->first) == 0) {
+                        handler = &it->second;
+                        break;
+                    }
+                for (auto it = _prefix_streams.rbegin(); !handler && it != _prefix_streams.rend();
+                     ++it)
+                    if (req.path.compare(0, it->first.size(), it->first) == 0) {
+                        stream = &it->second;
+                        break;
+                    }
+            }
             const bool authorized =
-                _token.empty() || same_secret(req.get("token"), _token);
-            if (req.method == "GET" && authorized && stream_it != _streams.end()) {
+                _token.empty() || same_secret(req.get("token"), _token) ||
+                (_cookie_auth && same_secret(req.cookie(cookie_name()), _token));
+            const bool post_ok = req.method == "POST" && stream;
+            if ((req.method == "GET" || post_ok) && authorized && stream) {
                 size_t live = 0;
                 {
                     std::lock_guard<std::mutex> lk(_stream_mu);
                     for (const StreamThread& t : _stream_threads) live += !t.done->load();
                 }
                 if (live < kMaxStreams) {
-                    start_stream((intptr_t)client, req, stream_it->second);
+                    start_stream((intptr_t)client, req, *stream, std::move(pending));
                     continue;   // the stream's thread owns the socket now
                 }
                 resp = HttpResponse::text(503, "too many streams");
-            } else if (req.method != "GET") {
+            } else if (req.method != "GET" && !post_ok) {
                 resp = HttpResponse::text(400, "GET only");
             } else if (!authorized) {
                 resp = HttpResponse::text(
                     403, "{\"ok\":false,\"error\":\"bad or missing token=\"}",
                     "application/json");
-            } else if (it == _routes.end()) {
+            } else if (!handler) {
                 resp = HttpResponse::text(404, "not found");
             } else {
                 try {
-                    resp = it->second(req);
+                    resp = (*handler)(req);
                 } catch (const std::exception& e) {
                     std::fprintf(stderr, "[viewer] handler error: %s\n", e.what());
                     resp = HttpResponse::text(500, e.what());
@@ -359,17 +467,16 @@ void HttpServer::serve_loop() {
             }
         }
 
-        char hdr[320];
-        int n = std::snprintf(hdr, sizeof hdr,
-            "HTTP/1.0 %d %s\r\nContent-Type: %s\r\nContent-Length: %zu\r\n"
-            "%sConnection: close\r\n\r\n",
-            resp.status, status_text(resp.status),
-            resp.content_type.c_str(), resp.body.size(),
-            _token.empty() ? "Access-Control-Allow-Origin: *\r\n" : "");
+        std::string hdr = "HTTP/1.0 " + std::to_string(resp.status) + " " +
+                          status_text(resp.status) + "\r\nContent-Type: " + resp.content_type +
+                          "\r\nContent-Length: " + std::to_string(resp.body.size()) + "\r\n";
+        if (_token.empty()) hdr += "Access-Control-Allow-Origin: *\r\n";
+        for (const auto& [name, value] : resp.headers) hdr += name + ": " + value + "\r\n";
+        hdr += "Connection: close\r\n\r\n";
         // Client disconnects mid-response (tab refresh, latest-wins drop) are
         // routine; send_all just fails and we move on -- parity with the
         // Python handler's BrokenPipeError swallowing.
-        if (send_all(client, hdr, (size_t)n) && !resp.body.empty())
+        if (send_all(client, hdr.data(), hdr.size()) && !resp.body.empty())
             send_all(client, resp.body.data(), resp.body.size());
         close_socket(client);
     }

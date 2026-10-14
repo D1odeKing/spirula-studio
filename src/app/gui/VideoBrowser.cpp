@@ -560,7 +560,7 @@ void VideoBrowser::take_frames() {
 }
 
 VideoBrowser::Result VideoBrowser::draw(float height, double& clip_start, double& clip_end,
-                                        bool locked, float kept_fps) {
+                                        bool locked, float kept_fps, bool clip) {
     Result r;
     if (_key.empty()) return r;
     set_paused(false);
@@ -685,6 +685,7 @@ VideoBrowser::Result VideoBrowser::draw(float height, double& clip_start, double
     else if (!_src.builtin_decode) ui::help_on_hover_disabled(pmsg::play_needs_gpu);
     else if (_gpu_failed.load()) ui::help_on_hover_disabled(pmsg::play_gpu_cannot);
     else ui::help_on_hover_disabled(pmsg::play_gpu_busy);
+    if (!clip) return r;
     ImGui::SameLine();
     ImGui::BeginDisabled(locked);
     if (ui::Button(pmsg::clip_start_here)) {

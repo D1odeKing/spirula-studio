@@ -175,7 +175,7 @@ void test_stream() {
            "an ordinary route answers while a stream is open");
 
     std::vector<socket_t> extra;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 16; i++) {
         socket_t f = connect_to(port);
         send(f, req.data(), (int)req.size(), 0);
         extra.push_back(f);
@@ -183,7 +183,7 @@ void test_stream() {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     socket_t last = extra.back();
     const std::string over = read_until(last, "\r\n\r\n");
-    expect(over.find(" 503 ") != std::string::npos, "a fifth stream is refused");
+    expect(over.find(" 503 ") != std::string::npos, "a seventeenth stream is refused");
     for (socket_t f : extra) close_socket(f);
     close_socket(fd);
 
@@ -192,7 +192,7 @@ void test_stream() {
     const double stop_ms = std::chrono::duration<double, std::milli>(
                                std::chrono::steady_clock::now() - s0).count();
     expect(stop_ms < 2000, "stop() ends the streams promptly");
-    expect(streams.load() == 4, "four streams ran");
+    expect(streams.load() == 16, "sixteen streams ran");
 }
 
 }  // namespace

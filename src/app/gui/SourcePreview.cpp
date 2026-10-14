@@ -512,7 +512,7 @@ SourcePreview::Result SourcePreview::draw(float height, double* clip_start, doub
             double unused_start = 0.0, unused_end = 0.0;
             const VideoBrowser::Result v = _video.draw(
                 h, clip_start ? *clip_start : unused_start, clip_end ? *clip_end : unused_end,
-                _in.clip_locked || !clip_start, _in.kept_fps);
+                _in.clip_locked || !clip_start, _in.kept_fps, clip_start != nullptr);
             r.clip_changed = v.clip_changed && clip_start;
             r.want_gpu = v.want_gpu;
             break;

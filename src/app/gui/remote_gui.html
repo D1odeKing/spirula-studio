@@ -20,12 +20,47 @@
   #banner button { margin-left: 10px; }
   #state { position: fixed; right: 8px; bottom: 6px; opacity: .55; z-index: 2;
            pointer-events: none; }
+  .panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+           background: #232328; border: 1px solid #555; border-radius: 8px; padding: 14px;
+           z-index: 3; display: none; box-shadow: 0 8px 30px #0008; }
+  .panel h3 { margin: 0 0 8px; font-size: 14px; }
+  .panel .dir { color: #9a9; word-break: break-all; margin-bottom: 10px; }
+  #upload { width: min(560px, 90vw); }
+  #upload .zone { border: 2px dashed #555; border-radius: 6px; padding: 18px; text-align: center;
+                  margin: 10px 0; color: #aaa; }
+  #upload .zone.over { border-color: #8ab4f8; color: #fff; }
+  #upload ul { max-height: 40vh; overflow: auto; margin: 0; padding-left: 18px; }
+  #upload li.err { color: #f99; }
+  #upload progress { width: 100%; }
+  #player { width: min(1100px, 92vw); }
+  #player video { width: 100%; max-height: 75vh; background: #000; }
+  #drop { position: fixed; inset: 0; background: #1e3a5f99; z-index: 4; display: none;
+          align-items: center; justify-content: center; font-size: 18px; pointer-events: none; }
+  button { font: inherit; }
 </style>
 </head>
 <body>
 <img id="screen" alt="" tabindex="0" draggable="false">
 <div id="banner"></div>
 <div id="state">connecting</div>
+<div id="drop"></div>
+<div id="upload" class="panel">
+  <h3>Upload to the server</h3>
+  <div class="dir" id="up-dir"></div>
+  <button id="up-files">Choose files...</button>
+  <button id="up-folder">Choose a folder...</button>
+  <button id="up-close" style="float:right">Close</button>
+  <div class="zone" id="up-zone">or drop files and folders here</div>
+  <progress id="up-progress" max="1" value="0" hidden></progress>
+  <ul id="up-list"></ul>
+  <input id="up-input-files" type="file" multiple hidden>
+  <input id="up-input-folder" type="file" webkitdirectory hidden>
+</div>
+<div id="player" class="panel">
+  <button id="player-close" style="float:right">Close</button>
+  <h3 id="player-name"></h3>
+  <video id="player-video" controls preload="metadata"></video>
+</div>
 <script>
 "use strict";
 const token = new URLSearchParams(location.search).get("token") || "";
@@ -121,7 +156,7 @@ screen.addEventListener("wheel", e => {
 // ---- keyboard ----------------------------------------------------------------
 const held = new Set();
 function key(e, down) {
-  if (e.isComposing) return;
+  if (e.isComposing || panelOpen()) return;
   let code = e.code;
   if (mac && code === "MetaLeft") code = "ControlLeft";
   if (mac && code === "MetaRight") code = "ControlRight";
@@ -136,6 +171,7 @@ function key(e, down) {
 addEventListener("keydown", e => key(e, true));
 addEventListener("keyup", e => key(e, false));
 addEventListener("paste", e => {
+  if (panelOpen()) return;
   const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
   push({t: "clip", v: text});
   push({t: "k", code: "KeyV", d: 1, c: 1});
@@ -149,21 +185,154 @@ addEventListener("blur", () => {
 });
 addEventListener("focus", () => push({t: "f", d: 1}));
 
-// ---- status: cursor, the GUI's clipboard, links it wanted opened ------------
-let clipSeen = -1, urlsSeen = -1;
-function showLink(url) {
-  banner.textContent = "The GUI wants to open ";
-  const a = document.createElement("a");
-  a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = url;
+// ---- what the GUI asks of this page -----------------------------------------
+const $ = id => document.getElementById(id);
+const base = p => p.split(/[\\/]/).filter(Boolean).pop() || p;
+const fileUrl = (route, path) =>
+  "/remote/" + route + "/" + encodeURIComponent(base(path)) + "?path=" + encodeURIComponent(path);
+function panelOpen() {
+  return $("upload").style.display === "block" || $("player").style.display === "block";
+}
+// Opening a tab needs a click on this page, so a link waits in the banner.
+function showBanner(text, label, action) {
+  banner.textContent = text + " ";
+  const go = document.createElement("button");
+  go.textContent = label;
+  go.onclick = () => { action(); banner.style.display = "none"; };
   const close = document.createElement("button");
   close.textContent = "Close";
   close.onclick = () => { banner.style.display = "none"; };
-  banner.append(a, close);
+  banner.append(go, close);
   banner.style.display = "block";
 }
+function onEvent(ev) {
+  if (ev.t === "url") {
+    showBanner("The GUI wants to open " + ev.v, "Open", () => window.open(ev.v, "_blank", "noopener"));
+  } else if (ev.t === "viewer") {
+    const model = fileUrl("raw", ev.v);
+    showBanner("Open " + base(ev.v) + " in the Spirula Viewer", "Open",
+               () => window.open("/viewer/index.html?model=" + encodeURIComponent(model), "_blank"));
+  } else if (ev.t === "download") {
+    const a = document.createElement("a");
+    a.href = fileUrl("download", ev.v);
+    a.download = "";
+    document.body.append(a);
+    a.click();
+    a.remove();
+  } else if (ev.t === "upload") {
+    openUpload(ev.v);
+  } else if (ev.t === "play") {
+    $("player-name").textContent = base(ev.v);
+    $("player-video").src = fileUrl("raw", ev.v);
+    $("player").style.display = "block";
+  }
+}
+$("player-close").onclick = () => {
+  $("player-video").pause();
+  $("player-video").removeAttribute("src");
+  $("player-video").load();
+  $("player").style.display = "none";
+  screen.focus({preventScroll: true});
+};
+
+// ---- uploads: one file at a time, each as one POST ---------------------------
+let upDir = "", uploading = false, upQueue = [];
+function openUpload(dir) {
+  upDir = dir;
+  $("up-dir").textContent = dir;
+  $("upload").style.display = "block";
+}
+$("up-close").onclick = () => { $("upload").style.display = "none"; screen.focus({preventScroll: true}); };
+$("up-files").onclick = () => $("up-input-files").click();
+$("up-folder").onclick = () => $("up-input-folder").click();
+for (const id of ["up-input-files", "up-input-folder"])
+  $(id).onchange = e => {
+    enqueue([...e.target.files].map(f => ({file: f, name: f.webkitRelativePath || f.name})));
+    e.target.value = "";
+  };
+function postFile(item, overwrite) {
+  return new Promise(resolve => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "/remote/upload?dir=" + encodeURIComponent(upDir) + "&name=" +
+           encodeURIComponent(item.name) + (overwrite ? "&overwrite=1" : ""));
+    x.upload.onprogress = e => { if (e.lengthComputable) item.bar(e.loaded / e.total); };
+    x.onload = () => resolve(x.status);
+    x.onerror = () => resolve(0);
+    x.send(item.file);
+  });
+}
+function enqueue(items) {
+  for (const it of items) {
+    const li = document.createElement("li");
+    li.textContent = it.name + " (" + (it.file.size / 1048576).toFixed(1) + " MB)";
+    $("up-list").append(li);
+    it.li = li;
+    it.bar = f => { $("up-progress").value = f; };
+    upQueue.push(it);
+  }
+  if (!uploading) runUploads();
+}
+async function runUploads() {
+  uploading = true;
+  $("up-progress").hidden = false;
+  while (upQueue.length) {
+    const it = upQueue.shift();
+    it.li.textContent += " ...";
+    let status = await postFile(it, false);
+    if (status === 409 && confirm(it.name + " already exists there. Replace it?"))
+      status = await postFile(it, true);
+    it.li.textContent = it.li.textContent.replace(/ \.\.\.$/, status === 200 ? " - done" :
+                        status === 409 ? " - skipped" : " - failed (" + status + ")");
+    if (status !== 200 && status !== 409) it.li.className = "err";
+  }
+  $("up-progress").hidden = true;
+  uploading = false;
+}
+// A dropped folder arrives as a tree to walk; its files keep their paths.
+async function droppedFiles(dt) {
+  const out = [];
+  const walk = async (entry, prefix) => {
+    if (entry.isFile) {
+      const file = await new Promise((ok, no) => entry.file(ok, no));
+      out.push({file, name: prefix + file.name});
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise((ok, no) => reader.readEntries(ok, no));
+        if (!batch.length) break;
+        for (const e of batch) await walk(e, prefix + entry.name + "/");
+      }
+    }
+  };
+  // Read before the first await: the browser empties dt once the event returns.
+  const entries = [...dt.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const plain = [...dt.files].map(file => ({file, name: file.name}));
+  for (const e of entries) await walk(e, "");
+  return entries.length ? out : plain;
+}
+let dropDir = "";
+addEventListener("dragover", e => {
+  if (![...e.dataTransfer.types].includes("Files")) return;
+  e.preventDefault();
+  $("drop").textContent = dropDir ? "Drop to upload into " + dropDir
+                                  : "Open File > Browse Files... to choose where uploads go";
+  $("drop").style.display = "flex";
+});
+addEventListener("dragleave", e => { if (!e.relatedTarget) $("drop").style.display = "none"; });
+addEventListener("drop", async e => {
+  e.preventDefault();
+  $("drop").style.display = "none";
+  const target = $("upload").style.display === "block" ? upDir : dropDir;
+  if (!target) return;
+  if ($("upload").style.display !== "block") openUpload(target);
+  enqueue(await droppedFiles(e.dataTransfer));
+});
+
+// ---- status: cursor, the GUI's clipboard, what it asks of this page ---------
+let clipSeen = -1, eventsSeen = -1;
 async function poll() {
   try {
-    const r = await fetch(q("/remote/status?urls=" + Math.max(0, urlsSeen)), {cache: "no-store"});
+    const r = await fetch(q("/remote/status?events=" + Math.max(0, eventsSeen)), {cache: "no-store"});
     const s = await r.json();
     screen.style.cursor = s.cursor;
     if (s.w && (s.w !== frameW || s.h !== frameH)) {
@@ -176,10 +345,10 @@ async function poll() {
       if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
     }
     clipSeen = s.clip;
-    // Links from before this page connected are not this page's to show.
-    const fresh = urlsSeen >= 0;
-    for (const u of s.urls) { urlsSeen = Math.max(urlsSeen, u.n); if (fresh) showLink(u.url); }
-    if (!fresh) urlsSeen = Math.max(urlsSeen, 0);
+    dropDir = s.drop || "";
+    // What the GUI asked before this page connected is not this page's to do.
+    if (eventsSeen < 0) eventsSeen = s.last;
+    else for (const ev of s.events) { eventsSeen = Math.max(eventsSeen, ev.n); onEvent(ev); }
     const fps = lastFrame < 0 ? 0 : (s.frame - lastFrame) * 2;
     lastFrame = s.frame;
     if (connected) state.textContent = s.w + "×" + s.h + "  " + fps + " fps";

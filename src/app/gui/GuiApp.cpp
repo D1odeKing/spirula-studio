@@ -49,6 +49,7 @@
 #include "i18n/catalog/Render.h"
 #include "i18n/catalog/Roi.h"
 #include "i18n/catalog/SourcePreview.h"
+#include "i18n/catalog/Files.h"
 #include "i18n/catalog/Train.h"
 #include "i18n/catalog/TrainFields.h"
 
@@ -345,6 +346,7 @@ void GuiApp::shutdown() {
     // render workers before the engine goes back.
     _compare.destroy_gl();
     _compare.close();
+    _files.destroy_gl();
     _mesh_preview_open = false;
     stop_inference_users();
     _segment.destroy_gl();
@@ -2218,6 +2220,25 @@ std::vector<std::string> GuiApp::raw_inputs(const std::vector<std::string>& path
     return sources;
 }
 
+// The Files window (FileBrowser.h), over whatever screen is up. A video it
+// shows decodes on the device only when nothing else is using it.
+void GuiApp::draw_files() {
+    if (!_files.is_open()) {
+        FileBrowser::Host none;
+        _files.draw(none);
+        return;
+    }
+    FileBrowser::Host host;
+    host.open_here = [this](const std::string& path) { handle_drop({path}); };
+    host.gpu_allowed = [this] {
+        return _native_device_frozen && !native_work_busy() && !_segment.is_open() &&
+               !_geometry_panel.is_open() && !_mask_editor.is_open();
+    };
+    host.ffmpeg = _ffmpeg_exe;
+    host.builtin_video = backends().builtin_video;
+    _files.draw(host);
+}
+
 void GuiApp::handle_drop(const std::vector<std::string>& paths) {
     std::error_code ec;
     // A laser scan is an input of the dataset screen wherever it lands, and so
@@ -3357,6 +3378,7 @@ void GuiApp::frame() {
         case Screen::Mesh:   draw_mesh();   break;
     }
     if (_roi_editor.is_open()) _roi_editor.draw();
+    draw_files();
 
     // A job cancelled by the editor's close finishes its stage off this thread.
     _mask_editor.sam_poll_retiring();
@@ -3515,6 +3537,8 @@ void GuiApp::draw_menu_bar() {
             ImGui::EndMenu();
             if (picked) open_recent(go);
         }
+        if (ui::MenuItem(spirula::i18n::msg::files::menu_browse)) _files.open();
+        ui::help_on_hover(spirula::i18n::msg::files::menu_browse_help);
         ImGui::Separator();
         if (ui::MenuItem(msg::menu_batch) && !native_work_busy())
             _screen = Screen::Batch;
@@ -3799,6 +3823,9 @@ void GuiApp::draw_home() {
 
     if (ui::Button(msg::home_batch, ImVec2(-1, bh))) _screen = Screen::Batch;
     ui::help_on_hover(msg::home_batch_help);
+
+    if (ui::Button(spirula::i18n::msg::files::menu_browse, ImVec2(-1, bh))) _files.open();
+    ui::help_on_hover(spirula::i18n::msg::files::menu_browse_help);
 
     ImGui::Spacing();
     ui::TextDisabledWrapped(msg::home_drop_hint);

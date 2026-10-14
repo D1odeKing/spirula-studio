@@ -3,6 +3,7 @@
 #include "app/gui/RemoteDisplay.h"
 
 #include "app/gui/GlLoader.h"
+#include "app/gui/RemoteFiles.h"
 #include "app/gui/RemoteInput.h"
 #include "app/webviewer/HttpServer.h"
 #include "app_generated/remote_gui_html.h"   // kRemoteGuiHtml[] (CMake-embedded)
@@ -46,7 +47,9 @@ namespace {
 // host memory, 59 MB at this size, whatever the window uses of it.
 constexpr int kScreenW = 5120, kScreenH = 2880;
 
-struct Url { uint64_t n; std::string url; };
+// Something the page is asked to do: open a link, open a file in the web
+// viewer, download, upload into a folder, play a video.
+struct PageEvent { uint64_t n; std::string type, value; };
 
 struct State {
     bool active = false;
@@ -63,8 +66,10 @@ struct State {
     std::string clip_in;                // the page's clipboard, for Ctrl+V
     std::string clip_out;               // what the GUI copied, for the page
     uint64_t clip_seq = 0;
-    std::deque<Url> urls;
-    uint64_t url_seq = 0;
+    std::deque<PageEvent> events;
+    uint64_t event_seq = 0;
+    std::string drop_dir;               // where a file dropped on the page goes
+    uint64_t uploads = 0;
     int cursor = ImGuiMouseCursor_Arrow;
 
     std::vector<uint8_t> rgba;          // the frame waiting to be encoded
@@ -173,11 +178,21 @@ void json_str(std::string& out, const std::string& v) {
     out += '"';
 }
 
+// Hands the token over as a cookie, so the viewer's scripts and the files it
+// fetches need not carry it in their URLs.
 HttpResponse handle_page(const HttpRequest&) {
     HttpResponse r;
     r.content_type = "text/html; charset=utf-8";
     r.body.assign(kRemoteGuiHtml, kRemoteGuiHtml + kRemoteGuiHtmlSize);
+    r.headers.push_back({"Set-Cookie", st().http.token_cookie()});
     return r;
+}
+
+void post_event(const char* type, const std::string& value) {
+    State& s = st();
+    std::lock_guard<std::mutex> lk(s.mu);
+    s.events.push_back({++s.event_seq, type, value});
+    while (s.events.size() > 32) s.events.pop_front();
 }
 
 HttpResponse handle_input(const HttpRequest& req) {
@@ -197,24 +212,28 @@ HttpResponse handle_input(const HttpRequest& req) {
 
 HttpResponse handle_status(const HttpRequest& req) {
     State& s = st();
-    const uint64_t urls_seen = (uint64_t)std::max(0, req.get_int("urls", 0));
+    const uint64_t seen = (uint64_t)std::max(0, req.get_int("events", 0));
     std::string out = "{";
     std::lock_guard<std::mutex> lk(s.mu);
     out += "\"frame\":" + std::to_string(s.jpeg_seq);
     out += ",\"w\":" + std::to_string(s.jpeg_w) + ",\"h\":" + std::to_string(s.jpeg_h);
     out += ",\"cursor\":\"" + std::string(cursor_name(s.cursor)) + "\"";
     out += ",\"clip\":" + std::to_string(s.clip_seq);
-    out += ",\"urls\":[";
+    out += ",\"drop\":";
+    json_str(out, s.drop_dir);
+    out += ",\"events\":[";
     bool first = true;
-    for (const Url& u : s.urls) {
-        if (u.n <= urls_seen) continue;
+    for (const PageEvent& e : s.events) {
+        if (e.n <= seen) continue;
         out += first ? "" : ",";
         first = false;
-        out += "{\"n\":" + std::to_string(u.n) + ",\"url\":";
-        json_str(out, u.url);
+        out += "{\"n\":" + std::to_string(e.n) + ",\"t\":";
+        json_str(out, e.type);
+        out += ",\"v\":";
+        json_str(out, e.value);
         out += "}";
     }
-    out += "]}";
+    out += "],\"last\":" + std::to_string(s.event_seq) + "}";
     return HttpResponse::json(out);
 }
 
@@ -457,6 +476,12 @@ void start(const Options& opt, GLFWwindow* window) {
     s.http.route("/remote/status", handle_status);
     s.http.route("/remote/clipboard", handle_clipboard);
     s.http.route_stream("/remote/stream", handle_stream);
+    s.http.set_cookie_auth(true);
+    add_file_routes(s.http, [] {
+        State& st_ = st();
+        std::lock_guard<std::mutex> lk(st_.mu);
+        st_.uploads++;
+    });
     s.http.start(s.opt.host, s.opt.port);
 
     ImGuiPlatformIO& pio = ImGui::GetPlatformIO();
@@ -543,13 +568,27 @@ void end_frame(int fb_w, int fb_h) {
 }
 
 bool open_url(const std::string& url) {
-    State& s = st();
-    if (!s.active) return false;
+    if (!st().active) return false;
     if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) return false;
-    std::lock_guard<std::mutex> lk(s.mu);
-    s.urls.push_back({++s.url_seq, url});
-    while (s.urls.size() > 16) s.urls.pop_front();
+    post_event("url", url);
     return true;
+}
+
+void open_in_viewer(const std::string& path) { if (active()) post_event("viewer", path); }
+void download(const std::string& path) { if (active()) post_event("download", path); }
+void request_upload(const std::string& dir) { if (active()) post_event("upload", dir); }
+void play_video(const std::string& path) { if (active()) post_event("play", path); }
+
+void set_drop_dir(const std::string& dir) {
+    State& s = st();
+    std::lock_guard<std::mutex> lk(s.mu);
+    s.drop_dir = dir;
+}
+
+uint64_t upload_count() {
+    State& s = st();
+    std::lock_guard<std::mutex> lk(s.mu);
+    return s.uploads;
 }
 
 void shutdown() {

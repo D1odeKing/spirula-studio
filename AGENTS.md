@@ -197,6 +197,9 @@ src/
 │   │                         RemoteDisplay.{h,cpp}: the whole GUI in a browser on
 │   │                         another machine (`spirula gui --remote PORT`), for a
 │   │                         cloud GPU -- docs/notes/remote-gui.md
+│   │                         FileBrowser.{h,cpp}: the Files window, every mounted
+│   │                         storage and moving files to and from another
+│   │                         computer -- docs/notes/file-browser.md
 │   │   └── edit/             selecting parts of a model (by region, by
 │   │                           attribute, by colour), deleting them, and
 │   │                           placing the whole model: one document /

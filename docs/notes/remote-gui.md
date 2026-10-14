@@ -123,10 +123,12 @@ session, so the GUI's own browser is used, which lists the GPU box's files.
 | `/` | the page |
 | `/remote/stream` | MJPEG, boundary `spirulaframe` |
 | `/remote/input?e=[...]` | the events above |
-| `/remote/status?urls=N` | `frame` (count of frames encoded), `w`/`h`, `cursor` (a CSS cursor name), `clip`, `urls` newer than `N` |
+| `/remote/status?events=N` | `frame` (count of frames encoded), `w`/`h`, `cursor` (a CSS cursor name), `clip`, `drop` (where a drag onto the page goes), `events` newer than `N` (`url`, `viewer`, `download`, `upload`, `play`) and `last` |
 | `/remote/clipboard` | what the GUI last copied, as text |
 
-Every route wants `token=`.
+Every route wants `token=`, or the `ss_token_<port>` cookie the page sets.
+The file routes (`/viewer/`, `/remote/raw/`, `/remote/download/`,
+`/remote/upload`) are in [file-browser.md](file-browser.md).
 
 ## Measured
 
@@ -138,8 +140,8 @@ input parsing and the stream routes over a socket.
 
 ## Not done
 
-- Files on the laptop cannot be dropped onto the page; copy them to the box
-  (`scp`, `rsync`, or the `tar | ssh` pipe) and open them there.
+- Files dropped onto the page are uploaded only while the Files window is
+  open ([file-browser.md](file-browser.md)); dropping one opens nothing.
 - No IME composition: text that needs one cannot be typed.
 - The page draws one frame pixel per CSS pixel, which is slightly soft on a
   high-DPI screen.

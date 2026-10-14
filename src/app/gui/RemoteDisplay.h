@@ -8,6 +8,7 @@
 // GUI opens or saves is on that machine. Same loopback + token model as the
 // SfM monitor. Design and use: docs/notes/remote-gui.md.
 
+#include <cstdint>
 #include <string>
 
 struct GLFWwindow;
@@ -50,6 +51,18 @@ void end_frame(int fb_w, int fb_h);
 // A link the GUI wanted opened, shown to the page instead; false for anything
 // but http(s), which the page could not open anyway.
 bool open_url(const std::string& url);
+
+// Files, on this machine, handed to the page (docs/notes/file-browser.md):
+// a splat or cloud for its web viewer, a file or folder to download, a folder
+// to upload into, a video for the browser to play.
+void open_in_viewer(const std::string& path);
+void download(const std::string& path);
+void request_upload(const std::string& dir);
+void play_video(const std::string& path);
+// Where a file dropped on the page goes; "" refuses drops.
+void set_drop_dir(const std::string& dir);
+// Uploads finished so far, so a listing knows to refresh.
+uint64_t upload_count();
 
 void shutdown();
 

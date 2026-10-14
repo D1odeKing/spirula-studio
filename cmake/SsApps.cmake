@@ -274,6 +274,13 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/remote_gui.html
         ${CMAKE_BINARY_DIR}/app_generated/remote_gui_html.h
         RemoteGuiHtml)
+    # The standalone web viewer, which a remote session serves at /viewer/ so a
+    # splat opens in the browser, on the laptop's GPU (docs/notes/file-browser.md).
+    ss_embed_bundle(
+        ${CMAKE_BINARY_DIR}/app_generated/web_viewer_bundle.h WebViewer ${SS_ROOT}/viewer
+        index.html css/style.css js/camera.js js/colors.js js/dataset.js
+        js/histogram.js js/linalg.js js/main.js js/renderer.js js/shaders.js
+        js/sortworker.js js/wasm.js js/ssv_wasm.js js/ssv_wasm.wasm)
 
     file(GLOB SS_GUI_SOURCES CONFIGURE_DEPENDS
         ${SS_SRC}/app/gui/*.cpp ${SS_SRC}/app/gui/edit/*.cpp
@@ -526,6 +533,18 @@ if(SS_BUILD_GUI)
     target_link_libraries(remote_gui_test PRIVATE imgui_glfw)
     if(WIN32)
         target_link_libraries(remote_gui_test PRIVATE ws2_32)
+    endif()
+
+    # The Files window's storage listing, tar export and the remote file
+    # routes (docs/notes/file-browser.md), over a real socket.
+    add_executable(files_test
+        ${SS_SRC}/app/gui/tests/files_test.cpp
+        ${SS_SRC}/app/gui/Storage.cpp
+        ${SS_SRC}/app/gui/TarWriter.cpp
+        ${SS_SRC}/app/gui/RemoteFiles.cpp)
+    ss_configure_app(files_test)
+    if(WIN32)
+        target_link_libraries(files_test PRIVATE ws2_32)
     endif()
 
     add_executable(recent_list_test
