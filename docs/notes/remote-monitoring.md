@@ -1,5 +1,8 @@
 # Watching a headless run from somewhere else
 
+The whole GUI, not only a view of one run, can be used the same way:
+[remote-gui.md](remote-gui.md).
+
 A cloud GPU has no screen. Training has always served a browser viewer
 (`src/app/webviewer/`); a reconstruction now does too, and both can be asked
 questions by a coding agent through MCP. Everything here goes through

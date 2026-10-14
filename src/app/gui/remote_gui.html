@@ -1,0 +1,195 @@
+<!doctype html>
+<!-- The page of `spirula gui --remote`: shows the GUI's frames and sends this
+     browser's input back. Served by src/app/gui/RemoteDisplay.cpp, which is
+     where the protocol is defined. docs/notes/remote-gui.md -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spirula Studio (remote)</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #121214; overflow: hidden;
+               font: 13px system-ui, sans-serif; color: #ddd; }
+  #screen { position: fixed; left: 0; top: 0; display: block; outline: none;
+            user-select: none; -webkit-user-drag: none; image-rendering: auto; }
+  #banner { position: fixed; left: 50%; top: 10px; transform: translateX(-50%);
+            background: #2a2a30; border: 1px solid #444; border-radius: 6px;
+            padding: 8px 12px; display: none; max-width: 90vw; z-index: 2; }
+  #banner a { color: #8ab4f8; word-break: break-all; }
+  #banner button { margin-left: 10px; }
+  #state { position: fixed; right: 8px; bottom: 6px; opacity: .55; z-index: 2;
+           pointer-events: none; }
+</style>
+</head>
+<body>
+<img id="screen" alt="" tabindex="0" draggable="false">
+<div id="banner"></div>
+<div id="state">connecting</div>
+<script>
+"use strict";
+const token = new URLSearchParams(location.search).get("token") || "";
+const q = s => s + (s.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token);
+const screen = document.getElementById("screen");
+const state = document.getElementById("state");
+const banner = document.getElementById("banner");
+// On a Mac the Cmd key is what Ctrl is on the pod.
+const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+
+// ---- input: batched, in order, one request in flight ----------------------
+let queue = [], sending = false;
+function push(ev) {
+  const last = queue[queue.length - 1];
+  if (ev.t === "m" && last && last.t === "m") queue[queue.length - 1] = ev;
+  else queue.push(ev);
+  if (!sending) flush();
+}
+async function flush() {
+  sending = true;
+  while (queue.length) {
+    const batch = queue; queue = [];
+    try {
+      await fetch(q("/remote/input?e=" + encodeURIComponent(JSON.stringify(batch))),
+                  {cache: "no-store"});
+    } catch (e) { /* the stream's own reconnect reports it */ }
+  }
+  sending = false;
+}
+function mods(e) {
+  return {c: (e.ctrlKey || (mac && e.metaKey)) ? 1 : 0, s: e.shiftKey ? 1 : 0,
+          a: e.altKey ? 1 : 0, m: (!mac && e.metaKey) ? 1 : 0};
+}
+// The frame's size comes from /remote/status: an <img> on a multipart stream
+// keeps the first part's naturalWidth for good.
+let frameW = 0, frameH = 0;
+function pos(e) {
+  const r = screen.getBoundingClientRect();
+  const sx = frameW && r.width ? frameW / r.width : 1, sy = frameH && r.height ? frameH / r.height : 1;
+  return {x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy};
+}
+
+// ---- size: the GUI's window follows this page's ---------------------------
+let sizeTimer = 0;
+function sendSize() {
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(() => {
+    const w = Math.max(320, Math.floor(innerWidth)), h = Math.max(240, Math.floor(innerHeight));
+    push({t: "size", w, h});
+  }, 120);
+}
+addEventListener("resize", sendSize);
+
+// ---- the frame stream -------------------------------------------------------
+let connected = false, lastFrame = -1;
+function connect() {
+  state.textContent = "connecting";
+  screen.src = q("/remote/stream?n=" + Date.now());
+  sendSize();
+}
+// An <img> on a multipart stream fires "load" for the first part only.
+screen.addEventListener("load", () => {
+  if (!connected) { connected = true; sendSize(); }
+});
+screen.addEventListener("error", () => {
+  connected = false;
+  state.textContent = "disconnected, retrying";
+  setTimeout(connect, 2000);
+});
+
+// ---- mouse -------------------------------------------------------------------
+const BUTTON = {0: 0, 1: 2, 2: 1};   // DOM left/middle/right -> ImGui left/right/middle
+screen.addEventListener("pointermove", e => push({t: "m", ...pos(e)}));
+screen.addEventListener("pointerdown", e => {
+  screen.focus({preventScroll: true});
+  screen.setPointerCapture(e.pointerId);
+  push({t: "m", ...pos(e)});
+  if (e.button in BUTTON) push({t: "b", b: BUTTON[e.button], d: 1});
+  e.preventDefault();
+});
+screen.addEventListener("pointerup", e => {
+  push({t: "m", ...pos(e)});
+  if (e.button in BUTTON) push({t: "b", b: BUTTON[e.button], d: 0});
+  e.preventDefault();
+});
+screen.addEventListener("contextmenu", e => e.preventDefault());
+screen.addEventListener("wheel", e => {
+  const unit = e.deltaMode === 1 ? 1 / 3 : e.deltaMode === 2 ? 3 : 1 / 100;
+  push({t: "w", x: -e.deltaX * unit, y: -e.deltaY * unit});
+  e.preventDefault();
+}, {passive: false});
+
+// ---- keyboard ----------------------------------------------------------------
+const held = new Set();
+function key(e, down) {
+  if (e.isComposing) return;
+  let code = e.code;
+  if (mac && code === "MetaLeft") code = "ControlLeft";
+  if (mac && code === "MetaRight") code = "ControlRight";
+  const m = mods(e);
+  // Ctrl+V comes through the paste event, which carries this browser's clipboard.
+  if (down && m.c && code === "KeyV") return;
+  if (down) held.add(code); else held.delete(code);
+  push({t: "k", code, d: down ? 1 : 0, ...m});
+  if (down && e.key.length === 1 && !m.c && !m.m) push({t: "t", v: e.key});
+  e.preventDefault();
+}
+addEventListener("keydown", e => key(e, true));
+addEventListener("keyup", e => key(e, false));
+addEventListener("paste", e => {
+  const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+  push({t: "clip", v: text});
+  push({t: "k", code: "KeyV", d: 1, c: 1});
+  push({t: "k", code: "KeyV", d: 0, c: 1});
+  e.preventDefault();
+});
+addEventListener("blur", () => {
+  for (const code of held) push({t: "k", code, d: 0});
+  held.clear();
+  push({t: "f", d: 0});
+});
+addEventListener("focus", () => push({t: "f", d: 1}));
+
+// ---- status: cursor, the GUI's clipboard, links it wanted opened ------------
+let clipSeen = -1, urlsSeen = -1;
+function showLink(url) {
+  banner.textContent = "The GUI wants to open ";
+  const a = document.createElement("a");
+  a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = url;
+  const close = document.createElement("button");
+  close.textContent = "Close";
+  close.onclick = () => { banner.style.display = "none"; };
+  banner.append(a, close);
+  banner.style.display = "block";
+}
+async function poll() {
+  try {
+    const r = await fetch(q("/remote/status?urls=" + Math.max(0, urlsSeen)), {cache: "no-store"});
+    const s = await r.json();
+    screen.style.cursor = s.cursor;
+    if (s.w && (s.w !== frameW || s.h !== frameH)) {
+      frameW = s.w; frameH = s.h;
+      screen.style.width = frameW + "px";
+      screen.style.height = frameH + "px";
+    }
+    if (clipSeen >= 0 && s.clip !== clipSeen) {
+      const text = await (await fetch(q("/remote/clipboard"), {cache: "no-store"})).text();
+      if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+    }
+    clipSeen = s.clip;
+    // Links from before this page connected are not this page's to show.
+    const fresh = urlsSeen >= 0;
+    for (const u of s.urls) { urlsSeen = Math.max(urlsSeen, u.n); if (fresh) showLink(u.url); }
+    if (!fresh) urlsSeen = Math.max(urlsSeen, 0);
+    const fps = lastFrame < 0 ? 0 : (s.frame - lastFrame) * 2;
+    lastFrame = s.frame;
+    if (connected) state.textContent = s.w + "×" + s.h + "  " + fps + " fps";
+  } catch (e) { /* retried on the next tick */ }
+  setTimeout(poll, 500);
+}
+
+connect();
+poll();
+screen.focus({preventScroll: true});
+</script>
+</body>
+</html>

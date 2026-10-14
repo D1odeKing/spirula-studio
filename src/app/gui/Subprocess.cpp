@@ -2,6 +2,8 @@
 
 #include "app/gui/Subprocess.h"
 
+#include "app/gui/RemoteDisplay.h"
+
 #include <cctype>
 
 #include <algorithm>
@@ -373,6 +375,8 @@ bool command_exists(const std::string& exe) {
 }
 
 bool open_url(const std::string& url) {
+    // The page of a remote session shows the link; this machine has no screen.
+    if (remote::active()) return remote::open_url(url);
     // Not ShellExecute: it lives in shell32, and this is the only call in the
     // program that would need it. `cmd /c start` reaches the same handler.
     // The empty "" is start's window-title argument -- without it, a quoted
@@ -663,6 +667,8 @@ bool command_exists(const std::string& exe) {
 }
 
 bool open_url(const std::string& url) {
+    // The page of a remote session shows the link; this machine has no screen.
+    if (remote::active()) return remote::open_url(url);
 #ifdef __APPLE__
     const char* openers[] = {"open"};
 #else

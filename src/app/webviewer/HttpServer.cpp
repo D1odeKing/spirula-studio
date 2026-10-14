@@ -2,6 +2,7 @@
 
 #include "app/webviewer/HttpServer.h"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <random>
@@ -124,6 +125,7 @@ const char* status_text(int code) {
         case 403: return "Forbidden";
         case 404: return "Not Found";
         case 500: return "Internal Server Error";
+        case 503: return "Service Unavailable";
         default:  return "";
     }
 }
@@ -137,7 +139,31 @@ bool same_secret(const std::string& a, const std::string& b) {
     return d == 0;
 }
 
+// A frame stream to a viewer on another continent is a few long-lived
+// connections at most; more is a page reloading in a loop.
+constexpr size_t kMaxStreams = 4;
+
 }  // namespace
+
+
+// ===========================================================================
+// HttpStream
+// ===========================================================================
+
+bool HttpStream::begin(const std::string& content_type) {
+    const std::string hdr =
+        "HTTP/1.0 200 OK\r\nContent-Type: " + content_type +
+        "\r\nCache-Control: no-cache, no-store\r\n" +
+        (_cors ? "Access-Control-Allow-Origin: *\r\n" : "") +
+        "Connection: close\r\n\r\n";
+    return send(hdr.data(), hdr.size());
+}
+
+bool HttpStream::send(const void* data, size_t len) {
+    if (!alive()) return false;
+    _ok = send_all((socket_t)_fd, data, len);
+    return _ok;
+}
 
 
 // ===========================================================================
@@ -195,10 +221,49 @@ void HttpServer::stop() {
     // serve_loop() select()s with a timeout instead, so clearing _running is
     // enough; it exits within one poll interval and we close after the join.
     if (_thread.joinable()) _thread.join();
+    reap_streams(true);
     if (_listen_fd != -1) {
         close_socket((socket_t)_listen_fd);
         _listen_fd = -1;
     }
+}
+
+void HttpServer::reap_streams(bool all) {
+    std::vector<StreamThread> finished;
+    {
+        std::lock_guard<std::mutex> lk(_stream_mu);
+        for (size_t i = 0; i < _stream_threads.size();) {
+            if (all || _stream_threads[i].done->load()) {
+                finished.push_back(std::move(_stream_threads[i]));
+                _stream_threads.erase(_stream_threads.begin() + (ptrdiff_t)i);
+            } else {
+                i++;
+            }
+        }
+    }
+    for (StreamThread& t : finished)
+        if (t.thread.joinable()) t.thread.join();
+}
+
+void HttpServer::start_stream(intptr_t client, const HttpRequest& req,
+                              const StreamHandler& h) {
+    auto done = std::make_shared<std::atomic<bool>>(false);
+    const bool cors = _token.empty();
+    std::thread t([this, client, req, h, done, cors] {
+        HttpStream stream;
+        stream._fd = client;
+        stream._cors = cors;
+        stream._running = &_running;
+        try {
+            h(req, stream);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "[viewer] stream error: %s\n", e.what());
+        }
+        close_socket((socket_t)client);
+        done->store(true);
+    });
+    std::lock_guard<std::mutex> lk(_stream_mu);
+    _stream_threads.push_back({std::move(t), std::move(done)});
 }
 
 void HttpServer::serve_loop() {
@@ -223,6 +288,7 @@ void HttpServer::serve_loop() {
                 continue;    // transient accept error
             break;           // shutting down
         }
+        reap_streams(false);
 
         std::string head;
         HttpResponse resp;
@@ -261,9 +327,23 @@ void HttpServer::serve_loop() {
             }
 
             auto it = _routes.find(req.path);
-            if (req.method != "GET") {
+            auto stream_it = _streams.find(req.path);
+            const bool authorized =
+                _token.empty() || same_secret(req.get("token"), _token);
+            if (req.method == "GET" && authorized && stream_it != _streams.end()) {
+                size_t live = 0;
+                {
+                    std::lock_guard<std::mutex> lk(_stream_mu);
+                    for (const StreamThread& t : _stream_threads) live += !t.done->load();
+                }
+                if (live < kMaxStreams) {
+                    start_stream((intptr_t)client, req, stream_it->second);
+                    continue;   // the stream's thread owns the socket now
+                }
+                resp = HttpResponse::text(503, "too many streams");
+            } else if (req.method != "GET") {
                 resp = HttpResponse::text(400, "GET only");
-            } else if (!_token.empty() && !same_secret(req.get("token"), _token)) {
+            } else if (!authorized) {
                 resp = HttpResponse::text(
                     403, "{\"ok\":false,\"error\":\"bad or missing token=\"}",
                     "application/json");

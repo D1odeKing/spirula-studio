@@ -269,6 +269,12 @@ if(SS_BUILD_GUI)
         ${CMAKE_BINARY_DIR}/app_generated/app_banner.h
         AppBanner)
 
+    # The page of `spirula gui --remote` (src/app/gui/RemoteDisplay.h).
+    ss_embed_file(
+        ${SS_SRC}/app/gui/remote_gui.html
+        ${CMAKE_BINARY_DIR}/app_generated/remote_gui_html.h
+        RemoteGuiHtml)
+
     file(GLOB SS_GUI_SOURCES CONFIGURE_DEPENDS
         ${SS_SRC}/app/gui/*.cpp ${SS_SRC}/app/gui/edit/*.cpp
         ${SS_SRC}/app/gui/render/*.cpp ${SS_SRC}/app/gui/mask/*.cpp)
@@ -510,6 +516,17 @@ if(SS_BUILD_GUI)
     add_executable(stage_eta_test
         ${SS_SRC}/app/gui/tests/stage_eta_test.cpp)
     ss_configure_app(stage_eta_test)
+
+    # The remote GUI's input parsing and HttpServer's stream routes, over a
+    # real socket; no window or GL.
+    add_executable(remote_gui_test
+        ${SS_SRC}/app/gui/tests/remote_gui_test.cpp
+        ${SS_SRC}/app/gui/RemoteInput.cpp)
+    ss_configure_app(remote_gui_test)
+    target_link_libraries(remote_gui_test PRIVATE imgui_glfw)
+    if(WIN32)
+        target_link_libraries(remote_gui_test PRIVATE ws2_32)
+    endif()
 
     add_executable(recent_list_test
         ${SS_SRC}/app/gui/tests/recent_list_test.cpp

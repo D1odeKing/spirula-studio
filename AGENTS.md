@@ -52,6 +52,8 @@ tools/guictl.py             drive the GUI from a script -- list the widgets on
                               screen, click them, read the framebuffer back.
                               tools/gui_mcp.py is the same surface as an MCP
                               server; docs/notes/gui-automation.md
+tools/runpod/               the RunPod image (Dockerfile, start.sh) and pod setup
+                              script; the remote GUI's ports and tunnel
 tools/monitor_mcp.py        a headless SfM run and the training viewer as MCP
                               tools (both share tools/mcp_stdio.py);
                               docs/notes/remote-monitoring.md
@@ -192,6 +194,9 @@ src/
 │   │                         SourcePreview.h: the dataset screen's look at an
 │   │                         input before it runs -- frames and the clip, photos,
 │   │                         GPS/IMU, scans -- docs/notes/source-preview.md
+│   │                         RemoteDisplay.{h,cpp}: the whole GUI in a browser on
+│   │                         another machine (`spirula gui --remote PORT`), for a
+│   │                         cloud GPU -- docs/notes/remote-gui.md
 │   │   └── edit/             selecting parts of a model (by region, by
 │   │                           attribute, by colour), deleting them, and
 │   │                           placing the whole model: one document /

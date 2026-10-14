@@ -73,14 +73,28 @@ refused with a message naming the `--accept-license family=yes` to pass.
 ## The desktop app
 
 ```text
-spirula [<path>...]
-spirula gui [<path>...]
+spirula [<path>...] [--remote PORT ...]
+spirula gui [<path>...] [--remote PORT ...]
+spirula gui --help
 ```
 
-The app takes no flags of its own beside the global ones. Each path is opened
-as if it had been dropped on the window: a dataset folder, a training run, a
-`.ply`, a video or a folder of photos lands on the screen that handles it, and
-several videos named together become the inputs of one dataset.
+Each path is opened as if it had been dropped on the window: a dataset folder,
+a training run, a `.ply`, a video or a folder of photos lands on the screen
+that handles it, and several videos named together become the inputs of one
+dataset.
+
+The `--remote` flags run the whole GUI on this machine (a cloud GPU) and show
+it in a browser on another, over an SSH tunnel; every path and setting is this
+machine's. `docs/notes/remote-gui.md` has the details.
+
+| flag | default | meaning |
+|---|---|---|
+| `--remote PORT` | | Serve the GUI on `PORT` instead of showing a window. Starts an Xvfb when there is no display. Prints the address with its token. |
+| `--remote-host HOST` | `127.0.0.1` | Address to listen on. `0.0.0.0` opens it to the network, guarded only by the token. |
+| `--remote-token TOKEN` | random | The token the address must carry (`?token=`). |
+| `--remote-quality Q` | 80 | JPEG quality of the frames, 1-100. |
+| `--remote-fps N` | 30 | Most frames a second sent, 1-60. |
+| `-h`, `--help` | | Show the GUI's usage and exit. |
 
 | environment variable | effect |
 |---|---|
@@ -88,6 +102,7 @@ several videos named together become the inputs of one dataset.
 | `SS_GUI_AUTOMATION_PORT` | its port (default 7777) |
 | `SS_GUI_AUTOMATION_TOKEN` | a fixed token instead of a random one |
 | `SS_GUI_OFFSCREEN=1` | create the window invisible |
+| `SS_GUI_REMOTE=PORT` | the same as `--remote PORT` |
 
 ## Conventions shared by the tools
 

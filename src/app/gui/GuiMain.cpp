@@ -13,8 +13,10 @@
 #include "app/gui/GuiApp.h"
 #include "app/gui/Layout.h"
 #include "app/gui/NavCamera.h"
+#include "app/gui/RemoteDisplay.h"
 #include "app/gui/VulkanPrime.h"
 #include "i18n/catalog/Brand.h"
+#include "i18n/Message.h"
 
 #ifdef _WIN32
 // Before the GL headers: both this and they define APIENTRY, and windows.h
@@ -39,6 +41,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -144,25 +147,46 @@ bool ui_busy() {
 }  // namespace
 
 int spirula_gui_main(int argc, char** argv) {
+    for (int i = 1; i < argc; i++)
+        if (argv[i] && (std::string(argv[i]) == "--help" || std::string(argv[i]) == "-h")) {
+            std::printf("%s\n", spirula::i18n::format(spirula::i18n::msg::log::gui_usage,
+                                                      {argv[0]}).c_str());
+            return 0;
+        }
+    gui::remote::Options remote;
+    std::string remote_error;
+    if (!gui::remote::take_args(argc, argv, remote, remote_error) ||
+        (remote.port && !gui::remote::ensure_display(remote_error))) {
+        std::fprintf(stderr, "%s\n", spirula::i18n::format(
+                                         spirula::i18n::msg::log::remote_gui_error,
+                                         {remote_error}).c_str());
+        return 2;
+    }
+    const bool is_remote = remote.port != 0;
     // First, and before anything slow: the console is on screen until it goes.
 #ifdef _WIN32
-    release_own_console();
+    if (!is_remote) release_own_console();
 #endif
     // Before anything spawns a child, including the tools this binary re-runs
     // itself as: a Finder launch starts with almost nothing on PATH.
     app::add_desktop_search_paths();
-    // The one process with no console and nobody reading its stderr.
-    app::set_crash_dialog(true);
+    // The one process with no console and nobody reading its stderr -- unless
+    // it is remote, where a dialog would open on a screen nobody sees.
+    app::set_crash_dialog(!is_remote);
     // Checkpoints are fetched by the screen that asked for them, with a
     // progress bar and a button. Inherited by the children, so nothing this
     // window starts runs a curl the user did not press anything for.
     set_no_auto_fetch();
     // Before the window maps: that is when the shell looks up its entry.
-    gui::register_desktop_entry();
+    if (!is_remote) gui::register_desktop_entry();
     // Must precede any GL context (VulkanPrime.h).
     gui::prime_vulkan_driver();
 
     glfwSetErrorCallback(glfw_error_callback);
+#if !defined(_WIN32) && !defined(__APPLE__)
+    // The Xvfb ensure_display() started, even where a Wayland session is set.
+    if (is_remote) glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+#endif
     if (!glfwInit()) {
         std::fprintf(stderr, "%s\n",
                      spirula::i18n::msg::log::err_glfw_init.get());
@@ -194,7 +218,7 @@ int spirula_gui_main(int argc, char** argv) {
     }
     // A driven window still needs a real GL context, but nothing needs it on
     // screen -- and one that is not on screen cannot be clicked on by accident.
-    if (spirula::env_on("GUI_OFFSCREEN"))
+    if (spirula::env_on("GUI_OFFSCREEN") || is_remote)
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     // The title is set from the catalog below, once GuiApp has settled the
@@ -228,6 +252,21 @@ int spirula_gui_main(int argc, char** argv) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
     gui::automation::arm();
+    if (is_remote) {
+        try {
+            gui::remote::start(remote, window);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "%s\n", spirula::i18n::format(
+                                             spirula::i18n::msg::log::remote_gui_error,
+                                             {e.what()}).c_str());
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplGlfw_Shutdown();
+            ImGui::DestroyContext();
+            glfwDestroyWindow(window);
+            glfwTerminate();
+            return 1;
+        }
+    }
 
     {
         gui::GuiApp app;
@@ -297,6 +336,7 @@ int spirula_gui_main(int argc, char** argv) {
             // After the backend's own mouse update, so an injected position
             // is the later event and wins for this frame.
             const bool scripted = gui::automation::begin_frame();
+            gui::remote::begin_frame(window);
             if (const auto d = gui::automation::take_drop(); !d.empty()) app.handle_drop(d);
             ImGui::NewFrame();
             app.frame();
@@ -306,7 +346,8 @@ int spirula_gui_main(int argc, char** argv) {
             const double now = glfwGetTime();
             if (busy) busy_until = now + kBusyHoldSeconds;
             const bool iconified =
-                glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0;
+                glfwGetWindowAttrib(window, GLFW_ICONIFIED) != 0 ||
+                (is_remote && !gui::remote::watched());
             next_frame = now + 1.0 / (iconified        ? kFpsIconified
                                       : now < busy_until ? kFpsBusy
                                                          : kFpsIdle);
@@ -318,6 +359,7 @@ int spirula_gui_main(int argc, char** argv) {
             glClear(GL_COLOR_BUFFER_BIT);
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             gui::automation::end_frame(w, h);   // reads the back buffer
+            gui::remote::end_frame(w, h);
             glfwSwapBuffers(window);
         }
         // Joins worker threads (finishing a final checkpoint save if a stop
@@ -327,6 +369,7 @@ int spirula_gui_main(int argc, char** argv) {
     }
 
     gui::automation::shutdown();
+    gui::remote::shutdown();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

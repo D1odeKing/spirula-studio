@@ -4448,6 +4448,28 @@ SS_MSG(perf_log_report,
     RU("Статистика производительности сохранена. Для отчёта выполните: python tools/perf/perf_report.py \"{0}\""),
     TR("Performans istatistikleri kaydedildi. Rapor için şunu çalıştırın: python tools/perf/perf_report.py \"{0}\""));
 
+// ---- spirula gui --remote (src/app/gui/RemoteDisplay.h) ----
+
+SS_MSG_EN(remote_gui_at, "Remote GUI: http://{0}:{1}/?token={2}");
+SS_MSG_EN(remote_gui_tunnel,
+    "From another machine: ssh -N -L {0}:127.0.0.1:{0} -p <ssh port> root@<host>, "
+    "then open the address above there.");
+SS_MSG_EN(remote_gui_error, "remote GUI: {0}");
+SS_MSG_EN(gui_usage,
+    "Usage: {0} [<file-or-folder>...] [options]\n"
+    "\n"
+    "Opens Spirula Studio. Each path opens as if it were dropped on the window.\n"
+    "\n"
+    "Remote session (the whole GUI in a browser on another machine):\n"
+    "  --remote PORT           serve the GUI on PORT instead of showing a window;\n"
+    "                          starts an Xvfb when there is no display\n"
+    "  --remote-host HOST      address to listen on (default 127.0.0.1)\n"
+    "  --remote-token TOKEN    token the address must carry (default: random)\n"
+    "  --remote-quality Q      JPEG quality, 1-100 (default 80)\n"
+    "  --remote-fps N          most frames a second sent, 1-60 (default 30)\n"
+    "\n"
+    "Environment: SS_GUI_REMOTE=PORT is --remote PORT. See docs/notes/remote-gui.md.");
+
 }  // namespace log
 }  // namespace msg
 }  // namespace i18n

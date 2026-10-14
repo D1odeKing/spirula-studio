@@ -1,6 +1,7 @@
 // NativeDialog.cpp -- see NativeDialog.h.
 
 #include "app/gui/NativeDialog.h"
+#include "app/gui/RemoteDisplay.h"
 
 #include "app/gui/Subprocess.h"
 
@@ -310,7 +311,8 @@ NativeDialog::~NativeDialog() {
     if (_worker.joinable()) _worker.detach();
 }
 
-bool NativeDialog::available() { return platform_available(); }
+// A remote session's picker would open on the pod's invisible screen.
+bool NativeDialog::available() { return !remote::active() && platform_available(); }
 
 bool NativeDialog::open(const std::string& title, Mode mode,
                         const std::vector<std::string>& extensions,
