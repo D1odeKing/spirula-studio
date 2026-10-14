@@ -171,6 +171,8 @@ Defaults are a fresh config, which is what `--help` prints; `auto` then applies 
 | `--ba-growth` | auto, map | `1.1` | advanced | Model growth that triggers the next global bundle adjustment. Range 1 to 100. |
 | `--ba-growth-rtol` | auto, map | `0.0001` | advanced | Relative cost improvement a growth-phase BA stops below, 0 for the solver's. Range 0 to 1. |
 | `--ba-growth-patience` | auto, map | `5` | advanced | Accepted steps below that tolerance before it stops. Range 1 to 1000. |
+| `--seq-scale-break` | auto, map | `3` | advanced | Undo and regrow the frames of a sequence that came out at the wrong scale: where the camera's step and the distance to what it sees both change by more than this factor from one stretch of a walk to the next (D80); 0 turns the check off. Range 0 to 1000. |
+| `--seq-scale-check-every` | auto, map | `50` | advanced | Registrations between two scale-break checks while a model grows. Range 1 to 1000000. |
 | `--max-models` | auto, map | `50` | advanced | Reconstructions a fragmented capture may produce; 1 for a single model. Range 1 to 100000. |
 | `--model-overlap` | auto, map | `20` | advanced | Images a further model may take from one already kept -- what a merge later aligns on. Range 0 to 1000000. |
 | `--model-overlap-ratio` | auto, map | `1` | advanced | Further images it earns per image it finds that nothing holds, on top of --model-overlap; 0 for COLMAP's flat cap (D66) Range 0 to 1000. |

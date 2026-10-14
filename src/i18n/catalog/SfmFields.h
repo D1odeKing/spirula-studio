@@ -2943,6 +2943,14 @@ SS_MSG(ba_growth_rtol_help,
     TR("Büyüme evresi dengelemesinin altında durduğu göreli maliyet iyileşmesi, "
        "çözücününki için 0"));
 
+SS_MSG_EN(seq_scale_break_help,
+    "Undo and regrow the frames of a sequence that came out at the wrong scale: where the "
+    "camera's step and the distance to what it sees both change by more than this factor "
+    "from one stretch of a walk to the next (D80); 0 turns the check off");
+
+SS_MSG_EN(seq_scale_check_every_help,
+    "Registrations between two scale-break checks while a model grows");
+
 SS_MSG(ba_growth_patience_help,
     EN("Accepted steps below that tolerance before it stops"),
     JA("停止するまでに、その許容差を下回ったまま受け入れるステップ数"),

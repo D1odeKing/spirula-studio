@@ -612,6 +612,10 @@ struct SfmConfig {
       "", ba_growth_rtol)                                                                          \
     F(mapper.ba_growth_patience, "ba-growth-patience", CMD_AUTO | CMD_MAP, Tier::Advanced,         \
       "mapper", 1, 1000, "", ba_growth_patience)                                                   \
+    F(mapper.seq_scale_ratio, "seq-scale-break", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0,  \
+      1000, "", seq_scale_break)                                                                   \
+    F(mapper.seq_scale_check_every, "seq-scale-check-every", CMD_AUTO | CMD_MAP, Tier::Advanced,   \
+      "mapper", 1, 1000000, "", seq_scale_check_every)                                             \
     F(mapper.max_num_models, "max-models", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 1,        \
       100000, "", max_models)                                                                      \
     F(mapper.max_model_overlap, "model-overlap", CMD_AUTO | CMD_MAP, Tier::Advanced, "mapper", 0,  \

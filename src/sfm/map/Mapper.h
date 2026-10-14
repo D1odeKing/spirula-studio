@@ -57,6 +57,7 @@
 // include this header, so there is no cycle.
 #include "sfm/map/Merge.h"
 #include "sfm/map/Profile.h"
+#include "sfm/map/SequenceScale.h"
 #include "core/Env.h"
 
 namespace sfm {
@@ -382,6 +383,10 @@ struct MapperOptions {
     // apart along one are neighbours, and a neighbour's correspondences are
     // trusted before the rest of the model's. The matcher's `--overlap`.
     int sequence_window = 2;
+    // Scale breaks along a sequence (map/SequenceScale.h, D80): the step and
+    // depth change that counts as one, 0 for no check, and how often it runs.
+    double seq_scale_ratio = 3.0;
+    int seq_scale_check_every = 50;
     // Sensor priors (sfm/core/PriorSource.h): a registration turned more than
     // this (or three sigma of the prior) off what a placed neighbour and the
     // gyro predict is re-solved with the rotation fixed, or refused.
@@ -2755,6 +2760,10 @@ private:
             if (seq_)
                 slog::out(slog::Tag::Map, spirula::i18n::msg::sfm::map_sequence_summary,
                          {(long long)reg_near_won_, (long long)reg_vouched_});
+            if (seq_ && scale_found_ && opt_.verbose)
+                slog::diag(slog::Tag::Map,
+                           "[map] scale breaks along sequences: %u found, %u image(s) undone to "
+                           "regrow, %u left out", scale_found_, scale_regrown_, scale_left_out_);
             if (priors_)
                 slog::out(slog::Tag::Map, spirula::i18n::msg::sfm::map_prior_summary,
                          {(long long)prior_stats_.corrected, (long long)prior_stats_.refused,
@@ -2918,6 +2927,63 @@ private:
     void grow() {
         growLoop();
         checkedRefine(true);
+        // The last look at scale breaks, over every sequence (D80).
+        for (int round = 0; round < 2 && repairScaleBreaks(true); round++) {
+            rebuildScores();
+            growLoop();
+            checkedRefine(true);
+        }
+    }
+
+    // When each image came in, for the scale-break check's "which side is
+    // newer", and where along its sequence, for where the next check looks.
+    void noteRegistered(uint32_t img) {
+        if (reg_tick_.size() < db_.images.size()) reg_tick_.resize(db_.images.size(), 0);
+        reg_tick_[img] = ++reg_clock_;
+        if (!seq_ || !seq_->has(img)) return;
+        if (scale_dirty_.size() < seq_->length.size()) scale_dirty_.resize(seq_->length.size());
+        scale_dirty_[(size_t)seq_->seq[img]].push_back(seq_->pos[img]);
+    }
+
+    // Undo what a scale break left at the wrong size (D80) to regrow it against
+    // the whole model; a second break at one place leaves it out instead.
+    // `everything` checks unchanged sequences too. Returns images undone.
+    uint32_t repairScaleBreaks(bool everything) {
+        if (!seq_ || !(opt_.seq_scale_ratio > 1)) return 0;
+        SequenceScaleOptions so;
+        so.ratio = opt_.seq_scale_ratio;
+        const std::vector<SequenceScaleBreak> breaks = findSequenceScaleBreaks(
+            rec_, *seq_, reg_tick_, so, everything ? nullptr : &scale_dirty_);
+        scale_dirty_.assign(seq_->length.size(), {});
+        uint32_t undone = 0;
+        for (const SequenceScaleBreak& b : breaks) {
+            bool again = false;
+            for (const auto& sp : scale_breaks_)
+                again = again ||
+                        (sp.first == b.sequence && std::abs(sp.second - b.pos) <= 2 * so.window);
+            if (!again) scale_breaks_.push_back({b.sequence, b.pos});
+            scale_found_++;
+            uint32_t n = 0;
+            for (uint32_t img : b.drop)
+                for (uint32_t j : frameMates(img)) {
+                    if (!rec_.images.at(j).registered) continue;
+                    deregisterImage(j);
+                    reg_trials_[j] = again ? opt_.max_reg_trials : 0;
+                    if (!again) scale_regrow_.insert(j);
+                    n++;
+                }
+            (again ? scale_left_out_ : scale_regrown_) += n;
+            undone += n;
+            if (opt_.verbose)
+                slog::diag(slog::Tag::Map,
+                           "[map] scale break along %s at position %d: steps x%.2f and depth "
+                           "x%.2f past it; %u image(s) %s",
+                           seq_->members[(size_t)b.sequence].front().c_str(), b.pos, b.step_ratio,
+                           b.depth_ratio, n,
+                           again ? "left out, it broke there before" : "undone to regrow");
+        }
+        if (undone) resetOrphanCameras();
+        return undone;
     }
 
     // The registration loop alone, returning how many images it brought in.
@@ -3006,6 +3072,11 @@ private:
             const bool rerank = std::exchange(gps_latch_rerank_, false);
             if (!registered && rerank) continue;
             if (!registered) break;  // nothing in the ranking can be registered
+            if (seq_ && opt_.seq_scale_check_every > 0 &&
+                ++regs_since_scale_check_ >= (uint32_t)opt_.seq_scale_check_every) {
+                regs_since_scale_check_ = 0;
+                if (repairScaleBreaks(false)) rebuildScores();
+            }
             const bool due = rec_.numRegistered() >= next_ba;
             if (due || ba_requested_) {
                 // Under stop_at_ba the requested BA is the caller's joint solve.
@@ -3399,6 +3470,12 @@ private:
             im.point3D_ids.assign(feats_[i].count(), kInvalidPoint3D);
         }
         reg_trials_.assign(db_.images.size(), 0);
+        reg_tick_.assign(db_.images.size(), 0);
+        reg_clock_ = 0;
+        scale_regrow_.clear();
+        scale_breaks_.clear();
+        scale_dirty_.clear();
+        regs_since_scale_check_ = 0;
     }
 
     // ---- initialization ----
@@ -3990,6 +4067,8 @@ private:
         rec_.images[a].registered = true;
         rec_.images[b].pose = g.pose;
         rec_.images[b].registered = true;
+        noteRegistered(a);
+        noteRegistered(b);
 
         std::vector<double> angles;
         int created = 0;
@@ -4341,6 +4420,7 @@ private:
                     int num_inliers, size_t pool) {
         rec_.images[img].pose = pose;
         rec_.images[img].registered = true;
+        noteRegistered(img);
         for (size_t k = 0; k < feat.size(); k++) {
             if (!inlier[k]) continue;
             uint32_t f = feat[k];
@@ -4411,7 +4491,7 @@ private:
         PnPResult rival;  // the whole pool's answer, when the neighbours overruled it
         if (focal_known_.count(cid) || opt_.focal_search_samples <= 0) {
             r = ransacPnP(X, br, camOf(img).focal(), errPx(img));
-            if (seq_) {
+            if (seq_ && !scale_regrow_.count(img)) {
                 const PnPResult whole = r;
                 if (preferNearPose(img, X, br, nearf, r)) rival = whole;
             }
@@ -6108,6 +6188,15 @@ private:
     std::vector<std::vector<uint16_t>> near_support_;  // support_ over sequence neighbours only
     std::vector<int> near_score_;                      // per image, features with near support
     uint32_t reg_vouched_ = 0;   // registrations the neighbours carried past the pool's ratio
+    // Scale breaks (D80): registration order, the images undone to regrow, the
+    // places a break was undone once, and which sequences changed since a check.
+    std::vector<uint64_t> reg_tick_;
+    uint64_t reg_clock_ = 0;
+    std::set<uint32_t> scale_regrow_;
+    std::vector<std::pair<int32_t, int32_t>> scale_breaks_;
+    std::vector<std::vector<int32_t>> scale_dirty_;   // positions, per sequence
+    uint32_t regs_since_scale_check_ = 0;
+    uint32_t scale_found_ = 0, scale_regrown_ = 0, scale_left_out_ = 0;
     uint32_t reg_near_won_ = 0;  // ... where the neighbours' pose beat the whole pool's
     int seed_phase_ = 0;         // 0: seed among neighbour pairs, 1: among every pair
     uint32_t reg_by_rig_ = 0;         // registrations the rig placed, summed over the run
