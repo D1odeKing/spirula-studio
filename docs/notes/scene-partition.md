@@ -21,7 +21,7 @@ part grows in front of another part's cameras. The scheme here targets the
 first and the last two directly; appearance drift is left for a later shared
 initialization (see "Not done").
 
-## The visibility cut (the default, `--method graph`)
+## The visibility cut (`--method graph`)
 
 What a part needs is that each of its cameras sees mostly its own region,
 and that the region is one coherent piece of the scene rather than a plane's
@@ -89,7 +89,7 @@ views by their ground-truth image (see below); Dataset C at half resolution:
 | Dataset A | one model on everything | 22.73 / 0.793 | | | | 459 s |
 | | view graph, 3 parts, ring 0.1 | 22.71 / 0.799 | -0.02 | 0 | -2.8 | 778 s |
 | | visibility cut, 3 parts, ring 0.2 | 22.45 / 0.796 | -0.28 | 10 | -6.0 | 515 s |
-| | visibility cut, 3 parts, ring 0.1 (default) | 22.63 / 0.799 | -0.10 | 2 | -3.4 | 776 s |
+| | visibility cut, 3 parts, ring 0.1 (the default ring) | 22.63 / 0.799 | -0.10 | 2 | -3.4 | 776 s |
 | Dataset C | one model on everything | 17.11 / 0.687 | | | | 613 s |
 | | visibility cut, 6 parts, ring 0.2 | 17.11 / 0.694 | +0.00 | 2 | -3.8 | 1072 s |
 
@@ -115,7 +115,7 @@ matches the full model.
      points beside them;
    - poses only: k nearest camera centres, weighted `1 + cos(view angle)`.
    `Auto` takes the first of these that works.
-2. **Cut** (view-graph method, `--method viewgraph`; `graph::cut_labels`): recursive normalized-cut bisection by the
+2. **Cut** (view-graph method, `--method viewgraph`, the default; `graph::cut_labels`): recursive normalized-cut bisection by the
    Fiedler vector of the normalized Laplacian, the same code the bottom-up SfM
    mapper uses for its atoms, with three things the mapper does not want:
    each side of a bisection must hold at least 30% of the parent (a free

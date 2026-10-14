@@ -263,6 +263,32 @@ SS_MSG(opt_depth,
        "oluşturmada işe yarayan genelde normallerdir ve derinlik hem diskteki "
        "yeri hem de eğitimdeki okumayı ikiye katlar."));
 
+SS_MSG(opt_no_normal,
+    EN("Do not write normal maps. With --depth this writes depth alone; "
+       "without it there is nothing to do."),
+    JA("法線マップを書き出しません。--depth と併用すると深度だけを書き出し、"
+       "併用しなければ何もしません。"),
+    ZH_HANS("不写出法线图。配合 --depth 时只写深度；不加 --depth 则什么也不做。"),
+    ZH_HANT("不寫出法線圖。配合 --depth 時只寫深度；不加 --depth 則什麼也不做。"),
+    KO("법선 맵을 쓰지 않습니다. --depth와 함께 쓰면 깊이만 쓰고, 없으면 할 "
+       "일이 없습니다."),
+    DE("Keine Normalenkarten schreiben. Mit --depth wird nur Tiefe "
+       "geschrieben, ohne gibt es nichts zu tun."),
+    FR("Ne pas écrire les cartes de normales. Avec --depth, seule la "
+       "profondeur est écrite ; sans, il n'y a rien à faire."),
+    ES("No escribir mapas de normales. Con --depth se escribe solo la "
+       "profundidad; sin él no hay nada que hacer."),
+    PT("Não escrever mapas de normais. Com --depth escreve-se só a "
+       "profundidade; sem ele não há nada a fazer."),
+    IT("Non scrivere le mappe delle normali. Con --depth si scrive solo la "
+       "profondità; senza, non c'è nulla da fare."),
+    NL("Geen normaalafbeeldingen schrijven. Met --depth wordt alleen diepte "
+       "geschreven; zonder is er niets te doen."),
+    RU("Не записывать карты нормалей. С --depth записывается только глубина; "
+       "без него делать нечего."),
+    TR("Normal haritalarını yazma. --depth ile yalnızca derinlik yazılır; "
+       "onsuz yapılacak bir şey kalmaz."));
+
 SS_MSG(opt_normal_format,
     EN("File type for the normal maps. `jpg` is about a fifth the size; the "
        "loss lands on the normal's direction, which the geometry term reads "

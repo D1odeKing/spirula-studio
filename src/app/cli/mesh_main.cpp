@@ -149,6 +149,14 @@ MeshCameras load_cameras(const JsonValue& run_cfg, const fs::path& run_dir,
 // Flags
 // ===========================================================================
 
+meshing::MeshingConfig cli_meshing_defaults() {
+    meshing::MeshingConfig m;
+    m.floater_min_faces = 10;
+    m.fill_hole_max_edges = 20;
+    m.degenerate_angle_deg = 15.0f;
+    return m;
+}
+
 struct Options {
     std::string checkpoint;
     std::string data;
@@ -160,7 +168,7 @@ struct Options {
     // Canonical selector passed by GUI children; empty uses shared precedence.
     std::string device;
     std::optional<float> iso;           // default depends on cameras
-    meshing::MeshingConfig m;           // remaining knobs live here
+    meshing::MeshingConfig m = cli_meshing_defaults();
 };
 
 // One row of `--help`: the flag with its value syntax on the left, the
@@ -258,11 +266,6 @@ int parse_i(const std::string& key, const char* v) {
 
 Options parse_args(int argc, char** argv) {
     Options o;
-    // meshing preset defaults
-    o.m.floater_min_faces = 10;
-    o.m.fill_hole_max_edges = 20;
-    o.m.degenerate_angle_deg = 15.0f;
-    o.m.max_cameras = -1;
 
     int i = 1;
     if (i < argc && argv[i][0] != '-') o.checkpoint = argv[i++];

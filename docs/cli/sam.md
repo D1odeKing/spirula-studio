@@ -131,7 +131,8 @@ Frame selection:
 | `-n`, `--max-frames <n>` | 0 (all) | Stop after writing `n` frames. |
 | `-q`, `--quality <0..100>` | 95 | JPEG quality; a value outside 0..100 writes PNG. |
 | `-r`, `--rotate <deg>` | 0 | 0, 90, 180 or 270, clockwise. |
-| `--no-autorotate` | | Ignore the rotation the file asks for. `--autorotate` turns it back on. |
+| `--autorotate` | on | Turn frames by the rotation the file asks for. |
+| `--no-autorotate` | | Ignore the rotation the file asks for. |
 | `--scale <f>` | 1 | Resize factor, at most 1. |
 | `--lut <file\|name>` | | Colour LUT for every frame: a `.cube` file, a built-in name, or `auto` for the one the clip's metadata names. `spirula sam extract --help` lists the built-in names. |
 | `--track <i>` | every track | Video track to read; with all of them, each goes to `<out>/cam0`, `<out>/cam1`, ... |

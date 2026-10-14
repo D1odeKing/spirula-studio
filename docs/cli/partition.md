@@ -37,9 +37,6 @@ file.
 | `--source auto\|tracks\|projection\|proximity` | `auto` | Where covisibility comes from. `auto` takes the model's own tracks, else projects the seed cloud into every frame, else uses camera positions alone. |
 | `-o`, `--output <file>` | `<dataset>/partition.json` | Where to write the partition. |
 
-`--help` gives `graph` as the `--method` default; the command starts from
-`viewgraph`.
-
 ## `merge`
 
 | flag | default | meaning |

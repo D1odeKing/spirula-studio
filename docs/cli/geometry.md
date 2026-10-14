@@ -22,7 +22,7 @@ continues where the last one stopped unless `--overwrite`.
 | `--max-size <n>` | 1064 | Longest side of the maps written, and of one image the network runs. |
 | `--num-tokens <n>` | 3600 | Patches MoGe's transformer runs (its range is 1200 to 3600); sets its cost. Metric3D ignores it. |
 | `--depth` | off | Also write depth maps. |
-| `--no-normal` | | Do not write normal maps. |
+| `--no-normal` | | Do not write normal maps; with `--depth`, write depth alone. |
 | `--normal-format png\|jpg` | `png` | File type for the normal maps; `jpg` is about a fifth the size. |
 | `--jpeg-quality <n>` | 95 | JPEG quality when the format is `jpg`. |
 | `--depth-units relative\|mm` | `relative` | `relative` fills the 16 bits with the scene, scaled by its 99.9th percentile; `mm` stores millimetres (up to 65.5 m). |

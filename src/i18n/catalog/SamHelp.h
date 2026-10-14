@@ -913,6 +913,21 @@ SS_MSG(xh_no_autorotate,
     RU("не поворачивать кадры на угол, который требует съёмка"),
     TR("kareleri çekimin istediği açıyla döndürme"));
 
+SS_MSG(xh_autorotate,
+    EN("turn frames by the rotation the capture asks for (the default)"),
+    JA("撮影が指定する回転をフレームに適用する（既定）"),
+    ZH_HANS("按素材要求的角度旋转帧（默认）"),
+    ZH_HANT("按素材要求的角度旋轉影格（預設）"),
+    KO("촬영본이 요구하는 회전을 프레임에 적용함 (기본값)"),
+    DE("Einzelbilder um die von der Aufnahme verlangte Drehung drehen (Standard)"),
+    FR("tourner les images selon la rotation demandée par la capture (par défaut)"),
+    ES("girar los fotogramas según el giro que pide la captura (predeterminado)"),
+    PT("girar os fotogramas pela rotação que a captura pede (predefinição)"),
+    IT("ruotare i fotogrammi secondo la rotazione chiesta dalla ripresa (predefinito)"),
+    NL("beelden draaien volgens de door de opname gevraagde rotatie (standaard)"),
+    RU("поворачивать кадры на угол, который требует съёмка (по умолчанию)"),
+    TR("kareleri çekimin istediği açıyla döndür (öntanımlı)"));
+
 SS_MSG(xh_lut,
     EN("colour LUT applied to every frame: a .cube file, a built-in name ({0}), or "
        "`auto` for the one the clip's own metadata names"),

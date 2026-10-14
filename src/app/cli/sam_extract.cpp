@@ -78,6 +78,7 @@ void usage() {
     help_row("-n, --max-frames <n>", H::xh_max_frames);
     help_row("-q, --quality <0..100>", H::xh_quality);
     help_row("-r, --rotate <deg>", H::xh_rotate);
+    help_row("    --autorotate", H::xh_autorotate);
     help_row("    --no-autorotate", H::xh_no_autorotate);
     help_row("    --scale <f>", H::xh_scale);
     std::string luts;

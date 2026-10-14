@@ -55,8 +55,4 @@ a value.
 | `--degenerate-angle-deg <a>` | 15 | Repair triangles with angles below this. |
 | `--quality-iters <n>` | 3 | Valence-flip and tangential-relaxation iterations. |
 
-`--help` prints the meshing library's defaults for `--floater-min-faces`,
-`--fill-hole-max-edges` and `--degenerate-angle-deg` (100, 12 and 2); the
-values above are what the command actually starts from.
-
 Exit status is 0 on success and 1 on any error.

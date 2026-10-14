@@ -35,79 +35,79 @@ SS_MSG(usage_intro,
     EN("`split` reads a COLMAP, Nerfstudio or Metashape dataset, cuts its cameras "
        "where they share the least, gives every part the region its cameras see "
        "and a ring of outside cameras that see it too, and writes partition.json. "
-       "Train each part with `spirula train <dataset> --partition <file> "
+       "Train each part with `spirula train --data <dataset> --partition <file> "
        "--partition-part <k>`, then `merge` keeps each model's splats inside its "
        "own region and writes them as one file."),
     JA("`split` は COLMAP / Nerfstudio / Metashape のデータセットを読み、カメラを"
        "共有の最も少ない所で切り、各パートにそのカメラが見る領域と、それを見てい"
        "る外側のカメラの輪を与えて partition.json を書き出します。各パートは "
-       "`spirula train <dataset> --partition <file> --partition-part <k>` で学習"
+       "`spirula train --data <dataset> --partition <file> --partition-part <k>` で学習"
        "し、`merge` が各モデルのスプラットを自分の領域内だけ残してひとつのファイ"
        "ルにまとめます。"),
     ZH_HANS("`split` 读取 COLMAP、Nerfstudio 或 Metashape 数据集，在相机共视最少"
             "处切开，给每个分区分配其相机所见的区域和同样看到该区域的外围相机环，"
-            "写出 partition.json。用 `spirula train <dataset> --partition <file> "
+            "写出 partition.json。用 `spirula train --data <dataset> --partition <file> "
             "--partition-part <k>` 训练各分区，再用 `merge` 只保留各模型在自身区"
             "域内的泼溅并写成一个文件。"),
     ZH_HANT("`split` 讀取 COLMAP、Nerfstudio 或 Metashape 資料集，在相機共視最少"
             "處切開，給每個分區分配其相機所見的區域和同樣看到該區域的外圍相機環，"
-            "寫出 partition.json。用 `spirula train <dataset> --partition <file> "
+            "寫出 partition.json。用 `spirula train --data <dataset> --partition <file> "
             "--partition-part <k>` 訓練各分區，再用 `merge` 只保留各模型在自身區"
             "域內的潑濺並寫成一個檔案。"),
     KO("`split`은 COLMAP, Nerfstudio 또는 Metashape 데이터셋을 읽어 카메라를 가장 "
        "적게 공유하는 곳에서 잘라, 각 파트에 그 카메라가 보는 영역과 그 영역을 함께 "
        "보는 바깥 카메라의 고리를 주고 partition.json을 씁니다. 각 파트는 `spirula "
-       "train <dataset> --partition <file> --partition-part <k>`로 학습하고, `merge`"
+       "train --data <dataset> --partition <file> --partition-part <k>`로 학습하고, `merge`"
        "가 각 모델의 스플랫을 자기 영역 안의 것만 남겨 한 파일로 씁니다."),
     DE("`split` liest einen COLMAP-, Nerfstudio- oder Metashape-Datensatz, "
        "schneidet die Kameras dort, wo sie am wenigsten gemeinsam sehen, gibt "
        "jedem Teil den Bereich, den seine Kameras sehen, und einen Ring äußerer "
        "Kameras, die ihn mitsehen, und schreibt partition.json. Jeder Teil wird "
-       "mit `spirula train <dataset> --partition <file> --partition-part <k>` "
+       "mit `spirula train --data <dataset> --partition <file> --partition-part <k>` "
        "trainiert; `merge` behält von jedem Modell die Splats im eigenen Bereich "
        "und schreibt sie als eine Datei."),
     FR("`split` lit un jeu de données COLMAP, Nerfstudio ou Metashape, coupe les "
        "caméras là où elles partagent le moins, donne à chaque partie la région "
        "que voient ses caméras et un anneau de caméras extérieures qui la voient "
        "aussi, et écrit partition.json. Entraînez chaque partie avec `spirula "
-       "train <dataset> --partition <file> --partition-part <k>`, puis `merge` "
+       "train --data <dataset> --partition <file> --partition-part <k>`, puis `merge` "
        "garde de chaque modèle les splats de sa propre région et les écrit en un "
        "seul fichier."),
     ES("`split` lee un conjunto COLMAP, Nerfstudio o Metashape, corta las cámaras "
        "donde menos comparten, da a cada parte la región que ven sus cámaras y un "
        "anillo de cámaras externas que también la ven, y escribe partition.json. "
-       "Entrena cada parte con `spirula train <dataset> --partition <file> "
+       "Entrena cada parte con `spirula train --data <dataset> --partition <file> "
        "--partition-part <k>`; después `merge` conserva de cada modelo los splats "
        "dentro de su región y los escribe en un solo archivo."),
     PT("`split` lê um conjunto COLMAP, Nerfstudio ou Metashape, corta as câmaras "
        "onde menos partilham, dá a cada parte a região que as suas câmaras veem e "
        "um anel de câmaras exteriores que também a veem, e escreve partition.json. "
-       "Treine cada parte com `spirula train <dataset> --partition <file> "
+       "Treine cada parte com `spirula train --data <dataset> --partition <file> "
        "--partition-part <k>`; depois `merge` guarda de cada modelo os splats "
        "dentro da sua região e escreve-os num só ficheiro."),
     IT("`split` legge un insieme COLMAP, Nerfstudio o Metashape, taglia le "
        "fotocamere dove condividono meno, dà a ogni parte la regione che le sue "
        "fotocamere vedono e un anello di fotocamere esterne che la vedono anche "
        "loro, e scrive partition.json. Addestra ogni parte con `spirula train "
-       "<dataset> --partition <file> --partition-part <k>`; poi `merge` tiene di "
+       "--data <dataset> --partition <file> --partition-part <k>`; poi `merge` tiene di "
        "ogni modello gli splat dentro la propria regione e li scrive in un solo "
        "file."),
     NL("`split` leest een COLMAP-, Nerfstudio- of Metashape-dataset, snijdt de "
        "camera's waar ze het minst delen, geeft elk deel het gebied dat zijn "
        "camera's zien plus een ring buitencamera's die het ook zien, en schrijft "
-       "partition.json. Train elk deel met `spirula train <dataset> --partition "
+       "partition.json. Train elk deel met `spirula train --data <dataset> --partition "
        "<file> --partition-part <k>`; daarna houdt `merge` van elk model de splats "
        "binnen het eigen gebied en schrijft ze als één bestand."),
     RU("`split` читает набор COLMAP, Nerfstudio или Metashape, режет камеры там, "
        "где они меньше всего пересекаются, даёт каждой части область, которую "
        "видят её камеры, и кольцо внешних камер, которые тоже её видят, и пишет "
-       "partition.json. Каждую часть обучают `spirula train <dataset> --partition "
+       "partition.json. Каждую часть обучают `spirula train --data <dataset> --partition "
        "<file> --partition-part <k>`, затем `merge` оставляет от каждой модели "
        "сплаты внутри её области и записывает их одним файлом."),
     TR("`split` bir COLMAP, Nerfstudio ya da Metashape veri kümesini okur, "
        "kameraları en az paylaştıkları yerden keser, her parçaya kameralarının "
        "gördüğü bölgeyi ve onu da gören dış kameralardan bir halka verir ve "
-       "partition.json yazar. Her parçayı `spirula train <dataset> --partition "
+       "partition.json yazar. Her parçayı `spirula train --data <dataset> --partition "
        "<file> --partition-part <k>` ile eğitin; sonra `merge` her modelin kendi "
        "bölgesindeki splatlarını tutup tek dosya yazar."));
 
@@ -250,43 +250,43 @@ SS_MSG(opt_max_seeds,
 SS_MSG(opt_method,
     EN("graph cuts the cameras and the points together where the least view "
        "crosses, so each camera sees most of its part; viewgraph cuts the "
-       "cameras alone and takes regions from their positions. Default: graph"),
+       "cameras alone and takes regions from their positions. Default: viewgraph"),
     JA("graph はカメラと点をまとめて、視野の交差が最も少ない所で切り、各カメラが自分の"
        "パートを最もよく見るようにします。viewgraph はカメラだけを切り、領域は位置から"
-       "決めます。既定: graph"),
+       "決めます。既定: viewgraph"),
     ZH_HANS("graph 把相机和点一起在视野交叉最少处切分，让每台相机看到的大多是自己的"
-            "分区；viewgraph 只切分相机，区域按相机位置推出。默认：graph"),
+            "分区；viewgraph 只切分相机，区域按相机位置推出。默认：viewgraph"),
     ZH_HANT("graph 把相機和點一起在視野交叉最少處切分，讓每台相機看到的大多是自己的"
-            "分區；viewgraph 只切分相機，區域按相機位置推出。預設：graph"),
+            "分區；viewgraph 只切分相機，區域按相機位置推出。預設：viewgraph"),
     KO("graph는 카메라와 점을 함께, 시야가 가장 적게 걸치는 곳에서 잘라 각 카메라가 "
        "자기 파트를 가장 많이 보게 합니다. viewgraph는 카메라만 자르고 영역은 위치에서 "
-       "정합니다. 기본값: graph"),
+       "정합니다. 기본값: viewgraph"),
     DE("graph schneidet Kameras und Punkte gemeinsam dort, wo am wenigsten Sicht "
        "die Grenze kreuzt, sodass jede Kamera meist ihren eigenen Teil sieht; "
        "viewgraph schneidet nur die Kameras und nimmt die Bereiche aus ihren "
-       "Positionen. Standard: graph"),
+       "Positionen. Standard: viewgraph"),
     FR("graph coupe caméras et points ensemble là où le moins de vue traverse, "
        "pour que chaque caméra voie surtout sa partie ; viewgraph ne coupe que "
-       "les caméras et tire les régions de leurs positions. Défaut : graph"),
+       "les caméras et tire les régions de leurs positions. Défaut : viewgraph"),
     ES("graph corta cámaras y puntos juntos por donde menos vista cruza, para "
        "que cada cámara vea sobre todo su parte; viewgraph corta solo las "
-       "cámaras y saca las regiones de sus posiciones. Predeterminado: graph"),
+       "cámaras y saca las regiones de sus posiciones. Predeterminado: viewgraph"),
     PT("graph corta câmaras e pontos juntos por onde menos vista atravessa, para "
        "que cada câmara veja sobretudo a sua parte; viewgraph corta só as "
-       "câmaras e tira as regiões das suas posições. Predefinição: graph"),
+       "câmaras e tira as regiões das suas posições. Predefinição: viewgraph"),
     IT("graph taglia fotocamere e punti insieme dove passa meno vista, così ogni "
        "fotocamera vede soprattutto la propria parte; viewgraph taglia solo le "
-       "fotocamere e ricava le regioni dalle loro posizioni. Predefinito: graph"),
+       "fotocamere e ricava le regioni dalle loro posizioni. Predefinito: viewgraph"),
     NL("graph snijdt camera's en punten samen waar het minste zicht de grens "
        "kruist, zodat elke camera vooral haar eigen deel ziet; viewgraph snijdt "
-       "alleen de camera's en haalt de gebieden uit hun posities. Standaard: graph"),
+       "alleen de camera's en haalt de gebieden uit hun posities. Standaard: viewgraph"),
     RU("graph режет камеры и точки вместе там, где границу пересекает меньше "
        "всего обзора, чтобы каждая камера видела в основном свою часть; viewgraph "
-       "режет только камеры, а области берёт из их положений. По умолчанию: graph"),
+       "режет только камеры, а области берёт из их положений. По умолчанию: viewgraph"),
     TR("graph kameraları ve noktaları birlikte, sınırı en az görüşün kestiği "
        "yerden böler; böylece her kamera çoğunlukla kendi parçasını görür. "
        "viewgraph yalnızca kameraları böler, bölgeleri konumlarından çıkarır. "
-       "Varsayılan: graph"));
+       "Varsayılan: viewgraph"));
 
 SS_MSG(opt_source,
     EN("Where covisibility comes from. auto takes the model's own tracks, else "
@@ -539,19 +539,19 @@ SS_MSG(log_written,
     RU("Разбиение записано: {0}"), TR("Bölümleme yazıldı: {0}"));
 
 SS_MSG(log_next,
-    EN("Train part k with: {0} train {1} --partition {2} --partition-part k"),
-    JA("パート k の学習: {0} train {1} --partition {2} --partition-part k"),
-    ZH_HANS("训练分区 k：{0} train {1} --partition {2} --partition-part k"),
-    ZH_HANT("訓練分區 k：{0} train {1} --partition {2} --partition-part k"),
-    KO("파트 k 학습: {0} train {1} --partition {2} --partition-part k"),
-    DE("Teil k trainieren mit: {0} train {1} --partition {2} --partition-part k"),
-    FR("Entraîner la partie k : {0} train {1} --partition {2} --partition-part k"),
-    ES("Entrenar la parte k: {0} train {1} --partition {2} --partition-part k"),
-    PT("Treinar a parte k: {0} train {1} --partition {2} --partition-part k"),
-    IT("Addestrare la parte k: {0} train {1} --partition {2} --partition-part k"),
-    NL("Deel k trainen met: {0} train {1} --partition {2} --partition-part k"),
-    RU("Обучить часть k: {0} train {1} --partition {2} --partition-part k"),
-    TR("k parçasını eğitmek için: {0} train {1} --partition {2} --partition-part k"));
+    EN("Train part k with: {0} train --data {1} --partition {2} --partition-part k"),
+    JA("パート k の学習: {0} train --data {1} --partition {2} --partition-part k"),
+    ZH_HANS("训练分区 k：{0} train --data {1} --partition {2} --partition-part k"),
+    ZH_HANT("訓練分區 k：{0} train --data {1} --partition {2} --partition-part k"),
+    KO("파트 k 학습: {0} train --data {1} --partition {2} --partition-part k"),
+    DE("Teil k trainieren mit: {0} train --data {1} --partition {2} --partition-part k"),
+    FR("Entraîner la partie k : {0} train --data {1} --partition {2} --partition-part k"),
+    ES("Entrenar la parte k: {0} train --data {1} --partition {2} --partition-part k"),
+    PT("Treinar a parte k: {0} train --data {1} --partition {2} --partition-part k"),
+    IT("Addestrare la parte k: {0} train --data {1} --partition {2} --partition-part k"),
+    NL("Deel k trainen met: {0} train --data {1} --partition {2} --partition-part k"),
+    RU("Обучить часть k: {0} train --data {1} --partition {2} --partition-part k"),
+    TR("k parçasını eğitmek için: {0} train --data {1} --partition {2} --partition-part k"));
 
 SS_MSG(merge_part_missing,
     EN("  part {0}: no trained model found"),

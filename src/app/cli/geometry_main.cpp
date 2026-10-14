@@ -101,6 +101,7 @@ void usage() {
     help_row("--max-size <n>", G::opt_max_size);
     help_row("--num-tokens <n>", G::opt_num_tokens);
     help_row("--depth", G::opt_depth);
+    help_row("--no-normal", G::opt_no_normal);
     help_row("--normal-format png|jpg", G::opt_normal_format);
     help_row("--jpeg-quality <n>", G::opt_jpeg_quality);
     help_row("--depth-units relative|mm", G::opt_depth_units);
