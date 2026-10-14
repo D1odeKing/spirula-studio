@@ -8,6 +8,7 @@
 #include "sfm/SfmConfig.h"
 #include "i18n/catalog/SfmFields.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <cmath>
@@ -15,6 +16,7 @@
 #include <cstring>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 // Locale.cpp's one global; English is what the reference is written in.
 namespace spirula::i18n::detail {
@@ -206,7 +208,13 @@ void sfm_flags() {
                 "applies `--quality` and `--data-type` (see [sfm.md](sfm.md#presets)). "
                 "A switch is written `--name` / `--no-name`. Basic flags are what the "
                 "GUI shows unfolded.\n");
-    const char* cur = "";
+    // A group's rows need not be contiguous in the table; each is listed once,
+    // in the order the groups first appear.
+    std::vector<std::string> groups;
+#define SFM_GROUP(member, name, cmds, tier, group, lo, hi, choices, help)                      \
+    if (std::find(groups.begin(), groups.end(), group) == groups.end()) groups.push_back(group);
+    SFM_CONFIG_FIELDS(SFM_GROUP)
+#undef SFM_GROUP
     // An alias row shares its member with the row it renames.
     auto alias_of = [&](const void* member, const char* self) -> std::string {
         std::string found;
@@ -219,12 +227,7 @@ void sfm_flags() {
         return found;
     };
 #define SFM_ROW(member, name, cmds, tier, group, lo, hi, choices, help)                         \
-    if (std::strcmp(cur, group) != 0) {                                                          \
-        cur = group;                                                                             \
-        std::printf("\n### %s\n\n| Flag | Commands | Default | Tier | Description |\n"           \
-                    "|---|---|---|---|---|\n", sfm_group(group).c_str());                         \
-    }                                                                                            \
-    {                                                                                            \
+    if (cur == group) {                                                                          \
         std::string text;                                                                        \
         if ((tier) == Tier::Alias)                                                               \
             text = "Another spelling of " + code("--" + alias_of(&d.member, name)) + ".";        \
@@ -237,7 +240,11 @@ void sfm_flags() {
                     (tier) == Tier::Basic ? "basic" : (tier) == Tier::Alias ? "alias" : "advanced", \
                     cell(text).c_str());                                                         \
     }
-    SFM_CONFIG_FIELDS(SFM_ROW)
+    for (const std::string& cur : groups) {
+        std::printf("\n### %s\n\n| Flag | Commands | Default | Tier | Description |\n"
+                    "|---|---|---|---|---|\n", sfm_group(cur.c_str()).c_str());
+        SFM_CONFIG_FIELDS(SFM_ROW)
+    }
 #undef SFM_ROW
     std::printf("\n");
 }
