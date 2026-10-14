@@ -76,8 +76,10 @@ does write its values, which is how a preset's tuning is put back to stock.
 
 - Progress prints every 100 steps: step, splat count, elapsed time, ETA and
   the losses.
-- Unless `--disable-viewer 1`, the web viewer listens on all interfaces at
-  `--viewer-port` (7007). `--keep-viewer-alive 1` keeps the process and the
+- Unless `--disable-viewer 1`, the web viewer listens on `--viewer-host`
+  (default `0.0.0.0`, all interfaces) at `--viewer-port` (7007). On a cloud
+  box, `--viewer-host 127.0.0.1 --viewer-token <random>` and an SSH tunnel
+  keep it private (`docs/notes/remote-monitoring.md`). `--keep-viewer-alive 1` keeps the process and the
   viewer up after training until it is killed.
 - Ctrl-C stops after the current step and saves a resumable checkpoint, unless
   `--steps-per-save 0`. A second Ctrl-C ends the process at once.

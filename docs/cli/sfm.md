@@ -19,6 +19,7 @@ spirula sfm --version | -V | version
 | `match` | match and geometrically verify a directory of feature files |
 | `map` | incremental reconstruction: matches to a COLMAP sparse model |
 | `merge` | fuse the models of a fragmented capture into fewer |
+| `monitor` | serve a browser view of a run, going or finished |
 | `ba` | bundle-adjust a sparse model |
 
 Most flags come from one table and are listed, with the commands that accept
@@ -54,6 +55,9 @@ beside the images is used automatically.
 | `--no-masks` | Ignore a masks directory even if one sits beside the images. |
 | `--no-manage` | Skip merging, growing, reseeding, auditing and splitting; keep the mapper's raw models. |
 | `--progress-dir DIR` | Write snapshots of the run (the current model, the pair matrix) for a front end to watch. |
+| `--monitor PORT` | Serve a browser view of the run on `PORT` while it goes: status, the model as it grows, the match map, each image's fit and the log. Writes snapshots to `WORKSPACE/.progress` unless `--progress-dir` says otherwise. The address and its token are printed; tunnel the port over SSH from another machine. |
+| `--monitor-host HOST` | Address the monitor listens on (default `127.0.0.1`). `0.0.0.0` opens it to the network, guarded only by the token. |
+| `--monitor-token TOKEN` | The token the monitor's address must carry (`?token=`). Default: a random one, printed with the address. |
 | `-h`, `--help` | Show help and exit. |
 
 ### Presets
@@ -167,6 +171,24 @@ adjustment runs across each seam unless `--no-ba`.
 |---|---|
 | `-o`, `--output DIR` | Directory to write the merged models into. Required unless `--in-place`, which takes exactly one input directory. |
 | `-h`, `--help` | Show help and exit. |
+
+## `monitor`
+
+```text
+spirula sfm monitor <WORKSPACE|PROGRESS_DIR> [--port PORT] [options]
+```
+
+Serves the page `auto --monitor` serves, for a run another process started
+with `--progress-dir`, or a finished workspace copied back. It reads the files
+as they are written and serves until Ctrl-C. Only a run started with
+`--monitor` shows its log. `docs/notes/remote-monitoring.md` has the routes.
+
+| flag | default | meaning |
+|---|---|---|
+| `--port PORT` | 7008 | Port to listen on. |
+| `--host HOST` | `127.0.0.1` | Address to listen on, as `--monitor-host`. |
+| `--token TOKEN` | random | As `--monitor-token`. |
+| `-h`, `--help` | | Show help and exit. |
 
 ## `ba`
 

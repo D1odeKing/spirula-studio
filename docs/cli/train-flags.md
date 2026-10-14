@@ -38,6 +38,8 @@ Defaults are the `3dgs` base, before a preset or a macro flag moves them. Tier i
 | `--save-eval-images` | `0` | advanced | Write rendered and reference images for the held-out views when training finishes. Useful for judging quality, at the cost of a little disk space. |
 | `--log-performance` | `0` | advanced | Records the computer and the run once a second while it trains: CPU use per core, memory, disk, GPU use, clocks and temperature, and how long each step waited for images versus ran on the GPU. The files go to the run's perf folder; python tools/perf/perf_report.py with that folder turns them into a report of what limited each stage. Costs a small fraction of one CPU core. |
 | `--viewer-port` | `7007` | advanced | Network port the built-in web viewer listens on. Change it if that port is already taken. |
+| `--viewer-host` | `0.0.0.0` | advanced | Address the web viewer listens on. 0.0.0.0 answers any machine that can reach this one; 127.0.0.1 answers only this machine, which an SSH tunnel then reaches from another. |
+| `--viewer-token` | `none` | advanced | When set, the viewer answers only requests that carry ?token= with this value, and pages on other sites can no longer read it. The address printed at the start includes it. Kept in the run's config.json like every other setting. |
 | `--disable-viewer` | `0` | advanced | Do not start the web viewer. Frees a little memory and avoids port conflicts when several trainings run at once. |
 | `--keep-viewer-alive` | `1` | advanced | Keep the program running after training finishes so the result stays open in the viewer. Press Ctrl-C to exit. Has no effect when the viewer is disabled. |
 
