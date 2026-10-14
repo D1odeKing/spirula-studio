@@ -42,6 +42,10 @@ int engine_get_num_sh() {
     return engine().num_sh;
 }
 
+int engine_get_sb_lobes() {
+    return engine().sb_lobes;
+}
+
 
 void engine_copy_render_to_host(
     TorchTensorView out_rgb,

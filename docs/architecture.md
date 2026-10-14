@@ -112,3 +112,11 @@ branches: `Primitive.cuh`, `Primitive3DGS.cuh`, `Primitive3DGUT.cuh`,
 parameters. This is what makes `src/instantiations/` (111 generated instantiation TUs)
 necessary on the CUDA side, and what maps to Slang specialization constants on
 the Vulkan side.
+
+The view-dependent colour is an axis of its own, orthogonal to the primitive:
+a `ColorBasis` (`core/ColorBasis.h`) says what one splat's colour row holds --
+SH bands, then spherical-beta lobes -- and travels with the row through the
+engine and the launch APIs. On Vulkan the projection family evaluates it in
+one place, `backend/vulkan/shaders/view_color.slang`, with the lobe count a
+specialization constant like the SH degree; the CUDA kernels take SH only and
+refuse lobes. [notes/spherical-beta.md](notes/spherical-beta.md).

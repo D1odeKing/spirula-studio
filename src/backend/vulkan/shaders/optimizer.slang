@@ -15,6 +15,7 @@
 #include "shaders/pixel_wise.slang"
 #undef CudaDeviceExport
 #include "optim_quant.slang"
+#include "sb_cells.slang"
 
 [SpecializationConstant]
 const int kOptimBits = 8;   // QuantizedAdamState bits: 4 or 8
@@ -63,7 +64,7 @@ bool _finitef(float v) {
 // fused_adam_step (fp32 state)
 // ---------------------------------------------------------------------------
 
-struct FusedAdamParams {  // 80 bytes: pushed directly
+struct FusedAdamParams {  // 96 bytes: pushed directly
     float* param;
     float* grad;
     float* exp_avg;
@@ -79,6 +80,8 @@ struct FusedAdamParams {  // 80 bytes: pushed directly
     uint stride;         // param stride per splat (steps index = idx/stride)
     uint zero_grad;
     uint wgs_per_row;
+    uint sb_first;       // first lobe cell of a row; kSbNoLobes: none
+    float sb_lr;
 };
 
 [shader("compute")]
@@ -96,8 +99,11 @@ void fused_adam_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     float v = p.grad[idx];
     if (!_finitef(v)) v = 0.0f;
     v *= p.grad_scale;
-    v += p.decay *
-         (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
+    uint c = idx % p.stride;
+    bool lobe = c >= p.sb_first;
+    if (!lobe)
+        v += p.decay *
+             (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
     float g1 = p.exp_avg[idx];
     float g2 = p.exp_avg_sq[idx];
     // Self-heal: a moment that is already non-finite would otherwise pin this
@@ -108,7 +114,8 @@ void fused_adam_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     g1 = kBeta1 * g1 + (1.0f - kBeta1) * v;
     g2 = kBeta2 * g2 + (1.0f - kBeta2) * v * v;
 
-    float x_new = x - p.lr * ibc1 * g1 / (sqrt(g2 * ibc2) + kAdamEps);
+    float x_new = x - (lobe ? p.sb_lr : p.lr) * ibc1 * g1 /
+                          (sqrt(g2 * ibc2) + kAdamEps);
 
     // A finite parameter must not become non-finite: for the per-photo
     // appearance tables (PPISP, bilagrid) one such entry poisons every pixel
@@ -155,7 +162,7 @@ void fused_adagrad_fwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // fused_adam_step_quantized (QuantizedAdamState<kOptimBits, 256>)
 // ---------------------------------------------------------------------------
 
-struct QAdamParams {  // 104 bytes: pushed directly
+struct QAdamParams {  // 120 bytes: pushed directly
     float* param;
     float* grad;
     uint* packed;          // AoS (u, log_s) cells
@@ -175,6 +182,8 @@ struct QAdamParams {  // 104 bytes: pushed directly
     uint zero_grad;
     uint num_blocks;       // ceil(numel / 256); grid may be folded larger
     uint wgs_per_row;
+    uint sb_first;         // first lobe cell of a row; kSbNoLobes: none
+    float sb_lr;
 };
 
 [ForceInline]
@@ -194,11 +203,14 @@ void _adam_q_impl<let BITS : int>(uint3 wg, uint tid, QAdamParams p) {
     float v = inside ? p.grad[idx] : 0.0f;
     if (!_finitef(v)) v = 0.0f;
     v *= p.grad_scale;
-    v += p.decay *
-         (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
+    uint c = min(idx, p.numel - 1) % p.stride;
+    bool lobe = c >= p.sb_first;
+    if (!lobe)
+        v += p.decay *
+             (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
 
     ShColorTrust trust = { 1.0f, 0.0f };
-    if (kColorTrust != 0 && inside) {
+    if (kColorTrust != 0 && inside && !lobe) {
         trust = _sh_color_trust(p.ct_features_dc, p.ct_opacities,
                                 p.ct_eps_tr, idx, p.stride);
         v *= trust.scale;
@@ -215,8 +227,9 @@ void _adam_q_impl<let BITS : int>(uint3 wg, uint tid, QAdamParams p) {
     g1 = kBeta1 * g1 + (1.0f - kBeta1) * v;
     g2 = kBeta2 * g2 + (1.0f - kBeta2) * v * v;
 
-    float delta = -p.lr * ibc1 * g1 / (sqrt(g2 * ibc2) + kAdamEps);
-    if (kColorTrust != 0) delta = _sh_trust_clamp(trust, delta);
+    float delta = -(lobe ? p.sb_lr : p.lr) * ibc1 * g1 /
+                  (sqrt(g2 * ibc2) + kAdamEps);
+    if (kColorTrust != 0 && !lobe) delta = _sh_trust_clamp(trust, delta);
     x += delta;
     if (inside) p.param[idx] = x;
 
@@ -246,7 +259,7 @@ void fused_adam_q(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // value; optionally reads the block-quantized SH gradient (gradq codec).
 // ---------------------------------------------------------------------------
 
-struct QQAdamParams {  // 136 bytes: above the push floor, passed by ring
+struct QQAdamParams {  // 144 bytes: above the push floor, passed by ring
     float* grad;            // fp32 dense; null under grad-quant
     uint* grad_q_packed;    // int8 codes; null keeps the fp32 read
     float2* grad_q_bounds;  // per-splat-block bounds, index (idx/stride)/256
@@ -270,7 +283,8 @@ struct QQAdamParams {  // 136 bytes: above the push floor, passed by ring
     uint zero_grad;
     uint num_blocks;
     uint wgs_per_row;
-    uint _pad0;
+    uint sb_first;          // first lobe cell of a row; kSbNoLobes: none
+    float sb_lr;
 };
 
 [ForceInline]
@@ -302,11 +316,14 @@ void _adam_qq_impl<let OPTIM_BITS : int, let VALUE_BITS : int>(
     }
     if (!_finitef(v)) v = 0.0f;
     v *= p.grad_scale;
-    v += p.decay *
-         (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
+    uint c = min(idx, p.numel - 1) % p.stride;
+    bool lobe = c >= p.sb_first;
+    if (!lobe)
+        v += p.decay *
+             (max(x - p.decay_offset, 0.0f) + min(x + p.decay_offset, 0.0f));
 
     ShColorTrust trust = { 1.0f, 0.0f };
-    if (kColorTrust != 0 && inside) {
+    if (kColorTrust != 0 && inside && !lobe) {
         trust = _sh_color_trust(p.ct_features_dc, p.ct_opacities,
                                 p.ct_eps_tr, idx, p.stride);
         v *= trust.scale;
@@ -324,8 +341,9 @@ void _adam_qq_impl<let OPTIM_BITS : int, let VALUE_BITS : int>(
     g1 = kBeta1 * g1 + (1.0f - kBeta1) * v;
     g2 = kBeta2 * g2 + (1.0f - kBeta2) * v * v;
 
-    float delta = -p.lr * ibc1 * g1 / (sqrt(g2 * ibc2) + kAdamEps);
-    if (kColorTrust != 0) delta = _sh_trust_clamp(trust, delta);
+    float delta = -(lobe ? p.sb_lr : p.lr) * ibc1 * g1 /
+                  (sqrt(g2 * ibc2) + kAdamEps);
+    if (kColorTrust != 0 && !lobe) delta = _sh_trust_clamp(trust, delta);
     x += delta;
 
     float2 value_mm =

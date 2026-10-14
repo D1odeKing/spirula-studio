@@ -65,7 +65,7 @@ static Scene build_scene(std::mt19937& rng) {
                   ttv(quats.data(), 4, {N, 4}),
                   ttv(scales.data(), 4, {N, 3}),
                   ttv(opac.data(), 4, {N, 1}), ttv(dc.data(), 4, {N, 3}),
-                  ttv(sh.data(), 4, {N, NUM_SH, 3}));
+                  ttv(sh.data(), 4, {N, NUM_SH, 3}), 0);
 
     Scene s;
     auto& cfg = s.cfg;

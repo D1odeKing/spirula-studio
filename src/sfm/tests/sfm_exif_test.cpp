@@ -5,6 +5,7 @@
 // place and upright in another, so the marker test below pins them together:
 // a pixel placed at `exifUpInCamera` must land at the top once the pixels are
 // turned by `exifTransform`.
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -62,6 +63,39 @@ std::vector<uint8_t> make_tiff(int orientation, int px_w, int px_h, int f35) {
     entry(0xA002, 4, (uint32_t)px_w);      // PixelXDimension
     entry(0xA003, 4, (uint32_t)px_h);      // PixelYDimension
     u32(0);
+    return b;
+}
+
+// IFD0 holding only a GPS IFD pointer; the GPS IFD gives N/E and the two
+// coordinates as degrees, minutes, seconds.
+std::vector<uint8_t> make_gps_tiff(double lat_deg, double lon_deg) {
+    std::vector<uint8_t> b;
+    auto u16 = [&b](unsigned v) {
+        b.push_back((uint8_t)v);
+        b.push_back((uint8_t)(v >> 8));
+    };
+    auto u32 = [&b](uint32_t v) {
+        for (int i = 0; i < 4; i++) b.push_back((uint8_t)(v >> (8 * i)));
+    };
+    b.push_back('I'); b.push_back('I');
+    u16(42);
+    u32(8);
+    const uint32_t gps = 8 + 2 + 12 + 4;
+    u16(1);
+    u16(0x8825); u16(4); u32(1); u32(gps);
+    u32(0);
+    const uint32_t data = gps + 2 + 4 * 12 + 4;
+    u16(4);
+    u16(0x0001); u16(2); u32(2); b.push_back('N'); b.push_back(0); u16(0);
+    u16(0x0002); u16(5); u32(3); u32(data);
+    u16(0x0003); u16(2); u32(2); b.push_back('E'); b.push_back(0); u16(0);
+    u16(0x0004); u16(5); u32(3); u32(data + 24);
+    u32(0);
+    for (double v : {lat_deg, lon_deg}) {
+        u32((uint32_t)(v * 1e6)); u32(1000000);
+        u32(0); u32(1);
+        u32(0); u32(1);
+    }
     return b;
 }
 
@@ -123,6 +157,15 @@ static int cmdExifTest(int, char**) {
     check(e.pixel_width == 3000 && e.pixel_height == 4000,
           "cleared: the other tags are untouched");
     std::remove(path.c_str());
+
+    // ---- GPS: a position, and the zeros a camera writes without a fix ----
+    std::vector<uint8_t> fix = make_gps_tiff(43.25, 79.5);
+    e = parseExifTiff(fix.data(), fix.size());
+    check(e.has_gps && std::fabs(e.lat_deg - 43.25) < 1e-6 && std::fabs(e.lon_deg - 79.5) < 1e-6,
+          "GPS reads back");
+    std::vector<uint8_t> none = make_gps_tiff(0.0, 0.0);
+    e = parseExifTiff(none.data(), none.size());
+    check(!e.has_gps && e.gps_zero, "GPS at 0, 0 is no GPS, and says so");
 
     // ---- an orientation with no tag at all ----
     check(readExif("sfm_exif_test.tmp.missing").orientation == 1,

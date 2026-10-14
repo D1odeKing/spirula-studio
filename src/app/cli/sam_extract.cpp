@@ -76,6 +76,8 @@ void usage() {
     help_row("-s, --skip <n>", H::xh_skip);
     help_row("-k, --keep <n>", H::xh_keep);
     help_row("-n, --max-frames <n>", H::xh_max_frames);
+    help_row("    --start <time>", H::xh_start);
+    help_row("    --end <time>", H::xh_end);
     help_row("-q, --quality <0..100>", H::xh_quality);
     help_row("-r, --rotate <deg>", H::xh_rotate);
     help_row("    --no-autorotate", H::xh_no_autorotate);
@@ -121,10 +123,29 @@ void usage() {
                  H::label_common.get());
 }
 
+// Seconds, or [[h:]m:]s with a fraction.
+bool parse_seconds(const char* text, double& out) {
+    double total = 0.0;
+    int parts = 0;
+    for (const char* p = text; *p;) {
+        char* end = nullptr;
+        const double v = std::strtod(p, &end);
+        if (end == p || !(v >= 0.0) || ++parts > 3) return false;
+        total = total * 60.0 + v;
+        p = end;
+        if (*p == ':') p++;
+        else if (*p) return false;
+    }
+    if (parts == 0) return false;
+    out = total;
+    return true;
+}
+
 struct Options {
     std::string input;
     std::string out_dir, mask_dir;
     int    skip = 1, keep = -1, max_frames = 0;
+    double clip_start = 0.0, clip_end = 0.0;
     int    quality = 95, rotate = 0;
     bool   auto_rotate = true;
     float  scale = 1.0f;
@@ -168,6 +189,18 @@ bool parse_args(int argc, char** argv, Options& o) {
         else if (a == "-s" || a == "--skip") o.skip = std::atoi(next("--skip"));
         else if (a == "-k" || a == "--keep") o.keep = std::atoi(next("--keep"));
         else if (a == "-n" || a == "--max-frames") o.max_frames = std::atoi(next("--max-frames"));
+        else if (a == "--start" || a == "--end") {
+            const char* v = next(a.c_str());
+            double t = 0.0;
+            if (!parse_seconds(v, t)) {
+                std::fprintf(stderr, "%s\n",
+                             spirula::i18n::format(
+                                 spirula::i18n::msg::cli::sam_unexpected_argument,
+                                 {a + " " + v}).c_str());
+                return false;
+            }
+            (a == "--start" ? o.clip_start : o.clip_end) = t;
+        }
         else if (a == "-q" || a == "--quality") o.quality = std::atoi(next("--quality"));
         else if (a == "-r" || a == "--rotate") o.rotate = std::atoi(next("--rotate"));
         else if (a == "--no-autorotate") o.auto_rotate = false;
@@ -289,6 +322,8 @@ int sam_cli_extract(int argc, char** argv) {
     job.skip = o.skip;
     job.keep = o.keep;
     job.max_frames = o.max_frames;
+    job.clip_start = o.clip_start;
+    job.clip_end = o.clip_end;
     job.quality = o.quality;
     job.rotate = o.rotate;
     job.auto_rotate = o.auto_rotate;

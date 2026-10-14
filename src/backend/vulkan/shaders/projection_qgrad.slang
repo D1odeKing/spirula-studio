@@ -1,24 +1,11 @@
 // Grad-quant projection backward (Vulkan backend), mirroring
-// kernels/projection/ProjectionBwdQuantGrad_kernel.cuh: SPLAT-parallel (one thread per
-// splat, 256/block); each thread loops its cameras in registers (no
-// atomics), then folds the register gradient onto the running QUANTIZED
-// grad accumulator via decode -> add -> block-reduce bounds -> encode.
-// Codecs from optim_quant.slang (signed symmetric gradq; And+Or masked
-// sub-word stores since per-splat cell runs need not be word-aligned).
-//
-// Spec constants 0..4 from proj_bwd_common.slang, plus:
-//   kEval3d       = 1: 3DGUT screen-grad layout + VJP
-//   kGqMask       = active-attribute bitmask (1 means, 2 quats, 4 scales,
-//                   8 opac, 16 dc, 32 sh) -- folded so inactive attributes'
-//                   loads never exist (llvmpipe speculated-load rule)
-//   kWorldGradAdd = 1: add mean/quat/scale register grads onto the fp32
-//                   world-grad buffer (3DGUT; one owner thread -> plain add)
-//   kDistortion   = CameraDistortionType (0..3), declared last
-//
-// One thread per splat also for !inside tail threads: the camera loop is
-// fully skipped for them (CUDA reads out-of-bounds aabb entries harmlessly
-// from pool slack; BDA reads must stay in bounds), and every thread reaches
-// every block reduce.
+// kernels/projection/ProjectionBwdQuantGrad_kernel.cuh: one thread per splat
+// loops its cameras in registers, then folds the gradient onto the running
+// QUANTIZED accumulator: decode -> add -> block-reduce bounds -> encode.
+// kGqMask (1 means, 2 quats, 4 scales, 8 opac, 16 dc, 32 colour row) folds
+// inactive attributes' loads away (llvmpipe speculated-load rule). Tail
+// threads skip the camera loop -- BDA reads must stay in bounds, where CUDA
+// reads pool slack -- but reach every block reduce.
 
 #define CudaDeviceExport ForceInline
 #include "aabb16.slang"
@@ -29,6 +16,7 @@
 #undef CudaDeviceExport
 #include "sh_quant.slang"
 #include "sh_vjp.slang"
+#include "view_color.slang"
 #include "atomic_float.slang"
 #include "proj_bwd_common.slang"
 #include "optim_quant.slang"
@@ -86,7 +74,7 @@ struct ProjectionQgradParams {
     uint32_t height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;  // float3 coefficient of the first lobe in a row
 };
 
 // One non-SH attribute: decode running grad + add this sub-batch's
@@ -130,6 +118,12 @@ void _qg_nonsh<let PRIMS : int>(bool active, uint* packed, float2* bounds,
     }
 }
 
+// Cell `k` of the splat's lobes, 0 outside them.
+[ForceInline]
+float _qg_sb_contrib(PbGrads g, int k) {
+    return (k >= 0 && k < 6 * kSbLobes) ? g.v_sb[k / 3][k % 3] : 0.0f;
+}
+
 // The per-splat camera loop, generic over the two projection spec axes so the
 // entry point folds them once (its block reduces stay outside).
 [ForceInline]
@@ -142,8 +136,14 @@ void _qg_camera_loop<let cam : CameraModelType, D : ICameraDistortion>(
                               p.features_dc, gid);
     ShAddrW sha = sh_quant_addr_w(p.num_sh_buffer,
                                  i64mem_get(p.sh_value_bounds_stride));
-    gindex_t qbase = sh_addr_base(sha, gid);
-    gindex_t sh_src = (gindex_t)gid * (gindex_t)p.sh_stride_src;
+    ColorRow row;
+    row.fp32 =
+        elem_at(p.features_sh, (gindex_t)gid * (gindex_t)p.sh_stride_src);
+    row.packed = p.sh_value_packed;
+    row.bounds = p.sh_value_bounds;
+    row.base = sh_addr_base(sha, gid);
+    row.bounds_stride = sha.bounds_stride;
+    row.pair_pitch = sha.pair_pitch;
     for (int cid_t = cid_0; cid_t < cid_1; ++cid_t) {
         // Packed: the forward emits (gaussian, camera) order, so cid_t is
         // the out_idx that indexes aabb / camera_ids / vs_screen.
@@ -159,9 +159,7 @@ void _qg_camera_loop<let cam : CameraModelType, D : ICameraDistortion>(
             float v_so = scrg_opac(v_row);
             float3 v_rgb = scrg_rgb(v_row);
             pb_vjp_3dgut<cam, D>(s, c, p.width, p.height, v_ss, v_so, g);
-            pb_sh_vjp<D>(s, c, elem_at(p.features_sh, sh_src),
-                         p.sh_value_packed, p.sh_value_bounds, qbase,
-                         sha.bounds_stride, sha.pair_pitch, v_rgb, g);
+            pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
         } else {
             float* v_row = scr2_row(p.vs_screen, idx);
             float2 v_xy = scr2_xy(v_row);
@@ -171,9 +169,7 @@ void _qg_camera_loop<let cam : CameraModelType, D : ICameraDistortion>(
             float3 v_rgb = scr2_rgb(v_row);
             pb_vjp_2d<cam, D>(s, c, p.width, p.height, v_xy, v_depth, v_conic,
                               v_opac, g);
-            pb_sh_vjp<D>(s, c, elem_at(p.features_sh, sh_src),
-                         p.sh_value_packed, p.sh_value_bounds, qbase,
-                         sha.bounds_stride, sha.pair_pitch, v_rgb, g);
+            pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
         }
     }
 }
@@ -237,10 +233,11 @@ void projection_qgrad(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                      block_id, gid, tid, inside, blk_ok, vd);
     }
 
-    // SH grad (8-bit): two passes over the full 3*K cells so inactive
+    // Colour-row grad (8-bit): two passes over the full 3*K cells so inactive
     // warmup bands (contribution 0) stay re-encoded against the fresh bound.
     if ((kGqMask & 32) != 0) {
         const int num_sh = kShDegree * (kShDegree + 2);
+        const int sb_c0 = 3 * int(p.sb_base);
         // Word pointer + in-word byte offset: the splat's run is addressed
         // relatively from here, so it stays 32-bit past 2^32 cells.
         const gindex_t sh_cell0 =
@@ -267,7 +264,8 @@ void projection_qgrad(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             }
             for (int c = 3 * num_sh; c < total; ++c) {
                 float nv = gradq_decode1<8>(sh_words,
-                                            sh_base + uint(c), sh_old);
+                                            sh_base + uint(c), sh_old) +
+                           _qg_sb_contrib(g, c - sb_c0);
                 sh_mm.x = min(sh_mm.x, nv);
                 sh_mm.y = max(sh_mm.y, nv);
             }
@@ -285,8 +283,9 @@ void projection_qgrad(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             for (uint cell = c0; cell < c1; ++cell) {
                 int c = int(cell - c0);
                 float old = gradq_decode1<8>(sh_words, cell, sh_old);
-                float contrib =
-                    (c < 3 * num_sh) ? g.v_sh[c / 3][c % 3] : 0.0f;
+                float contrib = (c < 3 * num_sh)
+                                    ? g.v_sh[c / 3][c % 3]
+                                    : _qg_sb_contrib(g, c - sb_c0);
                 uint code = gradq_encode1<8>(old + contrib, sh_mm) & 0xffu;
                 uint b = cell & 3u;
                 acc |= code << (8u * b);

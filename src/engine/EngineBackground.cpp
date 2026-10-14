@@ -476,7 +476,7 @@ void engine_background_optim_step(int step, const BackgroundStepConfig& cfg) {
             _sh_slice_fnd(bg.sh_g1.data_ptr(),           1),
             _sh_slice_fnd(bg.sh_g2.data_ptr(),           1),
             cfg.lr_dc, adam_step, no_per_splat_steps,
-            /*l2_reg=*/0.0f, /*l2_reg_offset=*/0.0f,
+            /*l2_reg=*/0.0f, /*l2_reg_offset=*/0.0f, SbOptimCells{},
             /*grad_scale=*/1.0f, /*zero_grad=*/false);
     }
     if (n > 1 && cfg.lr_sh > 0.0f) {
@@ -487,7 +487,7 @@ void engine_background_optim_step(int step, const BackgroundStepConfig& cfg) {
             _sh_slice_fnd(bg.sh_g1.data_ptr() + 1,       n - 1),
             _sh_slice_fnd(bg.sh_g2.data_ptr() + 1,       n - 1),
             cfg.lr_sh, adam_step, no_per_splat_steps,
-            /*l2_reg=*/0.0f, /*l2_reg_offset=*/0.0f,
+            /*l2_reg=*/0.0f, /*l2_reg_offset=*/0.0f, SbOptimCells{},
             /*grad_scale=*/1.0f, /*zero_grad=*/false);
     }
 }

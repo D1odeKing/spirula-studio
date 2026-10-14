@@ -180,7 +180,8 @@ Variant axes follow the CUDA instantiation structure
   output_median, VALUE_BITS** are value parameters → specialization
   constants on ONE SPIR-V module, folded at pipeline creation. Pipelines are
   created lazily and cached by (entry point, spec-constant tuple, device
-  capability set).
+  capability set). So is **kSbLobes**, the spherical-beta lobe count, which
+  only this backend has (below).
 
 ### The lens-distortion tier (`kDistortion`)
 
@@ -200,13 +201,31 @@ within a module and the host passes `SpecList` by index, so a constant
 inserted mid-module silently renumbers every axis after it (the class of bug
 the densify copy kernel hit — see "Spec IDs follow declaration order" below).
 The resulting IDs: warp 0; background_sh / pixel_wise_{render,train} /
-meshing_raster / visualizer 1; rasterize_moments 3; projection_fwd /
-rasterize_fwd 4; projection_bwd / rasterize_bwd 6; projection_qgrad 8;
-fpbo 11 (12 axes, still under `SpecList::kMax` = 16).
+meshing_raster / visualizer 1; rasterize_moments 3; rasterize_fwd 4;
+projection_fwd 6; rasterize_bwd 6; projection_bwd 7; projection_qgrad 9;
+fpbo 12 (13 axes, still under `SpecList::kMax` = 16).
 
 The one axis declared after `kDistortion` is warp's `kFromSource` (ID 1),
 which selects the source-camera projection in the wide warps: it trails so the
 launches that never re-distort keep passing their one-element `SpecList`.
+
+### The colour row (`kShDegree`, `kSbLobes`)
+
+A splat's view-dependent colour is one row of `features_sh`: the SH bands
+past the DC, then `kSbLobes` spherical-beta lobes of two float3 each
+(`core/ColorBasis.h`; docs/notes/spherical-beta.md). Every storage path --
+the q8/q16 value codec in both layouts, the 8-bit Adam state, the gradq
+accumulator, densify's copies -- treats the row as opaque cells, so the lobes
+ride through them unchanged. What knows the split:
+`backend/vulkan/shaders/view_color.slang` (the colour and its VJP, shared by
+the whole projection family through `ColorRow`), the per-cell optimizers
+(`sb_cells.slang`: their own rate, the regularizer on the amplitude only, no
+colour trust region), and FPBO, whose writeback walks the row's cells in
+order across the active bands, the warmup's zero bands and the lobes.
+Launchers resolve the lobes' first coefficient once (`vkk::color_spec`) and
+pass it as `sb_base`; `kShDegree` is the warmup's degree, so the stored bands
+cannot be inferred from it. The CUDA kernels carry no lobes and refuse a
+launch that asks for any.
 
 ## Shaders: build and shipping
 

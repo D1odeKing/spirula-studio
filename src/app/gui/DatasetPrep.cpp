@@ -605,6 +605,12 @@ int frame_skip(float fps, double src_fps) {
     return std::max(1, (int)std::lround(src_fps / std::max(fps, 0.01f)));
 }
 
+// How many of a video's frames its clip holds.
+int64_t clip_length(const PrepInput& in, double src_fps, int64_t src_frames) {
+    if (!in.clipped()) return src_frames;
+    return app::clip_frames(in.clip_start, in.clip_end, src_fps).length(src_frames);
+}
+
 // What a video is expected to yield, for the step's bar. The extraction loop
 // stops on the real end of stream either way.
 int64_t expected_frames(const PrepJob& job, float fps, double src_fps,
@@ -662,9 +668,18 @@ bool ffmpeg_extract_frame(const std::string& ffmpeg_exe, const std::string& vide
                           double seconds, const std::string& out_path,
                           const std::atomic<bool>& cancel,
                           const FfmpegStillOpts& opts) {
-    if (!command_exists(ffmpeg_exe)) return false;
+    return ffmpeg_extract_frames(ffmpeg_exe, video, seconds, {opts.track}, {out_path},
+                                 cancel, opts);
+}
+
+bool ffmpeg_extract_frames(const std::string& ffmpeg_exe, const std::string& video,
+                           double seconds, const std::vector<int>& tracks,
+                           const std::vector<std::string>& out_paths,
+                           const std::atomic<bool>& cancel, const FfmpegStillOpts& opts) {
+    if (!command_exists(ffmpeg_exe) || out_paths.empty() || tracks.size() != out_paths.size())
+        return false;
     std::error_code ec;
-    fs::remove(out_path, ec);
+    for (const std::string& p : out_paths) fs::remove(p, ec);
     char ts[32];
     std::snprintf(ts, sizeof ts, "%.3f", seconds > 0.0 ? seconds : 0.0);
     // -ss before -i: seek first, decode one frame, stop. The other order
@@ -673,20 +688,37 @@ bool ffmpeg_extract_frame(const std::string& ffmpeg_exe, const std::string& vide
     std::vector<std::string> argv{ffmpeg_exe, "-nostdin", "-y"};
     // A 360 capture's geometry is the EAC layout, not the display matrix.
     if (!opts.auto_rotate || opts.eac.valid()) argv.push_back("-noautorotate");
+    if (opts.keyframe)
+        argv.insert(argv.end(), {"-skip_frame", "nokey", "-noaccurate_seek"});
     argv.insert(argv.end(), {"-ss", ts, "-i", video});
-    if (opts.eac.valid())
+    if (opts.eac.valid()) {
         argv.insert(argv.end(), {"-filter_complex",
                                  app::pano360_graph(opts.eac, ""), "-map",
-                                 std::string("[") + app::pano360_canvas_pad() + "]"});
-    else if (opts.track > 0)
-        argv.insert(argv.end(), {"-map", "0:v:" + std::to_string(opts.track)});
-    argv.insert(argv.end(), {"-frames:v", "1", "-q:v", "2", out_path});
-    const int rc = run_process(argv, "", [](const std::string&) {}, cancel);
-    if (rc != 0) {
-        fs::remove(out_path, ec);
-        return false;
+                                 std::string("[") + app::pano360_canvas_pad() + "]",
+                                 "-frames:v", "1", "-q:v", "2", out_paths[0]});
+    } else {
+        // One output per track from the one run: a rig's streams share the
+        // seek and decode side by side.
+        for (size_t i = 0; i < tracks.size(); i++) {
+            // One track 0 is ffmpeg's own pick, as it always was here.
+            if (tracks.size() > 1 || tracks[i] > 0)
+                argv.insert(argv.end(), {"-map", "0:v:" + std::to_string(tracks[i])});
+            if (opts.max_side > 0) {
+                const std::string side = std::to_string(opts.max_side);
+                argv.insert(argv.end(), {"-vf", "scale=w='min(iw," + side + ")':h='min(ih," +
+                                                    side + ")':force_original_aspect_ratio=decrease"});
+            }
+            argv.insert(argv.end(), {"-frames:v", "1", "-q:v", "2", out_paths[i]});
+        }
     }
-    return fs::exists(out_path, ec) && fs::file_size(out_path, ec) > 0;
+    const int rc = run_process(argv, "", [](const std::string&) {}, cancel);
+    const size_t outputs = opts.eac.valid() ? 1 : out_paths.size();
+    bool ok = rc == 0;
+    for (size_t i = 0; i < outputs && ok; i++)
+        ok = fs::exists(out_paths[i], ec) && fs::file_size(out_paths[i], ec) > 0;
+    if (!ok)
+        for (const std::string& p : out_paths) fs::remove(p, ec);
+    return ok;
 }
 
 int probe_video_tracks(const std::string& ffmpeg_exe, const std::string& path,
@@ -1182,17 +1214,19 @@ int64_t DatasetPrep::estimate_frames(const PrepJob& job, const PrepInput& in,
     if (!job.force_external_decode && native_decode_reason().empty()) {
         std::string err;
         video::VideoProbe probe;
-        if (video::probe_video(in.path, probe, err) && probe.tracks > 0)
-            return expected_frames(job, input_fps(job, in),
-                                   probe.fps > 1.0 ? probe.fps : 30.0,
-                                   probe.frame_count,
+        if (video::probe_video(in.path, probe, err) && probe.tracks > 0) {
+            const double src_fps = probe.fps > 1.0 ? probe.fps : 30.0;
+            return expected_frames(job, input_fps(job, in), src_fps,
+                                   clip_length(in, src_fps, probe.frame_count),
                                    per_frame > 0 ? per_frame : probe.tracks);
+        }
     }
 #endif
     VideoFacts facts;
     if (ffmpeg_probe_video(job.ffmpeg_exe, in.path, facts, _cancel) &&
         facts.fps > 1.0)
-        return expected_frames(job, input_fps(job, in), facts.fps, facts.frames,
+        return expected_frames(job, input_fps(job, in), facts.fps,
+                               clip_length(in, facts.fps, facts.frames),
                                per_frame > 0 ? per_frame
                                              : (is_dual_fisheye_path(in.path) ? 2 : 1));
     return 0;
@@ -1538,7 +1572,9 @@ static bool lockstep_extraction(const PrepJob& job, const PrepInput& in, bool bu
 // frame is not resampled, so there too the stem is the source index).
 static PrepCapture capture_of(const PrepJob& job, const PrepInput& in, bool builtin) {
     const double fps = builtin ? 0.0 : (double)input_fps(job, in) * candidate_group(job, in);
-    return {in.subdir, in.path, fps, lockstep_extraction(job, in, builtin)};
+    PrepCapture c{in.subdir, in.path, fps, lockstep_extraction(job, in, builtin)};
+    if (!builtin && in.clipped()) c.time_offset = in.clip_start;
+    return c;
 }
 
 PrepCapture video_capture(const PrepJob& job, const PrepInput& in) {
@@ -1607,8 +1643,10 @@ static bool builtin_job(const PrepJob& job, const PrepInput& in,
         error = probe_err.empty() ? "no video track" : probe_err;
         return false;
     }
-    if (frames) *frames = probe.frame_count;
     const double src_fps = probe.fps > 1.0 ? probe.fps : 30.0;
+    fx.clip_start = in.clip_start;
+    fx.clip_end = in.clip_end;
+    if (frames) *frames = clip_length(in, src_fps, probe.frame_count);
     const bool every = every_frame(job, in);
     const int window = every ? 1 : std::max(job.sharp_window, 1);
     fx.input = in.path;
@@ -1749,7 +1787,8 @@ bool DatasetPrep::extract_video_builtin(const PrepJob& job, const PrepInput& in,
     };
     // Only where this run is going to measure for itself: a plan handed in was
     // made by plan_group, which reported its own pass.
-    ScanProgress scan(_prog, probe.frame_count);
+    ScanProgress scan(_prog, clip_length(in, probe.fps > 1.0 ? probe.fps : 30.0,
+                                         probe.frame_count));
     if (fx.adaptive && fx.plan.empty()) {
         scan.begin(leaf_name(in.path));
         sinks.scanning = [&](int64_t done, int64_t total) {
@@ -1785,6 +1824,21 @@ bool DatasetPrep::extract_video_builtin(const PrepJob& job, const PrepInput& in,
     }
     return true;
 #endif
+}
+
+// The clip as input options, before `-i`: a seek, then how much to read.
+// Stems count from the seek (PrepCapture::time_offset).
+static void append_clip_args(std::vector<std::string>& argv, const PrepInput& in) {
+    if (!in.clipped()) return;
+    char b[32];
+    if (in.clip_start > 0.0) {
+        std::snprintf(b, sizeof b, "%.6f", in.clip_start);
+        argv.insert(argv.end(), {"-ss", b});
+    }
+    if (in.clip_end > in.clip_start) {
+        std::snprintf(b, sizeof b, "%.6f", in.clip_end - in.clip_start);
+        argv.insert(argv.end(), {"-t", b});
+    }
 }
 
 bool DatasetPrep::append_lut_filter(const PrepJob& job, const PrepInput& in,
@@ -1869,6 +1923,7 @@ bool DatasetPrep::extract_video_ffmpeg(const PrepJob& job, const PrepInput& in,
         // to, which is what the built-in decoder's auto_rotate matches.
         std::vector<std::string> argv{job.ffmpeg_exe, "-nostdin", "-y"};
         if (!job.auto_rotate) argv.push_back("-noautorotate");
+        append_clip_args(argv, in);
         argv.insert(argv.end(), {"-i", track_path});
         if (every) append_every_frame_args(argv, job.max_frames);
         if (!vf.empty()) argv.insert(argv.end(), {"-vf", vf});
@@ -2036,9 +2091,10 @@ bool DatasetPrep::extract_360_ffmpeg(const PrepJob& job, const PrepInput& in,
     const std::string graph = app::pano360_graph(in.pano360, pre);
     // A 360 capture's geometry is the EAC layout, not the display matrix: the
     // built-in path leaves it alone and so must this one.
-    std::vector<std::string> argv{job.ffmpeg_exe, "-nostdin", "-y", "-noautorotate",
-                                  "-i", in.path, "-filter_complex", graph, "-map",
-                                  std::string("[") + app::pano360_canvas_pad() + "]"};
+    std::vector<std::string> argv{job.ffmpeg_exe, "-nostdin", "-y", "-noautorotate"};
+    append_clip_args(argv, in);
+    argv.insert(argv.end(), {"-i", in.path, "-filter_complex", graph, "-map",
+                             std::string("[") + app::pano360_canvas_pad() + "]"});
     if (every) append_every_frame_args(argv, job.max_frames);
     argv.insert(argv.end(), {"-qscale:v", "2", (cand / "c_%06d.jpg").string()});
     int rc = exec(argv);

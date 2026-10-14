@@ -101,6 +101,7 @@ struct OptimConfig {
     float lr_opacities    = 0.0f;
     float lr_features_dc  = 0.0f;
     float lr_features_sh  = 0.0f;
+    float lr_features_sb  = 0.0f;   // the lobe cells of a features_sh row
 
     float max_gauss_ratio              = 0.0f;
     float scale_regularization_weight  = 0.0f;

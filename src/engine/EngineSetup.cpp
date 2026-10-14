@@ -15,7 +15,8 @@ void set_data_3dgs(
     TorchTensorView scales,
     TorchTensorView opacities,
     TorchTensorView features_dc,
-    TorchTensorView features_sh
+    TorchTensorView features_sh,
+    int sb_lobes
 ) {
     int64_t max_num_splats = std::get<2>(means)[0];
     if (std::get<2>(quats)[0] != max_num_splats ||
@@ -33,6 +34,12 @@ void set_data_3dgs(
 
     auto sh_shape = std::get<2>(features_sh);
     engine().num_sh = (sh_shape.size() >= 2) ? (int)sh_shape[1] : 0;
+    if (sb_lobes < 0 || 2 * sb_lobes > engine().num_sh)
+        throw std::runtime_error("setData3DGS: a features_sh row of " +
+                                 std::to_string(engine().num_sh) +
+                                 " coefficients cannot hold " +
+                                 std::to_string(sb_lobes) + " lobes");
+    engine().sb_lobes = sb_lobes;
 
     // Splats are set once and persist on device; subsequent calls are no-ops.
     if (engine().world.initialized) return;
@@ -43,6 +50,13 @@ void set_data_3dgs(
     engine().world.opacities   = _hv_to_dv<float>(PoolSlot::WorldOpacities, opacities);
     engine().world.features_dc = _hv_to_dv<float3>(PoolSlot::WorldFeaturesDc, features_dc);
     engine().world.features_sh = _hv_to_dt2d<float3>(PoolSlot::WorldFeaturesSh, features_sh);
+    engine().world.features_sh_seeded = false;
+    if (const float* h = (const float*)std::get<0>(features_sh);
+        h && !backend::is_device_pointer(h)) {
+        const int64_t n = max_num_splats * 3 * (int64_t)engine().num_sh;
+        for (int64_t i = 0; i < n && !engine().world.features_sh_seeded; i++)
+            engine().world.features_sh_seeded = h[i] != 0.0f;
+    }
 
     engine().world.initialized = true;
 }

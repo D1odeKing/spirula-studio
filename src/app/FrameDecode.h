@@ -26,8 +26,10 @@ struct SelectClock {
     int keep = 0, skip = 1;
     std::vector<int64_t> ends;
     size_t next = 0;
+    FrameSpan span;
 
     bool candidate(int64_t i) {
+        if (i < span.first || span.past(i)) return false;
         if (!ends.empty()) {
             while (next < ends.size() && ends[next] < i) ++next;
             return next < ends.size() && i > ends[next] - std::max(keep, 1) &&

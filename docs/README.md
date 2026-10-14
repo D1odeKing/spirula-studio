@@ -6,6 +6,7 @@ the detail.
 | document | what it covers |
 |---|---|
 | [architecture.md](architecture.md) | layers, data flow, engine state, where each responsibility lives |
+| [cli/](cli/README.md) | every command-line flag of every `spirula` subcommand |
 | [build.md](build.md) | the build matrix, every option, per-platform notes |
 | [backends.md](backends.md) | the CUDA/Vulkan seam, coverage, pointers to the authoritative backend docs |
 | [codegen.md](codegen.md) | the four generators, what they own, and the invariants |
@@ -15,6 +16,7 @@ the detail.
 | [notes/rename-and-i18n-plan.md](notes/rename-and-i18n-plan.md) | the Spirula Studio rename, 13-locale localization, and retiring the Python client |
 | [notes/pose-normalization.md](notes/pose-normalization.md) | orientation/centering: what the native parser implements, and the kept reference for what it doesn't |
 | [notes/compare-view.md](notes/compare-view.md) | showing several models at once: engine scene slots, the shared navigation frame |
+| [notes/spherical-beta.md](notes/spherical-beta.md) | spherical-beta lobes: the colour row they share with SH, training, rotation, the PLY layout, results |
 | [notes/vram-splat-x-img.md](notes/vram-splat-x-img.md) | what the largest scratch category costs per element, the bitmask compaction, and the measured dead ends |
 | [notes/vram-high-res.md](notes/vram-high-res.md) | the per-pixel half of VRAM: the fused appearance chain, float16 images, what a 60 and a 120 MP image cost |
 | [notes/color-transfer.md](notes/color-transfer.md) | linear storage vs the output tone curve, the dynamic range a curve buys, and why its clip is straight-through |

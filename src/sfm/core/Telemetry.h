@@ -83,6 +83,7 @@ struct Telemetry {
     // says so; zero when it does not. Only read with no accelerometer.
     double attitude_world_up[3] = {0, 0, 0};
     std::vector<TelemetryGps> gps;
+    size_t gps_zero = 0;   // samples at 0, 0 -- a receiver with no fix -- dropped on read
     std::vector<TelemetryExposure> exposure;  // not sensor data: empty() ignores it
     std::vector<std::string> notes;
 

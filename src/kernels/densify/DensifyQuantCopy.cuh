@@ -33,19 +33,25 @@ __device__ __forceinline__ uint8_t _quant_encode_zero_byte(float zero_val, float
     return (uint8_t)fminf(fmaxf(qf, 0.0f), qmax);
 }
 
-// SH VALUE-quant codec copy: decode src splat's SH cells against src bounds
-// and encode into dst splat's cells against dst's CURRENT bounds. Cells
-// outside dst's current quant range are clipped at byte 0 or kQMax.
-//
-// For the "add" case the dst slot's bound starts at (0, 0) -- everything
-// clips to zero on the first densify step. The FPBO writeback's block-wide
-// (min, max) reduction expands the bound on the next training step, so the
-// child splat starts at SH=0 and adapts via Adam. Cleaner inheritance
-// (atomic bound expansion + neighbor re-encoding) is left for later.
-template<int BITS, bool BOUNDS_PER_SPLAT>
+// Order-preserving u32 image of a float, so an unsigned atomicMin takes a
+// float min of either sign. The bound grow below keeps max as min of -v, so
+// one 0xff fill empties both halves.
+__device__ __forceinline__ uint32_t _qv_key(float f) {
+    uint32_t b = __float_as_uint(f);
+    return (b & 0x80000000u) ? ~b : (b | 0x80000000u);
+}
+__device__ __forceinline__ float _qv_unkey(uint32_t k) {
+    return __uint_as_float((k & 0x80000000u) ? (k & 0x7fffffffu) : ~k);
+}
+
+// SH VALUE-quant codec copy of one splat's cells, src -> dst. GROW instead
+// records in `ext` how far dst's bound must widen: clipped to an empty
+// block's (0, 0), a spherical-beta lobe becomes a lit lobe facing +z.
+template<int BITS, bool BOUNDS_PER_SPLAT, bool GROW>
 __device__ __forceinline__ void _copy_quant_sh_value_for_splat(
     uint8_t* __restrict__ packed,
     float2*  __restrict__ bounds,
+    uint2*   __restrict__ ext,
     int64_t  src_splat,
     int64_t  dst_splat,
     int      num_sh,        // runtime SH count (degree-capped)
@@ -65,6 +71,8 @@ __device__ __forceinline__ void _copy_quant_sh_value_for_splat(
         dst_mm = bounds[dst_splat / 256];
     }
 
+    int64_t slot = -1;
+    uint32_t lo = 0xffffffffu, neg_hi = 0xffffffffu;
     int64_t cells = (int64_t)3 * num_sh;
     #pragma unroll 1
     for (int64_t c = 0; c < cells; ++c) {
@@ -75,11 +83,28 @@ __device__ __forceinline__ void _copy_quant_sh_value_for_splat(
             dst_mm = bounds[dst_cell / 256];
         }
         float v = Codec::decode_v(packed, src_cell, src_mm);
-        Codec::encode_v(packed, dst_cell, v, dst_mm);
+        if constexpr (GROW) {
+            const int64_t s = BOUNDS_PER_SPLAT ? dst_splat / 256 : dst_cell / 256;
+            if (s != slot && slot >= 0) {
+                atomicMin(&ext[slot].x, lo);
+                atomicMin(&ext[slot].y, neg_hi);
+                lo = neg_hi = 0xffffffffu;
+            }
+            slot = s;
+            if (!isfinite(v)) continue;
+            lo = min(lo, _qv_key(v));
+            neg_hi = min(neg_hi, _qv_key(-v));
+        } else {
+            Codec::encode_v(packed, dst_cell, v, dst_mm);
+        }
+    }
+    if (GROW && slot >= 0) {
+        atomicMin(&ext[slot].x, lo);
+        atomicMin(&ext[slot].y, neg_hi);
     }
 }
 
-template<int BITS, bool BOUNDS_PER_SPLAT>
+template<int BITS, bool BOUNDS_PER_SPLAT, bool GROW>
 __global__ void densify_copy_quant_sh_value_kernel(
     int64_t cur_num_splats,        // for default dst when dst_indices is null
     int64_t num_pairs,
@@ -87,6 +112,7 @@ __global__ void densify_copy_quant_sh_value_kernel(
     const int32_t* __restrict__ dst_indices,  // nullptr -> dst = cur_num_splats + idx
     uint8_t* __restrict__ packed,
     float2*  __restrict__ bounds,
+    uint2*   __restrict__ ext,
     int num_sh,
     int num_sh_buffer
 ) {
@@ -96,18 +122,19 @@ __global__ void densify_copy_quant_sh_value_kernel(
     int32_t dst = (dst_indices == nullptr)
         ? (int32_t)(cur_num_splats + pair)
         : dst_indices[pair];
-    _copy_quant_sh_value_for_splat<BITS, BOUNDS_PER_SPLAT>(
-        packed, bounds, src, dst, num_sh, num_sh_buffer);
+    _copy_quant_sh_value_for_splat<BITS, BOUNDS_PER_SPLAT, GROW>(
+        packed, bounds, ext, src, dst, num_sh, num_sh_buffer);
 }
 
 // Variant: src given by index_map[dst]; copy only when index_map[dst] != dst.
 // Used by the MCMC relocate path (mcmc_update_relocation_kernel mirror).
-template<int BITS, bool BOUNDS_PER_SPLAT>
+template<int BITS, bool BOUNDS_PER_SPLAT, bool GROW>
 __global__ void densify_copy_quant_sh_value_index_map_kernel(
     int64_t num_splats,
     const int32_t* __restrict__ index_map,   // [num_splats]
     uint8_t* __restrict__ packed,
     float2*  __restrict__ bounds,
+    uint2*   __restrict__ ext,
     int num_sh,
     int num_sh_buffer
 ) {
@@ -115,8 +142,59 @@ __global__ void densify_copy_quant_sh_value_index_map_kernel(
     if (dst >= num_splats) return;
     int32_t src = index_map[dst];
     if ((int64_t)src == dst) return;
-    _copy_quant_sh_value_for_splat<BITS, BOUNDS_PER_SPLAT>(
-        packed, bounds, src, dst, num_sh, num_sh_buffer);
+    _copy_quant_sh_value_for_splat<BITS, BOUNDS_PER_SPLAT, GROW>(
+        packed, bounds, ext, src, dst, num_sh, num_sh_buffer);
+}
+
+// One block per bound slot: a slot whose `ext` reaches past its bound has
+// every cell re-encoded to the widened bound, which it then adopts.
+template<int BITS>
+__global__ void densify_widen_quant_sh_value_kernel(
+    int64_t slot_cells,
+    uint8_t* __restrict__ packed,
+    float2*  __restrict__ bounds,
+    const uint2* __restrict__ ext
+) {
+    using Codec = QuantizedTensor<BITS, 256>;
+    const int64_t slot = blockIdx.x;
+    const float2 old = bounds[slot];
+    const uint2 e = ext[slot];
+    float2 nw = old;
+    if (e.x != 0xffffffffu) nw.x = fminf(old.x, _qv_unkey(e.x));
+    if (e.y != 0xffffffffu) nw.y = fmaxf(old.y, -_qv_unkey(e.y));
+    if (nw.x == old.x && nw.y == old.y) return;
+    for (int64_t c = threadIdx.x; c < slot_cells; c += blockDim.x) {
+        const int64_t cell = slot * slot_cells + c;
+        Codec::encode_v(packed, cell, Codec::decode_v(packed, cell, old), nw);
+    }
+    __syncthreads();
+    if (threadIdx.x == 0) bounds[slot] = nw;
+}
+
+// Bound slots holding the cells of splats [0, num_splats): one per 256-splat
+// block in the FPBO layout, one per 256 cells otherwise.
+static inline int64_t _quant_sh_value_slots(int64_t num_splats,
+                                            int num_sh_buffer,
+                                            bool bounds_per_splat,
+                                            int64_t* slot_cells) {
+    const int64_t R = 3 * (int64_t)num_sh_buffer;
+    *slot_cells = bounds_per_splat ? ((R + 1) >> 1) * 512 : 256;
+    const int64_t cells = bounds_per_splat ? ((num_splats + 255) / 256) * *slot_cells
+                                           : num_splats * R;
+    return (cells + *slot_cells - 1) / *slot_cells;
+}
+
+static inline void _launch_widen_quant_sh_value(int64_t num_slots,
+                                                int64_t slot_cells,
+                                                uint8_t* packed, float2* bounds,
+                                                const uint2* ext, int bits) {
+    if (bits == 8)
+        densify_widen_quant_sh_value_kernel<8><<<(unsigned)num_slots, 256>>>(
+            slot_cells, packed, bounds, ext);
+    else
+        densify_widen_quant_sh_value_kernel<16><<<(unsigned)num_slots, 256>>>(
+            slot_cells, packed, bounds, ext);
+    CHECK_DEVICE_ERROR(cudaGetLastError());
 }
 
 static inline void _launch_densify_copy_quant_sh_value_index_map(
@@ -131,21 +209,34 @@ static inline void _launch_densify_copy_quant_sh_value_index_map(
 ) {
     if (bits == 32 || num_splats == 0 || packed == nullptr || bounds == nullptr)
         return;
+    int64_t slot_cells = 0;
+    const int64_t num_slots = _quant_sh_value_slots(
+        num_splats, num_sh_buffer, bounds_per_splat, &slot_cells);
+    DeviceVector<uint2> ext;
+    ext.resize(PoolSlot::DensifyQshValueExt, num_slots);
+    CHECK_DEVICE_ERROR(cudaMemsetAsync(ext.data_ptr(), 0xff, sizeof(uint2) * num_slots));
     constexpr int BLOCK = 256;
     int grid = (int)((num_splats + BLOCK - 1) / BLOCK);
-    #define _LAUNCH(BB, BPS) \
-        densify_copy_quant_sh_value_index_map_kernel<BB, BPS><<<grid, BLOCK>>>( \
-            num_splats, index_map, packed, bounds, num_sh, num_sh_buffer)
-    if      (bits == 8  &&  bounds_per_splat) { _LAUNCH(8,  true);  }
-    else if (bits == 8  && !bounds_per_splat) { _LAUNCH(8,  false); }
-    else if (bits == 16 &&  bounds_per_splat) { _LAUNCH(16, true);  }
-    else if (bits == 16 && !bounds_per_splat) { _LAUNCH(16, false); }
+    #define _LAUNCH(BB, BPS, GROW) \
+        densify_copy_quant_sh_value_index_map_kernel<BB, BPS, GROW><<<grid, BLOCK>>>( \
+            num_splats, index_map, packed, bounds, ext.data_ptr(), num_sh, num_sh_buffer)
+    #define _LAUNCH_BITS(GROW) \
+        if      (bits == 8  &&  bounds_per_splat) { _LAUNCH(8,  true,  GROW); } \
+        else if (bits == 8  && !bounds_per_splat) { _LAUNCH(8,  false, GROW); } \
+        else if (bits == 16 &&  bounds_per_splat) { _LAUNCH(16, true,  GROW); } \
+        else if (bits == 16 && !bounds_per_splat) { _LAUNCH(16, false, GROW); }
+    _LAUNCH_BITS(true)
+    CHECK_DEVICE_ERROR(cudaGetLastError());
+    _launch_widen_quant_sh_value(num_slots, slot_cells, packed, bounds,
+                                 ext.data_ptr(), bits);
+    _LAUNCH_BITS(false)
+    #undef _LAUNCH_BITS
     #undef _LAUNCH
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
 
-// Host-side launcher: dispatches the codec copy based on bits + bounds layout.
-// Safe no-op when bits == 32 (no value-quant) or num_pairs == 0.
+// Grow, widen, copy. No-op when bits == 32 or num_pairs == 0. Every dst lies
+// below cur_num_splats, or is cur_num_splats + pair without dst_indices.
 static inline void _launch_densify_copy_quant_sh_value(
     int64_t cur_num_splats,
     int64_t num_pairs,
@@ -160,16 +251,30 @@ static inline void _launch_densify_copy_quant_sh_value(
 ) {
     if (bits == 32 || num_pairs == 0 || packed == nullptr || bounds == nullptr)
         return;
+    int64_t slot_cells = 0;
+    const int64_t num_slots = _quant_sh_value_slots(
+        cur_num_splats + (dst_indices ? 0 : num_pairs), num_sh_buffer,
+        bounds_per_splat, &slot_cells);
+    DeviceVector<uint2> ext;
+    ext.resize(PoolSlot::DensifyQshValueExt, num_slots);
+    CHECK_DEVICE_ERROR(cudaMemsetAsync(ext.data_ptr(), 0xff, sizeof(uint2) * num_slots));
     constexpr int BLOCK = 256;
     int grid = (int)((num_pairs + BLOCK - 1) / BLOCK);
-    #define _LAUNCH(BB, BPS) \
-        densify_copy_quant_sh_value_kernel<BB, BPS><<<grid, BLOCK>>>( \
+    #define _LAUNCH(BB, BPS, GROW) \
+        densify_copy_quant_sh_value_kernel<BB, BPS, GROW><<<grid, BLOCK>>>( \
             cur_num_splats, num_pairs, src_indices, dst_indices, \
-            packed, bounds, num_sh, num_sh_buffer)
-    if      (bits == 8  &&  bounds_per_splat) { _LAUNCH(8,  true);  }
-    else if (bits == 8  && !bounds_per_splat) { _LAUNCH(8,  false); }
-    else if (bits == 16 &&  bounds_per_splat) { _LAUNCH(16, true);  }
-    else if (bits == 16 && !bounds_per_splat) { _LAUNCH(16, false); }
+            packed, bounds, ext.data_ptr(), num_sh, num_sh_buffer)
+    #define _LAUNCH_BITS(GROW) \
+        if      (bits == 8  &&  bounds_per_splat) { _LAUNCH(8,  true,  GROW); } \
+        else if (bits == 8  && !bounds_per_splat) { _LAUNCH(8,  false, GROW); } \
+        else if (bits == 16 &&  bounds_per_splat) { _LAUNCH(16, true,  GROW); } \
+        else if (bits == 16 && !bounds_per_splat) { _LAUNCH(16, false, GROW); }
+    _LAUNCH_BITS(true)
+    CHECK_DEVICE_ERROR(cudaGetLastError());
+    _launch_widen_quant_sh_value(num_slots, slot_cells, packed, bounds,
+                                 ext.data_ptr(), bits);
+    _LAUNCH_BITS(false)
+    #undef _LAUNCH_BITS
     #undef _LAUNCH
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }

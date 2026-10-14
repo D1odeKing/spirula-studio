@@ -11,6 +11,7 @@
 // written every `skip` -- and files are named by source frame index whichever
 // decoder ran.
 
+#include "app/FrameClip.h"
 #include "app/FrameLook.h"
 #include "app/FrameMotion.h"
 #include "nn/io/Image.h"
@@ -18,6 +19,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,11 @@ struct FrameExtractJob : FrameLook {
 
     FrameDecoder decoder = FrameDecoder::Auto;
     std::string ffmpeg_exe = "ffmpeg";
+
+    // The part of the video read, in seconds of it; `clip_end` 0 is its end.
+    // Frames keep their source index as their name, so a clip's frames meet
+    // the capture's IMU and GPS where the whole video's would.
+    double clip_start = 0.0, clip_end = 0.0;
 
     // Selection
     int   skip = 1;                // write one frame every n source frames
@@ -67,6 +74,10 @@ struct FrameExtractJob : FrameLook {
     sam::MaskOptions mask;
     bool  write_overlay = false;   // debug overlays next to the masks
 };
+
+inline FrameSpan clip_frames(const FrameExtractJob& o, double fps) {
+    return clip_frames(o.clip_start, o.clip_end, fps);
+}
 
 struct FrameExtractStats {
     double decode = 0, sharpness = 0, convert = 0, mask = 0, submit = 0;
@@ -165,5 +176,33 @@ bool extract_one_frame(const std::string& input, const FrameLook& look,
                        int64_t index, int folder, nn::Image& out,
                        const std::atomic<bool>* cancel, std::string& error,
                        const std::string& device = {});
+
+// A video held open for a player: every track decoded in step, so the next
+// frame costs a decode per track rather than extract_one_frame's open and
+// seek. One owner; it holds decoder memory on the device until close().
+class FrameCursor {
+public:
+    FrameCursor();
+    ~FrameCursor();
+    FrameCursor(const FrameCursor&) = delete;
+    FrameCursor& operator=(const FrameCursor&) = delete;
+
+    bool open(const std::string& input, std::string& error,
+              const std::string& device = {});
+    void close();
+    bool is_open() const;
+    int tracks() const;
+    // Every track brought to `index`. With `exact` false it settles for the
+    // sync sample at or before it: one decode, for a thumbnail.
+    bool go(int64_t index, bool exact, const std::atomic<bool>* cancel,
+            std::string& error);
+    int64_t index() const;   // where go() landed; -1 before it has
+    // That instant as extract_frames_at writes `folder` of `look`.
+    bool image(const FrameLook& look, int folder, nn::Image& out, std::string& error);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
 
 }  // namespace app

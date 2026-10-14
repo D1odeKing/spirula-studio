@@ -3,6 +3,7 @@
 #include "checkpoint/Adapt.h"
 
 #include "core/CheckpointIO.h"
+#include "core/SphericalBeta.h"
 #include "core/Tensor.h"
 
 #include <algorithm>
@@ -45,6 +46,7 @@ struct Buffer {
     size_t numel() const { return bytes.size() / elem_size(); }
     const float*   f32() const { return (const float*)bytes.data(); }
     const int32_t* i32() const { return (const int32_t*)bytes.data(); }
+    const uint32_t* u32() const { return (const uint32_t*)bytes.data(); }
     const uint8_t* u8()  const { return (const uint8_t*)bytes.data(); }
 };
 
@@ -61,6 +63,9 @@ Buffer from_floats(const std::vector<float>& v) {
 }
 Buffer from_bytes(const std::vector<uint8_t>& v) {
     return make_buffer("|u1", v.data(), v.size());
+}
+Buffer from_u32(const std::vector<uint32_t>& v) {
+    return make_buffer("<u4", v.data(), v.size() * sizeof(uint32_t));
 }
 
 std::map<std::string, Buffer> read_tar_npy(const fs::path& ckpt_dir) {
@@ -241,6 +246,7 @@ struct SlotClass {
     int  bits    = 0;
     bool fpbo    = false;
     bool is_int  = false;  // plain buffer holds int32, not float
+    bool is_uint = false;  // plain buffer holds uint32, not float
 };
 
 bool starts_with(const std::string& s, const char* p) {
@@ -265,6 +271,9 @@ std::optional<SlotClass> classify(const std::string& name) {
     if (name == "eng.accum_buffer") { SlotClass c; c.ch = 2; return c; }
     if (name == "eng.bias_correction_steps") {
         SlotClass c; c.ch = 1; c.is_int = true; return c;
+    }
+    if (name == "eng.visit_counters") {
+        SlotClass c; c.ch = 1; c.is_uint = true; return c;
     }
     // Quantized Adam moments, FPBO (means/quats/scales/opacities/features_dc).
     if (ends_with(name, "_qfpbo") && starts_with(name, "eng.")) {
@@ -341,15 +350,45 @@ std::vector<float> gather_rows(const float* src, int ch,
     return out;
 }
 
-// [max_ckpt, K_ck, 3] -> [max_new, K_new, 3], band-clamped and zero-padded.
-std::vector<float> resample_sh(const float* src, int K_ck,
-                               const std::vector<int64_t>& keep,
-                               int K_new, int64_t max_new) {
-    const int Kc = std::min(K_ck, K_new);
-    std::vector<float> out((size_t)(max_new * K_new * 3), 0.0f);
+std::vector<uint32_t> gather_u32_rows(const uint32_t* src, int ch,
+                                       const std::vector<int64_t>& keep,
+                                       int64_t max_new) {
+    std::vector<uint32_t> out((size_t)(max_new * ch), 0);
     for (size_t k = 0; k < keep.size(); k++)
-        std::memcpy(&out[k * K_new * 3], &src[keep[k] * K_ck * 3],
-                    (size_t)Kc * 3 * sizeof(float));
+        std::memcpy(&out[k * ch], &src[keep[k] * ch], (size_t)ch * sizeof(uint32_t));
+    return out;
+}
+
+// A features_sh row's split: float3 coefficients, the last 2 * lobes of
+// them spherical-beta lobes (core/ColorBasis.h).
+struct ColorRow {
+    int coeffs = 0;
+    int lobes = 0;
+    int sh() const { return coeffs - 2 * lobes; }
+};
+
+// [max_ckpt, K_ck, 3] -> [max_new, K_new, 3]: bands clamped and zero-padded,
+// lobes kept by index. A lobe the checkpoint lacks starts fresh when these
+// are the values (`values`), at zero when they are optimizer moments.
+std::vector<float> resample_sh(const float* src, ColorRow ck,
+                               const std::vector<int64_t>& keep,
+                               ColorRow nw, int64_t max_new, bool values) {
+    const int Kc = std::min(ck.sh(), nw.sh());
+    const int Lc = std::min(ck.lobes, nw.lobes);
+    std::vector<float> out((size_t)(max_new * nw.coeffs * 3), 0.0f);
+    for (size_t k = 0; k < keep.size(); k++) {
+        const float* s = &src[keep[k] * ck.coeffs * 3];
+        float* d = &out[k * nw.coeffs * 3];
+        std::memcpy(d, s, (size_t)Kc * 3 * sizeof(float));
+        std::memcpy(d + nw.sh() * 3, s + ck.sh() * 3,
+                    (size_t)Lc * spirula::sb::kLobeFloats * sizeof(float));
+        for (int l = Lc; l < nw.lobes && values; l++) {
+            const uint32_t h = (uint32_t)(k * 2654435761u) ^ (uint32_t)(l * 40503u);
+            spirula::sb::init_lobe((float)(h & 0xffff) / 65536.0f,
+                                   (float)(h >> 16) / 65536.0f,
+                                   d + nw.sh() * 3 + spirula::sb::kLobeFloats * l);
+        }
+    }
     return out;
 }
 
@@ -456,6 +495,7 @@ bool needs_adapt(const JsonValue& state, const TargetLayout& t) {
     if ((int64_t)state.get_double("max_num_splats", 0) != t.max_num_splats)
         return true;
     if ((int)state.get_double("num_sh", 0) != t.num_sh) return true;
+    if ((int)state.get_double("sb_lobes", 0) != t.sb_lobes) return true;
     if ((int64_t)state.get_double("cur_num_splats", 0) > t.max_num_splats)
         return true;
     for (const char* which : {"rgb", "depth", "normal"}) {
@@ -490,6 +530,10 @@ bool adapt_checkpoint(const fs::path& ckpt_dir, const TargetLayout& t,
     const int     K_ck   = (int)state.get_double("num_sh", 0);
     const int64_t max_new = t.max_num_splats;
     const int     K_new   = t.num_sh;
+    const ColorRow row_ck{K_ck, (int)state.get_double("sb_lobes", 0)};
+    const ColorRow row_new{K_new, t.sb_lobes};
+    if (row_ck.sh() < 0 || row_new.sh() < 0)
+        throw std::runtime_error("checkpoint adapt: lobe count exceeds the colour row");
     const int64_t n_img   = t.num_images;
 
     std::map<std::string, Buffer> arrs = read_tar_npy(ckpt_dir);
@@ -529,9 +573,13 @@ bool adapt_checkpoint(const fs::path& ckpt_dir, const TargetLayout& t,
                     out[k] = src[keep[k]];
                 emit[base] = make_buffer("<i4", out.data(),
                                          out.size() * sizeof(int32_t));
+            } else if (cls->is_uint) {
+                emit[base] = from_u32(gather_u32_rows(parts.plain->u32(), cls->ch,
+                                                       keep, max_new));
             } else if (cls->is_sh) {
-                emit[base] = from_floats(resample_sh(parts.plain->f32(), K_ck,
-                                                     keep, K_new, max_new));
+                emit[base] = from_floats(resample_sh(
+                    parts.plain->f32(), row_ck, keep, row_new, max_new,
+                    starts_with(base, "world.")));
             } else {
                 emit[base] = from_floats(gather_rows(parts.plain->f32(), cls->ch,
                                                      keep, max_new));
@@ -583,7 +631,8 @@ bool adapt_checkpoint(const fs::path& ckpt_dir, const TargetLayout& t,
 
             auto reindex_stream = [&](const std::vector<float>& v) {
                 if (cls->is_sh)
-                    return resample_sh(v.data(), K_ck, keep, K_new, max_new);
+                    return resample_sh(v.data(), row_ck, keep, row_new, max_new,
+                                       !cls->adam);
                 return gather_rows(v.data(), cpp_ck, keep, max_new);
             };
 
@@ -704,9 +753,9 @@ bool adapt_checkpoint(const fs::path& ckpt_dir, const TargetLayout& t,
         }
     }
 
-    // state.json with the three counts retargeted. Rewriting the three numbers
-    // in place keeps every other field (quant widths, FPBO flags, camera block)
-    // exactly as the writer emitted it.
+    // state.json with the counts retargeted. Rewriting the numbers in place
+    // keeps every other field (quant widths, FPBO flags, camera block) exactly
+    // as the writer emitted it.
     std::string st = state_text;
     auto set_int = [&st](const char* key, int64_t v) {
         std::string pat = std::string("\"") + key + "\":";
@@ -719,6 +768,12 @@ bool adapt_checkpoint(const fs::path& ckpt_dir, const TargetLayout& t,
     set_int("cur_num_splats", target_cur);
     set_int("max_num_splats", max_new);
     set_int("num_sh", K_new);
+    if (st.find("\"sb_lobes\":") == std::string::npos) {
+        const size_t k = st.find("\"num_sh\":");
+        if (k != std::string::npos)
+            st.insert(k, "\"sb_lobes\": 0,\n  ");
+    }
+    set_int("sb_lobes", t.sb_lobes);
 
     fs::create_directories(out_dir);
     std::ofstream out((out_dir / "state.tar").string(), std::ios::binary);

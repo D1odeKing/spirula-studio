@@ -3,6 +3,7 @@
 #include "app/TrainerCore.h"
 #include "backend/api/BackendRuntime.h"
 #include "core/Env.h"
+#include "core/SphericalBeta.h"
 #include "core/Tensor.h"
 #include "data/SceneTransform.h"
 #include "app/EvalMetrics.h"
@@ -248,7 +249,8 @@ SeedSplats seed_splats(const ColmapPoints3D& pts, const TrainConfig& cfg,
     const int64_t num = (int64_t)pick.size();
     const int64_t cap = cfg.preallocate_splat_tensors
         ? std::max<int64_t>(num, cfg.cap_max) : num;
-    const int64_t dim_sh = (int64_t)(cfg.sh_degree + 1) * (cfg.sh_degree + 1);
+    const ColorBasis basis{cfg.sh_degree, cfg.sb_lobes};
+    const int64_t K = basis.coeffs();
 
     SeedSplats s;
     s.num = num;
@@ -257,7 +259,7 @@ SeedSplats seed_splats(const ColmapPoints3D& pts, const TrainConfig& cfg,
     s.scales.assign(cap * 3, 0.f);
     s.opacities.assign(cap * 1, 0.f);
     s.features_dc.assign(cap * 3, 0.f);
-    s.features_sh.assign(cap * (dim_sh - 1) * 3, 0.f);
+    s.features_sh.assign(cap * K * 3, 0.f);
 
     // `pts` is in the training frame already: load_dataset() applied
     // relative_scale to it along with the cameras.
@@ -300,6 +302,11 @@ SeedSplats seed_splats(const ColmapPoints3D& pts, const TrainConfig& cfg,
         for (int d = 0; d < 3; d++)
             s.features_dc[i*3 + d] = (col[d] - 0.5f) / 0.28209479177387814f;
     }
+    for (int64_t i = 0; i < num; i++)
+        for (int l = 0; l < basis.sb_lobes; l++)
+            sb::init_lobe(uni(rng), uni(rng),
+                          &s.features_sh[(size_t)((i * K + basis.sh_coeffs()) * 3 +
+                                                  sb::kLobeFloats * l)]);
     return s;
 }
 
@@ -311,7 +318,7 @@ SeedSplats seed_splats_from_ply(const std::string& path, const TrainConfig& cfg,
             path + ": not a 3D Gaussian Splatting PLY (no opacity / scale / rot "
             "properties). A plain point cloud is a dataset's seed cloud, not an "
             "--init-ply.");
-    SplatCloud src = read_splat_ply(path, cfg.sh_degree > 0);
+    SplatCloud src = read_splat_ply(path, cfg.sh_degree > 0 || cfg.sb_lobes > 0);
     if (src.num == 0) throw std::runtime_error(path + ": no splats in file");
 
     std::vector<int64_t> pick((size_t)src.num);
@@ -329,9 +336,12 @@ SeedSplats seed_splats_from_ply(const std::string& path, const TrainConfig& cfg,
     const int64_t num = (int64_t)pick.size();
     const int64_t cap = cfg.preallocate_splat_tensors
         ? std::max<int64_t>(num, cfg.cap_max) : num;
-    const int64_t K = (int64_t)(cfg.sh_degree + 1) * (cfg.sh_degree + 1) - 1;
-    const int64_t K_src = src.dim_sh() - 1;
-    const int64_t K_copy = std::min(K, K_src);
+    const ColorBasis basis{cfg.sh_degree, cfg.sb_lobes};
+    const int64_t K = basis.coeffs();
+    const int64_t K_src = src.coeffs();
+    const int64_t K_copy = std::min<int64_t>(basis.sh_coeffs(), src.basis().sh_coeffs());
+    std::mt19937 rng(42);
+    std::uniform_real_distribution<float> uni(0.f, 1.f);
 
     SeedSplats s;
     s.num = num;
@@ -368,11 +378,23 @@ SeedSplats seed_splats_from_ply(const std::string& path, const TrainConfig& cfg,
 
         // A gamut change is linear and the DC carries it; the view-dependent
         // terms ride an encoded curve, so they come across as they are and the
-        // first refinements re-fit them.
+        // first refinements re-fit them. Lobes the file lacks start fresh.
         for (int64_t k = 0; k < K_copy; k++)
             for (int d = 0; d < 3; d++)
                 s.features_sh[(i*K + k)*3 + d] =
                     src.features_sh[(j*K_src + k)*3 + d];
+        float* lobes =
+            s.features_sh.data() + (i * K + basis.sh_coeffs()) * 3;
+        const float* src_lobes =
+            src.features_sh.data() + (j * K_src + src.basis().sh_coeffs()) * 3;
+        for (int l = 0; l < basis.sb_lobes; l++) {
+            if (l < src.sb_lobes)
+                std::copy(src_lobes + sb::kLobeFloats * l,
+                          src_lobes + sb::kLobeFloats * (l + 1),
+                          lobes + sb::kLobeFloats * l);
+            else
+                sb::init_lobe(uni(rng), uni(rng), lobes + sb::kLobeFloats * l);
+        }
     }
     return s;
 }
@@ -389,7 +411,7 @@ void append_point_seeds(SeedSplats& s, const ColmapPoints3D& pts,
     sub.preallocate_splat_tensors = false;
     SeedSplats p = seed_splats(pts, sub, color);
 
-    const int64_t K = (int64_t)(cfg.sh_degree + 1) * (cfg.sh_degree + 1) - 1;
+    const int64_t K = ColorBasis{cfg.sh_degree, cfg.sb_lobes}.coeffs();
     const int64_t at = s.num, total = s.num + p.num;
     if ((int64_t)s.opacities.size() < total) {
         s.means.resize((size_t)total * 3, 0.f);
@@ -532,6 +554,7 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.optim.lr_opacities   = scheduled_lr(step, max_steps_lr, c.opacities_lr);
     cfg.optim.lr_features_dc = scheduled_lr(step, max_steps_lr, c.features_dc_lr);
     cfg.optim.lr_features_sh = scheduled_lr(step, max_steps_lr, c.features_sh_lr);
+    cfg.optim.lr_features_sb = scheduled_lr(step, max_steps_lr, c.features_sb_lr);
     cfg.optim.max_gauss_ratio             = c.max_gauss_ratio;
     cfg.optim.scale_regularization_weight = c.scale_regularization_weight;
     // Front-loaded shape penalty. (p+1)(1-t)^p has unit integral over the run,
@@ -729,6 +752,11 @@ std::string train_config_unsupported(const TrainConfig& c) {
         return not_impl("--primitive " + c.primitive);
     if (c.quantization_level != 0 && c.quantization_level != 1)
         return lmsg::bad_quantization_level.get();
+    if (c.sb_lobes < 0 || c.sb_lobes > ColorBasis::kMaxSbLobes)
+        return lfmt(lmsg::bad_sb_lobes, {ColorBasis::kMaxSbLobes});
+#ifndef SS_BACKEND_VULKAN
+    if (c.sb_lobes > 0) return lmsg::sb_lobes_need_vulkan.get();
+#endif
     return {};
 }
 
@@ -1179,7 +1207,7 @@ void TrainerSession::setup_engine() {
     ColorResolution color = resolve_color(cfg);
     SeedSplats seed = seed_world(color);
     int64_t cap = (int64_t)seed.opacities.size();
-    int64_t dim_sh = (int64_t)(cfg.sh_degree + 1) * (cfg.sh_degree + 1);
+    const int64_t K = ColorBasis{cfg.sh_degree, cfg.sb_lobes}.coeffs();
     auto tv = [](std::vector<float>& v, std::vector<int64_t> shape) -> TorchTensorView {
         return {(uint64_t)(uintptr_t)v.data(), (uint32_t)sizeof(float), std::move(shape)};
     };
@@ -1189,7 +1217,8 @@ void TrainerSession::setup_engine() {
                   tv(seed.scales,      {cap, 3}),
                   tv(seed.opacities,   {cap, 1}),
                   tv(seed.features_dc, {cap, 3}),
-                  tv(seed.features_sh, {cap, dim_sh - 1, 3}));
+                  tv(seed.features_sh, {cap, K, 3}),
+                  cfg.sb_lobes);
 
     // Binning granularity for the splat-tile intersection (0 = automatic).
     engine_set_bin_tile_size(cfg.bin_tile_size);
@@ -1463,6 +1492,7 @@ void TrainerSession::restore_checkpoint() {
     ckpt::TargetLayout target;
     target.max_num_splats = engine_get_max_num_splats();
     target.num_sh         = engine_get_num_sh();
+    target.sb_lobes       = engine_get_sb_lobes();
     target.num_images     = (int)post.n_post;
     auto lhw = [](const std::array<int, 3>& xyw) {
         return std::array<int, 3>{xyw[2], xyw[1], xyw[0]};   // (X,Y,W)->(L,H,W)

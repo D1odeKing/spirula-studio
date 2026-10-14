@@ -161,21 +161,28 @@ static_assert(sizeof(NormalizeClipMapParams) == 3 * 8 + 6 * 4,
 
 // Mirrors CopyQshPairsParams.
 struct CopyQshPairsParams {
-    uint64_t src_indices, dst_indices, packed, bounds;
+    uint64_t src_indices, dst_indices, packed, bounds, ext;
     uint32_t cur_num_splats, num_pairs, num_sh, num_sh_buffer, has_dst,
-        bounds_per_splat, wgs_per_row;
-    uint32_t _pad0;
+        bounds_per_splat, wgs_per_row, grow;
 };
-static_assert(sizeof(CopyQshPairsParams) == 4 * 8 + 8 * 4,
+static_assert(sizeof(CopyQshPairsParams) == 5 * 8 + 8 * 4,
               "params layout must match the slang struct");
 
 // Mirrors CopyQshMapParams.
 struct CopyQshMapParams {
-    uint64_t index_map, packed, bounds;
-    uint32_t num_splats, num_sh, num_sh_buffer, bounds_per_splat, wgs_per_row;
-    uint32_t _pad0;
+    uint64_t index_map, packed, bounds, ext;
+    uint32_t num_splats, num_sh, num_sh_buffer, bounds_per_splat, wgs_per_row,
+        grow;
 };
-static_assert(sizeof(CopyQshMapParams) == 3 * 8 + 6 * 4,
+static_assert(sizeof(CopyQshMapParams) == 4 * 8 + 6 * 4,
+              "params layout must match the slang struct");
+
+// Mirrors WidenQshValueParams.
+struct WidenQshValueParams {
+    uint64_t packed, bounds, ext;
+    uint32_t slot_cells, num_slots, wgs_per_row, _pad0;
+};
+static_assert(sizeof(WidenQshValueParams) == 3 * 8 + 4 * 4,
               "params layout must match the slang struct");
 
 // Mirrors McmcProbsParams.
@@ -391,7 +398,47 @@ const int32_t* wswr_sample(int64_t numel, const float* weights_ptr,
     return out_idx.data_ptr();
 }
 
-// SH value-codec copy dispatch (pairs form). No-op when bits == 32.
+// The SH value codec's bound slots covering splats [0, num_splats), in
+// DensifyQuantCopy.cuh's terms; `ext` gets one empty widening key pair each.
+struct QshWiden {
+    DeviceVector<uint32_t> ext;
+    int64_t slots = 0;
+    uint32_t slot_cells = 0;
+};
+
+QshWiden qsh_widen_begin(int64_t num_splats, int num_sh_buffer,
+                         bool bounds_per_splat) {
+    QshWiden w;
+    const int64_t R = 3 * (int64_t)num_sh_buffer;
+    const int64_t slot_cells = bounds_per_splat ? ((R + 1) >> 1) * 512 : 256;
+    const int64_t cells = bounds_per_splat
+                              ? ((num_splats + 255) / 256) * slot_cells
+                              : num_splats * R;
+    w.slots = (cells + slot_cells - 1) / slot_cells;
+    w.slot_cells = (uint32_t)slot_cells;
+    w.ext.resize(PoolSlot::DensifyQshValueExt, 2 * w.slots);
+    backend::memset_async(w.ext.data_ptr(), 0xff,
+                          sizeof(uint32_t) * 2 * w.slots,
+                          backend::kDefaultStream);
+    return w;
+}
+
+void qsh_widen_apply(const QshWiden& w, uint8_t* packed, float2* bounds,
+                     int bits) {
+    WidenQshValueParams p{};
+    p.packed = (uint64_t)packed;
+    p.bounds = (uint64_t)bounds;
+    p.ext = (uint64_t)w.ext.data_ptr();
+    p.slot_cells = w.slot_cells;
+    p.num_slots = (uint32_t)w.slots;
+    vkk::dispatch_flat("densify.densify_widen_qsh_value",
+                       backend::vk::SpecList{0u, (uint32_t)bits},
+                       w.slots * 256, 256, &p, sizeof(p), &p.wgs_per_row);
+}
+
+// SH value-codec copy dispatch (pairs form). No-op when bits == 32. Every
+// dst lies below cur_num_splats, or is cur_num_splats + pair without
+// dst_indices.
 void launch_copy_qsh_pairs(int64_t cur_num_splats, int64_t num_pairs,
                            const int32_t* src_indices,
                            const int32_t* dst_indices, uint8_t* packed,
@@ -401,11 +448,15 @@ void launch_copy_qsh_pairs(int64_t cur_num_splats, int64_t num_pairs,
         return;
     if (bits != 8 && bits != 16)
         throw std::runtime_error("densify: sh_value_bits must be 32, 8 or 16");
+    QshWiden w = qsh_widen_begin(
+        cur_num_splats + (dst_indices ? 0 : num_pairs), num_sh_buffer,
+        bounds_per_splat);
     CopyQshPairsParams p{};
     p.src_indices = (uint64_t)src_indices;
     p.dst_indices = vkk::or_fallback(dst_indices);
     p.packed = (uint64_t)packed;
     p.bounds = (uint64_t)bounds;
+    p.ext = (uint64_t)w.ext.data_ptr();
     p.cur_num_splats = (uint32_t)cur_num_splats;
     p.num_pairs = (uint32_t)num_pairs;
     p.num_sh = (uint32_t)num_sh;
@@ -414,9 +465,13 @@ void launch_copy_qsh_pairs(int64_t cur_num_splats, int64_t num_pairs,
     p.bounds_per_splat = bounds_per_splat ? 1u : 0u;
     // Spec IDs follow declaration order in densify.slang: 0 = kShOptimBits
     // (unused by the copy kernels), 1 = kShValueBits.
-    vkk::dispatch_flat("densify.densify_copy_qsh_pairs",
-                       backend::vk::SpecList{0u, (uint32_t)bits}, num_pairs,
-                       256, &p, sizeof(p), &p.wgs_per_row);
+    for (uint32_t grow : {1u, 0u}) {
+        p.grow = grow;
+        vkk::dispatch_flat("densify.densify_copy_qsh_pairs",
+                           backend::vk::SpecList{0u, (uint32_t)bits},
+                           num_pairs, 256, &p, sizeof(p), &p.wgs_per_row);
+        if (grow) qsh_widen_apply(w, packed, bounds, bits);
+    }
 }
 
 // SH value-codec copy dispatch (index-map form).
@@ -428,17 +483,23 @@ void launch_copy_qsh_map(int64_t num_splats, const int32_t* index_map,
         return;
     if (bits != 8 && bits != 16)
         throw std::runtime_error("densify: sh_value_bits must be 32, 8 or 16");
+    QshWiden w = qsh_widen_begin(num_splats, num_sh_buffer, bounds_per_splat);
     CopyQshMapParams p{};
     p.index_map = (uint64_t)index_map;
     p.packed = (uint64_t)packed;
     p.bounds = (uint64_t)bounds;
+    p.ext = (uint64_t)w.ext.data_ptr();
     p.num_splats = (uint32_t)num_splats;
     p.num_sh = (uint32_t)num_sh;
     p.num_sh_buffer = (uint32_t)num_sh_buffer;
     p.bounds_per_splat = bounds_per_splat ? 1u : 0u;
-    vkk::dispatch_flat("densify.densify_copy_qsh_map",
-                       backend::vk::SpecList{0u, (uint32_t)bits}, num_splats,
-                       256, &p, sizeof(p), &p.wgs_per_row);
+    for (uint32_t grow : {1u, 0u}) {
+        p.grow = grow;
+        vkk::dispatch_flat("densify.densify_copy_qsh_map",
+                           backend::vk::SpecList{0u, (uint32_t)bits},
+                           num_splats, 256, &p, sizeof(p), &p.wgs_per_row);
+        if (grow) qsh_widen_apply(w, packed, bounds, bits);
+    }
 }
 
 // MCMC sampling-probability + cumsum stage shared by relocate/add.

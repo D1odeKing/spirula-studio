@@ -51,11 +51,7 @@ int engine_densify_step(int step, int max_steps, const DensifyConfig& cfg) {
               "(only 4-bit and 8-bit are wired through the dst zero-encoding).");
     }
     // SH VALUE-quant: pick the right buffer (cell-block or FPBO layout) for
-    // the codec-aware src->dst copy. We use clipping (no atomic bounds
-    // expansion) -- inheritance precision is lost in the first densify step
-    // but the FPBO writeback's block-wide (min, max) reduction expands the
-    // bound on the next training step, so the child splat adapts within one
-    // iteration. See `_copy_quant_sh_value_for_splat` for the rationale.
+    // the codec-aware src->dst copy (`_copy_quant_sh_value_for_splat`).
     int  sh_value_bits = engine().world.sh_value_bits;
     DeviceVector<uint8_t> dv_sh_value_packed;
     DeviceVector<float2>  dv_sh_value_bounds;

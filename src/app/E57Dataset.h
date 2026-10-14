@@ -68,16 +68,19 @@ bool extract_e57_images(const std::string& input, const std::string& images_dir,
                         bool pinhole, bool spherical,
                         const std::atomic<bool>* cancel = nullptr);
 
-// What the E57 screen previews: every image that would become a camera, and a
-// uniform draw of about `max_points` points, in the file frame. Empty when
-// `cancel` stopped it.
-struct E57Preview {
+// A scan (E57, LAS or PLY) as the dataset screen previews it: an E57's images
+// that would become cameras, and a uniform draw of about `max_points` points
+// in the file frame. Empty when cancelled; `read` counts points streamed.
+struct ScanPreview {
     std::vector<E57Camera> cameras;
+    std::vector<std::string> names;   // one per camera
     std::vector<double> xyz;
     std::vector<uint8_t> rgb;
+    int64_t streamed = 0;
 };
-E57Preview read_e57_preview(const std::string& path, int64_t max_points,
-                            const std::atomic<bool>* cancel = nullptr);
+ScanPreview read_scan_preview(const std::string& path, int64_t max_points,
+                              const std::atomic<bool>* cancel = nullptr,
+                              std::atomic<int64_t>* read = nullptr);
 
 // Thins the cloud in place to at most `target` points, one per occupied voxel
 // (the mean of its points). Returns the voxel edge, 0 when nothing was merged.

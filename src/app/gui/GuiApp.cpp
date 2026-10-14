@@ -8,6 +8,7 @@
 #include "dense/ConfigFields.h"
 #include "dense/Artifact.h"
 
+#include "core/ColorBasis.h"
 #include "core/ColorSpace.h"
 #include "core/ImageFile.h"
 
@@ -47,6 +48,7 @@
 #include "i18n/catalog/Partition.h"
 #include "i18n/catalog/Render.h"
 #include "i18n/catalog/Roi.h"
+#include "i18n/catalog/SourcePreview.h"
 #include "i18n/catalog/Train.h"
 #include "i18n/catalog/TrainFields.h"
 
@@ -97,6 +99,7 @@ namespace gmsg = spirula::i18n::msg::geometry;
 namespace tmsg = spirula::i18n::msg::train;
 namespace rmsg = spirula::i18n::msg::render;
 namespace mmsg = spirula::i18n::msg::maskedit;
+namespace svmsg = spirula::i18n::msg::preview;
 using spirula::i18n::Msg;
 using spirula::format_duration;
 
@@ -358,6 +361,7 @@ void GuiApp::shutdown() {
     _colmap.shutdown();
     _sfm.shutdown();
     reset_dataset_preview();
+    close_source_preview();
     _source_probe.stop();
     _download.cancel();
     _geom_download.cancel();
@@ -725,6 +729,11 @@ void GuiApp::write_run_settings(std::ofstream& f) {
         if (const std::string lut = input_lut(_sources, i); _sources[i].is_video && !lut.empty())
             line("video_lut:" + (_sources[i].subdir.empty() ? _sources[i].path : _sources[i].subdir),
                  lut);
+    for (const PrepInput& s : _sources)
+        if (s.clipped())
+            line("video_clip:" + (s.subdir.empty() ? s.path : s.subdir),
+                 cfg_str((float)s.clip_start) + "-" +
+                     (s.clip_end > 0.0 ? cfg_str((float)s.clip_end) : std::string("end")));
     line("sharp_window", std::to_string(j.prep.sharp_window));
     line("sync_tracks", cfg_str(j.prep.sync_tracks));
     line("max_frames", std::to_string(j.prep.max_frames));
@@ -1212,6 +1221,7 @@ void GuiApp::open_dataset(std::string dir, std::string image_dir,
     // Training is the end of the dataset screen's business with the run, so
     // this is where what it left for the screen to read goes.
     reset_dataset_preview();
+    close_source_preview();
     _runner.load_dataset(_cfg, _preset);
     _screen = Screen::Train;
 }
@@ -1384,6 +1394,8 @@ void GuiApp::close_splat() {
     _mesh_preview_open = false;
 }
 void GuiApp::close_native_previews() {
+    // Back to idle on the device before whatever closes these opens the next user.
+    _source_view.yield_gpu();
     _segment.close();
     _geometry_panel.close();
     _partition_panel.close();
@@ -2696,6 +2708,8 @@ bool GuiApp::add_sources(const std::vector<std::string>& paths, bool replace) {
     if (!inputs.empty()) mark_source_metadata_dirty();
     if (_sources.empty()) return false;
     const DatasetSettings before = capture_dataset_settings();
+    // What was just added is what the user wants to look at.
+    if (first_new < _sources.size()) select_source(_sources[first_new].path, false);
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
     reapply_dataset_builtin(before);
     if (_mask_preview_input >= (int)_sources.size()) _mask_preview_input = 0;
@@ -4404,6 +4418,8 @@ bool GuiApp::launch_dataset_job() {
     const RunFilms films{&_film_frames, &_film_masks, &_film_geometry};
     if (effective_engine() == Engine::BuiltIn) _sfm.start(_sfm_job, films);
     else                                      _colmap.start(_colmap_job, films);
+    // A run is what the column is for while it goes.
+    _right_input = false;
     // One run each: a re-do that stayed armed would throw the same step away
     // again the next time the button is pressed.
     forget_redo_requests();
@@ -4511,6 +4527,15 @@ void GuiApp::draw_sensor_toggles(PrepInput& s) {
 
 namespace {
 
+// A clip's ends on an input row: "00:01:23.4", the hour always there.
+std::string clip_clock(double s) {
+    const long long ds = (long long)std::floor(std::max(s, 0.0) * 10.0 + 0.5);
+    char b[48];
+    std::snprintf(b, sizeof b, "%02lld:%02lld:%02lld.%lld", ds / 36000, (ds / 600) % 60,
+                  (ds / 10) % 60, ds % 10);
+    return b;
+}
+
 // The rate box's text, with the unit; "0 fps" is every frame. A row following
 // the one above shows the caret the lens column uses for the same idea.
 std::string fps_label(float fps) {
@@ -4606,12 +4631,17 @@ void GuiApp::draw_dataset_source() {
     const float path_w =
         std::max(min_path, avail - controls_w - (one_line ? info_w : 0.0f));
     float row_controls = 0.0f, row_info = 0.0f;
+    _source_row_h.resize(_sources.size(), 0.0f);
+    const int selected = _source_sel_scan ? -1 : selected_source();
     for (size_t i = 0; i < _sources.size(); i++) {
         PrepInput& s = _sources[i];
         ImGui::PushID((int)i);
+        const float row_y = ImGui::GetCursorScreenPos().y;
+        if (row_select_begin(_source_row_h[i], (int)i == selected)) select_source(s.path, false);
         ImGui::SetNextItemWidth(path_w);
         std::string& path_edit = _source_path_edits[i];
         ui::InputTextRaw("##in", &path_edit);
+        if (ImGui::IsItemActivated()) select_source(s.path, false);
         const float path_right = ImGui::GetItemRectMax().x;
         // A typed path is only worth resolving once it is finished -- rewriting
         // `<folder>` to `<folder>/images` under the cursor is not helpful.
@@ -4727,7 +4757,17 @@ void GuiApp::draw_dataset_source() {
                                                          ? app::lut_display_name(lut)
                                                          : lut});
         }
+        // Set on the preview's timeline, which is not always on screen.
+        if (s.clipped()) {
+            ImGui::SameLine();
+            ui::TextDisabled(svmsg::row_clip,
+                             {clip_clock(s.clip_start),
+                              s.clip_end > 0.0 ? clip_clock(s.clip_end)
+                                               : std::string(svmsg::row_clip_end.get())});
+            ui::help_on_hover(svmsg::row_clip_help);
+        }
         row_info = std::max(row_info, ImGui::GetItemRectMax().x - info_left);
+        _source_row_h[i] = ImGui::GetCursorScreenPos().y - row_y - ImGui::GetStyle().ItemSpacing.y;
         ImGui::PopID();
     }
     if (!_sources.empty()) {
@@ -5358,6 +5398,8 @@ PreviewSource GuiApp::preview_source(size_t input) const {
     src.image_is_linear = _sfm_job.image_is_linear;
     src.image_exposure = _sfm_job.image_exposure;
     src.look.auto_rotate = _sfm_job.prep.auto_rotate;
+    src.clip_start = in.clip_start;
+    src.clip_end = in.clip_end;
     if (in.pano360.valid() && _sfm_job.prep.pano.mode != app::Pano360Mode::Off) {
         src.look.eac = in.pano360;
         src.look.views = app::pano360_views(in.pano360, _sfm_job.prep.pano);
@@ -6260,6 +6302,174 @@ int draw_view_tabs(const Msg* const* names, const bool* avail, int n, int implie
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// The input preview (SourcePreview.h)
+// ---------------------------------------------------------------------------
+
+void GuiApp::select_source(const std::string& path, bool scan) {
+    _source_sel = path;
+    _source_sel_scan = scan;
+    _right_input = true;
+}
+
+int GuiApp::selected_source() const {
+    if (_source_sel_scan) return -1;
+    for (size_t i = 0; i < _sources.size(); i++)
+        if (_sources[i].path == _source_sel) return (int)i;
+    return -1;
+}
+
+int GuiApp::selected_scan() const {
+    if (!_source_sel_scan) return -1;
+    for (size_t i = 0; i < _lidar.size(); i++)
+        if (_lidar[i].path == _source_sel) return (int)i;
+    return -1;
+}
+
+bool GuiApp::source_preview_available() const {
+    return selected_source() >= 0 || selected_scan() >= 0;
+}
+
+bool GuiApp::run_preview_available() {
+    return preview_has_content() || !dataset_steps()->scan().empty() ||
+           !_dense_preview_error.empty() || _dense_live;
+}
+
+PreviewInput GuiApp::source_preview_input() const {
+    PreviewInput in;
+    if (const int k = selected_scan(); k >= 0) {
+        in.kind = PreviewInput::Kind::Scan;
+        in.path = _lidar[(size_t)k].path;
+        return in;
+    }
+    const int i = selected_source();
+    if (i < 0) return in;
+    const PrepInput& s = _sources[(size_t)i];
+    std::error_code ec;
+    if (s.path.empty() || (s.is_video ? !fs::is_regular_file(s.path, ec)
+                                      : !fs::is_directory(s.path, ec)))
+        return in;
+    in.kind = s.is_video ? PreviewInput::Kind::Video : PreviewInput::Kind::Photos;
+    in.path = s.path;
+    in.src = preview_source((size_t)i);
+    in.src.clip_start = in.src.clip_end = 0.0;
+    in.pano = s.pano360;
+    in.pano_orient = _sfm_job.prep.pano;
+    in.mask_dir = s.mask_dir;
+    in.mask_flipped = _use_found_masks && _flip_found_masks;
+    in.kept_fps = input_fps(_sources, _sfm_job.prep.video_fps, (size_t)i);
+    in.clip_locked = dataset_busy();
+    if (s.is_video)
+        if (const std::string lut = input_lut(_sources, (size_t)i); !lut.empty())
+            in.lut = app::is_builtin_lut(lut) ? app::lut_display_name(lut) : lut;
+    return in;
+}
+
+void GuiApp::update_source_preview_gpu() {
+    if (_ffmpeg_checked != _ffmpeg_exe) {
+        _ffmpeg_checked = _ffmpeg_exe;
+        _ffmpeg_found = command_exists(_ffmpeg_exe);
+    }
+    // The inference device is one set of queues: nothing else may be on it,
+    // and the choice of device must already be made, which a preview never
+    // makes on its own (the button under the frame does, on request).
+    const bool gpu = _native_device_frozen && !native_work_busy() && !_segment.is_open() &&
+                     !_geometry_panel.is_open() && !_mask_editor.is_open();
+    _source_view.set_gpu(gpu, _ffmpeg_found);
+}
+
+void GuiApp::close_source_preview() {
+    _source_view.destroy_gl();
+    _source_view.clear();
+}
+
+void GuiApp::draw_dataset_right(float height) {
+    const bool run = run_preview_available();
+    const bool input = source_preview_available();
+    if (run && input) {
+        if (ui::RadioButton(svmsg::pane_input, _right_input)) _right_input = true;
+        ui::help_on_hover(svmsg::pane_input_help);
+        ImGui::SameLine();
+        if (ui::RadioButton(svmsg::pane_run, !_right_input)) _right_input = false;
+        ui::help_on_hover(svmsg::pane_run_help);
+    }
+    if (input && (!run || _right_input)) {
+        draw_source_preview(height);
+        return;
+    }
+    _source_view.pause();
+    draw_dataset_preview(height);
+}
+
+void GuiApp::draw_source_preview(float height) {
+    // On the GPU a video seeks in tens of milliseconds and plays; through
+    // ffmpeg a 4K frame takes over a second. So the first video shown makes
+    // the device choice, as opening a mask preview does.
+    if (!_native_device_frozen && !_source_gpu_asked && !native_work_busy()) {
+        const int i = selected_source();
+        if (selected_scan() < 0 && i >= 0 && _sources[(size_t)i].is_video &&
+            preview_source((size_t)i).builtin_decode) {
+            _source_gpu_asked = true;
+            if (freeze_native_device()) update_source_preview_gpu();
+        }
+    }
+    _source_view.show(source_preview_input());
+    if (!_source_view.active()) return;
+    float h = height;
+    if (h <= 0.0f) {
+        // Under the form, as the run's preview is: a splitter sets its share.
+        h = px(_source_preview_h);
+        float want = h;
+        if (splitter_h("##sourcepreviewsplit", &want, px(160.0f), px(900.0f),
+                       ImGui::GetContentRegionAvail().x)) {
+            _source_preview_h = want / ui_scale();
+            _layout_dirty = true;
+            h = want;
+        }
+    } else {
+        h = std::max(px(80.0f), h - ImGui::GetCursorPosY() + ImGui::GetCursorStartPos().y);
+    }
+    const int i = selected_source();
+    PrepInput* video = i >= 0 && _sources[(size_t)i].is_video ? &_sources[(size_t)i] : nullptr;
+    ImGui::BeginChild("##sourcepreview", ImVec2(0, h));
+    const SourcePreview::Result r =
+        _source_view.draw(ImGui::GetContentRegionAvail().y, video ? &video->clip_start : nullptr,
+                          video ? &video->clip_end : nullptr);
+    ImGui::EndChild();
+    if (r.want_gpu) freeze_native_device();
+    if (r.clip_changed && video) {
+        // Frames offered by an open mask preview, and clicks drawn on them,
+        // were placed in the old clip.
+        if (_segment.is_open() || _geometry_panel.is_open()) close_native_previews();
+        auto& clicks = _mask.clicks;
+        const size_t before = clicks.size();
+        clicks.erase(std::remove_if(clicks.begin(), clicks.end(),
+                                    [&](const MaskClick& c) {
+                                        return c.source == video->path ||
+                                               (c.source.empty() && _sources.size() == 1);
+                                    }),
+                     clicks.end());
+        if (clicks.size() != before) {
+            log(i18n::format(svmsg::log_clicks_dropped_clip, {video->path}));
+            if (clicks.empty()) {
+                _mask.object_count = 1;
+                _mask.current_object = 0;
+            }
+        }
+    }
+}
+
+bool GuiApp::row_select_begin(float last_h, bool selected) {
+    // Behind the row's own widgets, which take the clicks they cover; the
+    // rest of the row selects it.
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ImGui::SetNextItemAllowOverlap();
+    const bool hit = ui::SelectableRaw("##row", selected, ImGuiSelectableFlags_AllowOverlap,
+                                       ImVec2(0.0f, last_h > 0.0f ? last_h : ImGui::GetFrameHeight()));
+    ImGui::SetCursorScreenPos(at);
+    return hit;
+}
 
 void GuiApp::draw_dataset_steps() {
     // The plan last drawn or launched: what this run will do at each step.
@@ -7585,7 +7795,7 @@ std::string plan_key_label(const std::string& key) {
         {"mask_threshold", &dmsg::mask_threshold}, {"geometry_model", &dmsg::geom_model},
         {"geometry_max_size", &dmsg::geom_max_size},
         {"geometry_tokens", &dmsg::geom_num_tokens},
-        {"jpeg_quality", &dmsg::geom_jpeg_quality},
+        {"jpeg_quality", &dmsg::geom_jpeg_quality}, {"clip", &svmsg::plan_clip},
     };
     for (const auto& [k, m] : labels)
         if (key == k) return m->get();
@@ -8520,6 +8730,7 @@ void GuiApp::draw_new_dataset() {
         // The preview holds GL buffers and a decoding thread for a screen that
         // is no longer up.
         if (!native_work_busy()) reset_dataset_preview();
+        close_source_preview();
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
@@ -8558,7 +8769,8 @@ void GuiApp::draw_new_dataset() {
     // window the preview goes under the form instead, which is worth less but
     // costs the form nothing it cannot scroll.
     const bool wide = ImGui::GetContentRegionAvail().x >= px(1000.0f);
-    const bool two_col = preview_has_content() && wide;
+    update_source_preview_gpu();
+    const bool two_col = (preview_has_content() || source_preview_available()) && wide;
 
     ImGui::BeginChild("##dsbody", ImVec2(0, body_height(log_h) - strip_h));
     if (two_col) {
@@ -8576,8 +8788,8 @@ void GuiApp::draw_new_dataset() {
             _layout_dirty = true;
         }
         ImGui::BeginGroup();
-        draw_dataset_steps();
-        draw_dataset_preview(ImGui::GetContentRegionAvail().y);
+        if (running || preview_has_content()) draw_dataset_steps();
+        draw_dataset_right(ImGui::GetContentRegionAvail().y);
         ImGui::EndGroup();
     } else {
         const float avail = ImGui::GetContentRegionAvail().y;
@@ -8586,7 +8798,7 @@ void GuiApp::draw_new_dataset() {
         draw_dataset_form(avail - _ds_preview_h_used, running);
         const float y0 = ImGui::GetCursorPosY();
         if (running) draw_dataset_steps();
-        draw_dataset_preview(0.0f);
+        draw_dataset_right(0.0f);
         _ds_preview_h_used = ImGui::GetCursorPosY() - y0;
     }
     ImGui::EndChild();
@@ -11464,6 +11676,20 @@ void GuiApp::draw_basic_options() {
     if (ui::SliderInt(msg::opt_sh_degree, &_cfg.sh_degree, 0, 4))
         _cfg_ui.touched.insert("sh_degree");
     ui::help_on_hover(msg::opt_sh_degree_help);
+
+// #ifdef SS_BACKEND_VULKAN
+#if 0
+    // Shows the SH degree the lobes leave (train_resolve_macros), rather
+    // than the one the run would quietly replace.
+    ImGui::SetNextItemWidth(w);
+    if (ui::SliderInt(fld::sb_lobes, &_cfg.sb_lobes, 0,
+                      ColorBasis::kMaxSbLobes)) {
+        _cfg_ui.touched.insert("sb_lobes");
+        if (!_cfg_ui.touched.count("sh_degree"))
+            _cfg.sh_degree = _cfg.sb_lobes > 0 ? 0 : _defaults.sh_degree;
+    }
+    ui::help_on_hover(fld::sb_lobes_help);
+#endif
 
     if (ui::Checkbox(msg::opt_bilateral_grid, &_cfg.use_bilateral_grid))
         _cfg_ui.touched.insert("use_bilateral_grid");

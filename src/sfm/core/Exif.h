@@ -55,6 +55,7 @@ struct ExifData {
     // GPS, from the separate IFD tag 0x8825 points at. Degrees, signed by the
     // hemisphere ref; altitude negated when GPSAltitudeRef says below sea level.
     bool has_gps = false;
+    bool gps_zero = false;      // a GPS block at 0, 0: written with no fix, so not has_gps
     bool has_alt = false;
     double lat_deg = 0, lon_deg = 0, alt_m = 0;
 
@@ -205,6 +206,11 @@ inline void parseGpsIfd(const TiffReader& r, size_t off, ExifData& out) {
         }
     }
     if (!has_lat || !has_lon || !lat_ref || !lon_ref) return;
+    // Zeros are what a camera writes with no fix, not a position.
+    if (lat[0] == 0 && lat[1] == 0 && lat[2] == 0 && lon[0] == 0 && lon[1] == 0 && lon[2] == 0) {
+        out.gps_zero = true;
+        return;
+    }
     out.lat_deg = lat[0] + lat[1] / 60.0 + lat[2] / 3600.0;
     out.lon_deg = lon[0] + lon[1] / 60.0 + lon[2] / 3600.0;
     if (lat_ref == 'S' || lat_ref == 's') out.lat_deg = -out.lat_deg;

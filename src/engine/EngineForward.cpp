@@ -263,6 +263,8 @@ void forward_3dgs(
         }
     }
 
+    const ColorBasis color{sh_degree, engine().sb_lobes};
+
     // --- Projection ---
     if (packed) {
         DeviceVector<int32_t> cam_ids, gauss_ids;
@@ -271,7 +273,7 @@ void forward_3dgs(
 
         if (primitive == "3dgs") {
             auto [a, b, c, d, e] = projection_3dgs_packed_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -282,7 +284,7 @@ void forward_3dgs(
             engine().fwd.splats_s = e;
         } else if (primitive == "mip") {
             auto [a, b, c, d, e] = projection_mip_packed_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -293,7 +295,7 @@ void forward_3dgs(
             engine().fwd.splats_s = e;
         } else if (primitive == "3dgut") {
             auto [a, b, c, d, e] = projection_3dgut_packed_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -317,7 +319,7 @@ void forward_3dgs(
 
         if (primitive == "3dgs") {
             auto [a, b, c] = projection_3dgs_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -328,7 +330,7 @@ void forward_3dgs(
             engine().fwd.splats_s = c;
         } else if (primitive == "mip") {
             auto [a, b, c] = projection_mip_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -339,7 +341,7 @@ void forward_3dgs(
             engine().fwd.splats_s = c;
         } else if (primitive == "3dgut") {
             auto [a, b, c] = projection_3dgut_forward(
-                engine().cur_num_splats, sh_degree, in_splats,
+                engine().cur_num_splats, color, in_splats,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,

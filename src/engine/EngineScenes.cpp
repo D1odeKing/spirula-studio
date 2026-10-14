@@ -19,6 +19,7 @@ struct Scene {
     int64_t cur_num_splats = 0;
     int64_t max_num_splats = 0;
     int num_sh = 0;
+    int sb_lobes = 0;
     bool cs_enabled = false;
     int  cs_transfer = 0;
     bool cs_is_linear = false;
@@ -87,7 +88,8 @@ void engine_scene_set_data_3dgs(
     TorchTensorView scales,
     TorchTensorView opacities,
     TorchTensorView features_dc,
-    TorchTensorView features_sh
+    TorchTensorView features_sh,
+    int sb_lobes
 ) {
     Scene& s = at(slot);
     const int64_t max_num_splats = std::get<2>(means)[0];
@@ -113,6 +115,11 @@ void engine_scene_set_data_3dgs(
 
     const auto& sh_shape = std::get<2>(features_sh);
     s.num_sh = (sh_shape.size() >= 2) ? (int)sh_shape[1] : 0;
+    if (sb_lobes < 0 || 2 * sb_lobes > s.num_sh)
+        throw std::runtime_error("engine_scene_set_data_3dgs: a features_sh row of " +
+                                 std::to_string(s.num_sh) + " coefficients cannot hold " +
+                                 std::to_string(sb_lobes) + " lobes");
+    s.sb_lobes = sb_lobes;
     s.cur_num_splats = num_splats;
     s.max_num_splats = max_num_splats;
     s.loaded = true;
@@ -182,6 +189,7 @@ void engine_scene_activate(int slot) {
     engine().max_num_splats = s.max_num_splats;
     DevicePool::global().set_splat_counts(engine().cur_num_splats, engine().max_num_splats);
     engine().num_sh = s.num_sh;
+    engine().sb_lobes = s.sb_lobes;
     if (g_cs_slot != slot || g_cs_gen != s.cs_gen) {
         engine_init_color_space(s.cs_enabled, s.cs_transfer, s.cs_is_linear,
                                 s.cs_matrix, false, 0, false,

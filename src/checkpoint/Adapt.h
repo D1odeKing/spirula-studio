@@ -1,20 +1,14 @@
 #pragma once
 
-// Checkpoint layout adaptation: rewrite a checkpoint's saved buffers to a
-// layout different from the one they were written at, so training can resume
-// with fewer Gaussians, a different SH degree, or with/without bilagrid/PPISP.
-// The result is an ordinary state.tar that the unchanged (exact-match)
-// engine_load_checkpoint() then loads.
+// Checkpoint layout adaptation: rewrite a checkpoint's saved buffers so
+// training can resume with fewer Gaussians, another SH degree or lobe count,
+// or with/without bilagrid/PPISP; engine_load_checkpoint() then loads the
+// result exactly. Host-only, buffer at a time -- the motivating case is a run
+// that just ran out of VRAM -- and quantized buffers go through the engine's
+// own codecs in core/Tensor.h.
 //
-// Everything runs on the host, buffer at a time -- the motivating case is
-// resuming a run that just ran out of VRAM, so the adaptation cannot need any.
-// Quantized buffers are decoded and re-encoded through the engine's own codecs
-// in core/Tensor.h, not a copy of them.
-//
-// Splat reduction policy (target count = min(cur_ckpt, max_new)):
-//   1. drop the tail (newest splats) by up to the checkpoint's unsaturated
-//      slack (max_ckpt - cur_ckpt), then
-//   2. drop the rest by lowest opacity.
+// Splats past min(cur_ckpt, max_new) go newest first, by up to the
+// checkpoint's unsaturated slack (max_ckpt - cur_ckpt), then faintest first.
 
 #include "data/Json.h"
 
@@ -29,7 +23,8 @@ namespace ckpt {
 // also depends on the dataset carrying those maps, which only setup knows.
 struct TargetLayout {
     int64_t max_num_splats = 0;
-    int     num_sh         = 0;    // non-DC SH coefficients per colour channel
+    int     num_sh         = 0;    // float3 per features_sh row, lobes included
+    int     sb_lobes       = 0;
     int     num_images     = 0;    // POST-split camera count
     // Grid extents as (L, H, W); unset means the target has no such channel.
     std::optional<std::array<int, 3>> bilagrid_rgb;

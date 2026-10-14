@@ -2,8 +2,9 @@
 // DC/SH kernels): one step from identical state and identical world gradients
 // must move every splat parameter the same way, or a dataset large enough to
 // pick the split-batch path trains under a different update law. Self-checking
-// on either backend; `v_splats_screen` is zeroed so the fused
-// projection-backward half contributes nothing and only the optimizers differ.
+// on either backend, and on Vulkan again with spherical-beta lobes in the
+// colour rows; `v_splats_screen` is zeroed so the fused projection-backward
+// half contributes nothing and only the optimizers differ.
 //
 //   ./fpbo_split_parity
 
@@ -23,16 +24,17 @@ using backend::MemcpyKind;
 static constexpr int64_t N = 3072;
 static constexpr int64_t C = 2;
 static constexpr uint32_t W = 200, H = 150;
-static constexpr int NUM_SH = 15;
 static constexpr int MAX_DEG = 3;
 static constexpr int64_t NB = (N + 255) / 256;
-static constexpr int64_t SH_CELLS = N * NUM_SH * 3;
+// The colour row: 15 SH coefficients, then the lobes of the run in progress.
+static int NUM_SH = 15;
+static int64_t SH_CELLS = N * NUM_SH * 3;
 
 static constexpr float kLrMeans = 1.6e-4f, kLrQuats = 1e-3f;
 static constexpr float kLrScales = 5e-3f, kLrOpacs = 5e-2f;
 // Colour rates far above the presets': the trust-region rails have to
 // bind, or a path that never clips still matches one that does.
-static constexpr float kLrDc = 2.5e-3f, kLrSh = 5e-2f;
+static constexpr float kLrDc = 2.5e-3f, kLrSh = 5e-2f, kLrSb = 2e-2f;
 static constexpr float kDcReg = 0.02f, kShReg = 0.05f;
 static constexpr float kEpsTr = 1e-8f;  // small enough that the rails bind
 static constexpr int32_t kStep = 10;
@@ -73,7 +75,12 @@ static float decode_sh16(const std::vector<uint16_t>& packed,
     return mm.x + (mm.y - mm.x) * ((float)packed[(size_t)c] * (1.0f / 65535.0f));
 }
 
-int main() {
+static int run(int lobes) {
+    NUM_SH = 15 + 2 * lobes;
+    SH_CELLS = N * NUM_SH * 3;
+    const ColorBasis basis{MAX_DEG, lobes};
+    SbOptimCells sb_cells;
+    if (lobes > 0) sb_cells = {45, kLrSb};
     std::mt19937 rng(4242u);
     auto uf = [&](float lo, float hi) {
         return lo + (hi - lo) * (float)(rng() & 0xffffff) / 16777215.0f;
@@ -95,6 +102,10 @@ int main() {
         for (int k = 0; k < 3; k++) dc[3 * i + k] = uf(-0.5f, 1.5f);
     }
     for (auto& v : sh) v = uf(-0.3f, 0.3f);
+    // Lobes inside the codec's [-0.5, 0.5] init bounds, below.
+    for (int64_t i = 0; i < N; i++)
+        for (int k = 45; k < 3 * NUM_SH; k++)
+            sh[i * 3 * NUM_SH + k] = uf(-0.45f, 0.45f);
 
     // Gradients and Adam state, shared by both paths. The SH data gradient
     // stays zero: FPBO derives it in-kernel from the camera loop and never
@@ -166,8 +177,8 @@ int main() {
 
     for (const Cfg& cfg : cfgs) {
         const bool level1 = cfg.level == 1;
-        std::printf("level %d, color_trust_linear %d\n", cfg.level,
-                    (int)cfg.ctl);
+        std::printf("lobes %d, level %d, color_trust_linear %d\n", lobes,
+                    cfg.level, (int)cfg.ctl);
         backend::memset_sync(d_radii, 0, N * sizeof(float));
 
         // ---- fused path ----
@@ -187,7 +198,7 @@ int main() {
         };
 
         auto fwd = projection_3dgs_forward(
-            N, MAX_DEG, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
+            N, basis, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
             "PINHOLE", dist_fixture::kTierNames[0],
             ttv(d_dist, {C, kCameraDistortionParams}), radii, std::nullopt,
             std::nullopt, (uint32_t)NUM_SH, 32, 256);
@@ -247,13 +258,14 @@ int main() {
 
         float* f_score = upload(std::vector<float>(N, 0.f));
         fused_projection_bwd_optimizer_3dgs(
-            N, MAX_DEG, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
+            N, basis, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
             "PINHOLE", dist_fixture::kTierNames[0],
             ttv(d_dist, {C, kCameraDistortionParams}), DeviceVector<int32_t>{},
             DeviceVector<int32_t>{}, aabb, v_world, v_screen, g1_world,
             g2_world, shq, shq_b, shv, shv_b, f_non_sh, SplatVisitState{}, radii,
             dv<float>(f_score, N), kLrMeans, kLrQuats,
-            kLrScales, kLrOpacs, kLrDc, kLrSh, /*max_gauss_ratio=*/10.f,
+            kLrScales, kLrOpacs, kLrDc, kLrSh, kLrSb,
+            /*max_gauss_ratio=*/10.f,
             /*scale_reg=*/0.1f, /*mcmc_op=*/0.01f, /*mcmc_scale=*/0.01f,
             /*erank=*/0.1f, /*erank_s3=*/0.02f, /*quat_norm=*/0.01f, kDcReg,
             kShReg, /*max_screen_size=*/0.02f, /*max_screen_size_penalty=*/1.f,
@@ -352,7 +364,8 @@ int main() {
                     ttv(s_sh, {N, NUM_SH, 3}), ttv(s_v[5], {N, NUM_SH, 3}),
                     ttv(s_g1[5], {N, NUM_SH, 3}), ttv(s_g2[5], {N, NUM_SH, 3}),
                     ttv(s_dc, {N, 3}), ttv(s_opac, {N, 1}), kLrSh, 0.9f,
-                    0.999f, 1e-15f, kEpsTr, kShReg, kStep, 1.f, false);
+                    0.999f, 1e-15f, kEpsTr, kShReg, kStep, sb_cells, 1.f,
+                    false);
             } else {
                 // FPBO applies 2*dc_reg/3 per splat; fused_adam_step divides
                 // l2_reg by the parameter count, so pre-multiply by N.
@@ -362,14 +375,14 @@ int main() {
                                 DeviceTensorFloatND(ttv(s_g2[4], {N, 3, 1})),
                                 kLrDc, kStep, DeviceVector<int32_t>(),
                                 kDcReg * (float)N, 0.5f / 0.28209479177387814f,
-                                1.f, false);
+                                SbOptimCells{}, 1.f, false);
                 fused_adam_step(
                     N, DeviceTensorFloatND(ttv(s_sh, {N, NUM_SH * 3, 1})),
                     DeviceTensorFloatND(ttv(s_v[5], {N, NUM_SH * 3, 1})),
                     DeviceTensorFloatND(ttv(s_g1[5], {N, NUM_SH * 3, 1})),
                     DeviceTensorFloatND(ttv(s_g2[5], {N, NUM_SH * 3, 1})),
-                    kLrSh, kStep, DeviceVector<int32_t>(), kShReg, 0.f, 1.f,
-                    false);
+                    kLrSh, kStep, DeviceVector<int32_t>(), kShReg, 0.f,
+                    sb_cells, 1.f, false);
             }
         } else {
             fused_adam_step_quantized_value(
@@ -377,7 +390,7 @@ int main() {
                 DeviceTensorFloatND(ttv(s_v[5], {N, NUM_SH * 3, 1})), nullptr,
                 nullptr, s_shq, (float4*)s_shq_b, s_shv, (float2*)s_shv_b,
                 kLrSh, kStep, DeviceVector<int32_t>(), kShReg, 0.f, 8, 16,
-                color_trust, 1.f, false);
+                color_trust, sb_cells, 1.f, false);
         }
         backend::device_synchronize();
         if (const char* err = backend::last_error()) {
@@ -423,6 +436,14 @@ int main() {
         }
     }
 
+    return failures;
+}
+
+int main() {
+    int failures = run(0);
+#ifdef SS_BACKEND_VULKAN
+    failures += run(2);
+#endif
     std::printf("fpbo_split_parity: %s\n", failures ? "FAILED" : "PASSED");
     return failures ? 1 : 0;
 }

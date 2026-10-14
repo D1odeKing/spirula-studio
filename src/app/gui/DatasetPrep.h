@@ -13,6 +13,7 @@
 // the GUI can say so instead of failing at run time.
 
 #include "app/FfmpegVideo.h"
+#include "app/FrameClip.h"
 #include "app/FrameLook.h"
 #include "app/FrameMask.h"
 #include "app/Pano360.h"
@@ -129,6 +130,10 @@ struct PrepInput {
     // as several clips is rarely shot at one pace, and a clip walked through
     // slowly wants fewer frames than the one that ran past the same wall.
     float fps = 0.0f;
+    // The part of this video extracted, seconds into it; `clip_end` 0 is the
+    // end.
+    double clip_start = 0.0, clip_end = 0.0;
+    bool clipped() const { return is_video && (clip_start > 0.0 || clip_end > 0.0); }
     // The colour LUT baked into this video's frames as they are extracted: a
     // spec (app/CubeLut.h), kLutNone, or empty for automatic (input_lut).
     std::string lut;
@@ -243,6 +248,9 @@ struct PrepCapture {
     double fps = 0;
     // Every track kept the same instants, so the frames of one stem are a rig.
     bool lockstep = false;
+    // Seconds into the video stem 0 stands for: the clip's start, after the
+    // ffmpeg fallback, which numbers from where it began reading.
+    double time_offset = 0;
 };
 
 struct PrepJob {
@@ -517,6 +525,9 @@ struct FfmpegStillOpts {
     // A 360 capture: both tracks are decoded and the overlap strips cut out,
     // so what lands in `out_path` is the EAC canvas (app::pano360_graph).
     app::Pano360Layout eac;
+    // The sync sample at or before `seconds` instead: one decode, for a thumbnail.
+    bool keyframe = false;
+    int max_side = 0;   // scaled down to fit a square this size; 0 = as decoded
 };
 
 // One frame, `seconds` into the file, written to `out_path` as a JPEG.
@@ -525,6 +536,13 @@ bool ffmpeg_extract_frame(const std::string& ffmpeg_exe, const std::string& vide
                           double seconds, const std::string& out_path,
                           const std::atomic<bool>& cancel,
                           const FfmpegStillOpts& opts = {});
+// Track `tracks[i]` to `out_paths[i]` from ONE run, so a rig's streams cost one
+// seek. `opts.track` is unused; a 360 canvas fills `out_paths[0]` alone.
+bool ffmpeg_extract_frames(const std::string& ffmpeg_exe, const std::string& video,
+                           double seconds, const std::vector<int>& tracks,
+                           const std::vector<std::string>& out_paths,
+                           const std::atomic<bool>& cancel,
+                           const FfmpegStillOpts& opts = {});
 
 // The 360 packing a video carries, asked of the built-in demuxer where there is
 // one and of ffmpeg otherwise, so the answer does not depend on the decode path

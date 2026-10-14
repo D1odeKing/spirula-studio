@@ -213,7 +213,7 @@ static void render_one(RenderContext* ctx, int cam_idx,
 
     // --- projection (3DGUT, sh_degree = 0 -> DC color only) ---
     auto [aabb_2d, depths_2d, splats_s] = projection_3dgut_forward(
-        (int64_t)ctx->N, /*max_sh_degree=*/0, in_splats,
+        (int64_t)ctx->N, ColorBasis{}, in_splats,
         viewmats, intrins, W, H, model, distortion, dist,
         ctx->radii,
         std::nullopt, std::nullopt, /*num_sh_buffer=*/0, /*sh_value_bits=*/32,

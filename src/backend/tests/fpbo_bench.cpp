@@ -2,9 +2,10 @@
 // that dominates a training step (~2/3 of GPU time at cap_max splats).
 // Builds the same buffer set the engine hands it at quantization_level 1 and
 // times R back-to-back calls, so a kernel change can be A/B'd in seconds
-// instead of a 30k-step run. Same source on both backends.
+// instead of a 30k-step run. Same source on both backends; lobes are
+// Vulkan-only.
 //
-//   ./fpbo_bench [num_splats] [iters]
+//   ./fpbo_bench [num_splats] [iters] [sh_degree=3] [sb_lobes=0]
 
 #include <backend/tests/DistortionFixture.h>
 #include <kernels/projection/ProjectionPackedFwd.cuh>
@@ -23,7 +24,6 @@ using backend::MemcpyKind;
 
 namespace {
 
-constexpr int NUM_SH = 15;  // sh_degree 3
 constexpr uint32_t W = 1237, H = 822;
 
 template <typename T>
@@ -58,9 +58,12 @@ static DeviceTensor2D<uint2> vec_to_2d_aabb(const DeviceVector<uint2>& vec) {
 int main(int argc, char** argv) {
     const int64_t N = (argc > 1 ? std::atoll(argv[1]) : 5000000) / 256 * 256;
     const int iters = argc > 2 ? std::atoi(argv[2]) : 20;
+    const ColorBasis color{argc > 3 ? std::atoi(argv[3]) : 3,
+                           argc > 4 ? std::atoi(argv[4]) : 0};
+    const int num_sh = color.coeffs();
     const int64_t C = 1;
     const int64_t NB = (N + 255) / 256;
-    const int64_t cells = sh_fpbo_cells(N, NUM_SH);
+    const int64_t cells = sh_fpbo_cells(N, num_sh);
 
     std::mt19937 rng(20260825u);
     auto uf = [&](float lo, float hi) {
@@ -98,7 +101,7 @@ int main(int argc, char** argv) {
         DeviceTensorFloatND(ttv(upload(scales), {N, 3, 1})),
         DeviceTensorFloatND(ttv(upload(opac), {N, 1, 1})),
         DeviceTensorFloatND(ttv(upload(dc), {N, 3, 1})),
-        DeviceTensorFloatND(ttv(nullptr, {N, NUM_SH * 3, 1})),
+        DeviceTensorFloatND(ttv(nullptr, {N, num_sh * 3, 1})),
     };
 
     // Quantized SH state + values (the level-1 canonical storage).
@@ -122,19 +125,21 @@ int main(int argc, char** argv) {
     std::optional<TorchTensorView> shv_b_tv = ttv(d_shv_b, {NB, 2});
 
     auto out = projection_3dgs_packed_forward(
-        N, 3, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
+        N, color, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
         "PINHOLE", dist_fixture::kTierNames[0],
         ttv(d_dist + dist_fixture::row_offset(0, C),
             {C, kCameraDistortionParams}),
-        radii, shv_tv, shv_b_tv, (uint32_t)NUM_SH, 16, 0);
+        radii, shv_tv, shv_b_tv, (uint32_t)num_sh, 16, 0);
     DeviceVector<int32_t> cam_ids = std::get<0>(out);
     DeviceVector<int32_t> gauss_ids = std::get<1>(out);
     DeviceTensor2D<uint2> aabb_2d = vec_to_2d_aabb(std::get<2>(out));
     const int64_t n_isect = cam_ids.size();
     backend::device_synchronize();
     if (check_error("fwd")) return 1;
-    std::printf("N %lld  intersections %lld (%.1f%% visible)\n",
-                (long long)N, (long long)n_isect, 100.0 * n_isect / (double)N);
+    std::printf("SH %d  lobes %d  N %lld  intersections %lld"
+                " (%.1f%% visible)\n",
+                color.sh_degree, color.sb_lobes, (long long)N,
+                (long long)n_isect, 100.0 * n_isect / (double)N);
 
     std::vector<float> vxy(n_isect * 2), vd(n_isect), vc(n_isect * 3),
         vo(n_isect), vr(n_isect * 3);
@@ -152,7 +157,7 @@ int main(int argc, char** argv) {
     // 3dgs leaves every v_splats_world slot null (raster_bwd never writes
     // the world buffer for it) -- as does the engine.
     std::vector<DeviceTensorFloatND> v_world(6), g1(6), g2(6);
-    const int wch[6] = {3, 4, 3, 1, 3, 3 * NUM_SH};
+    const int wch[6] = {3, 4, 3, 1, 3, 3 * num_sh};
     for (int c = 0; c < 6; c++) {
         v_world[c] = DeviceTensorFloatND(ttv(nullptr, {N, wch[c], 1}));
         g1[c] = DeviceTensorFloatND(ttv(nullptr, {N, wch[c], 1}));
@@ -200,15 +205,15 @@ int main(int argc, char** argv) {
                              n_isect * sizeof(int32_t),
                              MemcpyKind::DeviceToDevice);
         fused_projection_bwd_optimizer_3dgs(
-            N, 3, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H,
-            "PINHOLE", dist_fixture::kTierNames[0],
+            N, color, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W,
+            H, "PINHOLE", dist_fixture::kTierNames[0],
             ttv(d_dist + dist_fixture::row_offset(0, C),
                 {C, kCameraDistortionParams}),
             cam_ids, gauss_ids, aabb_2d, v_world, v_screen, g1, g2, shq_tv,
             shq_b_tv, shv_tv, shv_b_tv, non_sh, SplatVisitState{}, radii,
             densify_score,
-            1.28e-4f, 1.5e-3f, 0.02f, 0.025f, 5e-3f, 2.5e-4f, 10.f, 0.01f,
-            0.01f, 0.01f, 0.f, 0.f, 0.f, 1e-3f, 1e-3f,
+            1.28e-4f, 1.5e-3f, 0.02f, 0.025f, 5e-3f, 2.5e-4f, 2.5e-3f, 10.f,
+            0.01f, 0.01f, 0.01f, 0.f, 0.f, 0.f, 1e-3f, 1e-3f,
             /*max_screen_size=*/0.3f, /*max_screen_size_penalty=*/1.f,
             /*use_scale_agnostic_mean=*/true, /*color_trust_linear=*/false,
             1e-4f, ttv(d_steps, {N, 1}), /*quantization_level=*/1);

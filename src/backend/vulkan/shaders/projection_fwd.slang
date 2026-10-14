@@ -1,17 +1,9 @@
-// Fused projection forward (Vulkan backend), mirroring
-// kernels/projection/ProjectionFwd_kernel.cuh: one thread per (camera, gaussian), all math
-// via the shared slang modules (primitive_3dgs.slang / harmonics.slang).
-//
-// Variants (specialization constants, matching the CUDA template axes):
-//   kCameraModel  = CameraModelType (0..3)
-//   kShDegree     = 0..4
-//   kAntialiased  = 0 (Vanilla3DGS) | 1 (MipSplatting)
-//   kShValueBits  = 0 (fp32) | 8 | 16 (the CUDA VALUE_BITS template axis;
-//                   decode via sh_quant.slang's word-based q8/q16 loads)
-//   kDistortion   = CameraDistortionType (0..3), declared last (dist_spec.slang)
-//
-// Params exceed the 128-byte push floor -> delivered via the params ring
-// (push constant = one device address).
+// Projection forward (Vulkan backend), mirroring
+// kernels/projection/ProjectionFwd_kernel.cuh: one thread per (camera,
+// gaussian), the math from the shared slang modules. The CUDA template axes
+// are specialization constants (kShValueBits = VALUE_BITS, 0 for fp32), plus
+// kSbLobes, which CUDA lacks; kDistortion is declared last (dist_spec.slang).
+// Params exceed the 128-byte push floor and go through the params ring.
 
 #define CudaDeviceExport ForceInline
 #include "int64_compat.slang"
@@ -22,6 +14,8 @@
 #include "shaders/harmonics.slang"
 #undef CudaDeviceExport
 #include "sh_quant.slang"
+#include "sh_vjp.slang"
+#include "view_color.slang"
 #include "dist_spec.slang"
 
 [SpecializationConstant]
@@ -32,35 +26,34 @@ const int kShDegree = 0;
 const int kAntialiased = 0;
 [SpecializationConstant]
 const int kShValueBits = 0;
+[SpecializationConstant]
+const int kSbLobes = 0;
 
-// SH -> rgb for one splat, gated exactly like _Base3DGS::project: fp32
-// features_sh when kShValueBits == 0, else the q8/q16 codec path
+// The colour row -> rgb for one splat, gated exactly like _Base3DGS::project:
+// fp32 features_sh when kShValueBits == 0, else the q8/q16 codec path
 // (docs/notes/sh-quant-layout.md).
 [ForceInline]
 float3 eval_splat_color(float3 mean, float3x3 R, float3 t, float3 dc,
                         float* features_sh, uint sh_stride, uint gid,
                         uint* sh_packed, float2* sh_bounds,
-                        uint num_sh_buffer, gindex_t sh_bounds_stride) {
-    if (kShValueBits == 8 || kShValueBits == 16) {
-        ShAddrW a = sh_quant_addr_w(num_sh_buffer, sh_bounds_stride);
-        gindex_t base = sh_addr_base(a, gid);
-        if (kShValueBits == 8)
-            return sh_to_color_qw<8>(kShDegree, mean, R, t, dc, sh_packed,
-                                     sh_bounds, base, a.bounds_stride,
-                                     a.pair_pitch);
-        return sh_to_color_qw<16>(kShDegree, mean, R, t, dc, sh_packed,
-                                  sh_bounds, base, a.bounds_stride,
-                                  a.pair_pitch);
-    }
-    float* sh = elem_at(features_sh, (gindex_t)gid * (gindex_t)sh_stride);
-    switch (kShDegree) {
-    case 0: return sh0_to_color(mean, R, t, dc, sh);
-    case 1: return sh1_to_color(mean, R, t, dc, sh);
-    case 2: return sh2_to_color(mean, R, t, dc, sh);
-    case 3: return sh3_to_color(mean, R, t, dc, sh);
-    case 4: return sh4_to_color(mean, R, t, dc, sh);
-    }
-    return float3(0.0f);
+                        uint num_sh_buffer, gindex_t sh_bounds_stride,
+                        uint sb_base) {
+    ShAddrW a = sh_quant_addr_w(num_sh_buffer, sh_bounds_stride);
+    ColorRow row;
+    row.fp32 = elem_at(features_sh, (gindex_t)gid * (gindex_t)sh_stride);
+    row.packed = sh_packed;
+    row.bounds = sh_bounds;
+    row.base = sh_addr_base(a, gid);
+    row.bounds_stride = a.bounds_stride;
+    row.pair_pitch = a.pair_pitch;
+    if (kShValueBits == 8)
+        return color_eval<8>(kShDegree, kSbLobes, int(sb_base), mean, R, t,
+                             dc, row);
+    if (kShValueBits == 16)
+        return color_eval<16>(kShDegree, kSbLobes, int(sb_base), mean, R, t,
+                              dc, row);
+    return color_eval<0>(kShDegree, kSbLobes, int(sb_base), mean, R, t, dc,
+                         row);
 }
 
 struct ProjectionFwdParams {
@@ -92,7 +85,7 @@ struct ProjectionFwdParams {
     uint32_t height;
     uint32_t wgs_per_row; // grid fold (flat id = wg.y * wgs_per_row*128 + x)
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;     // float3 coefficient of the first lobe in a row
 };
 
 void run_projection<let cam: CameraModelType, D : ICameraDistortion>(
@@ -142,7 +135,8 @@ void run_projection<let cam: CameraModelType, D : ICameraDistortion>(
     if (aabb.z > aabb.x && aabb.w > aabb.y)
         rgb = eval_splat_color(mean, R, t, dc, p.features_sh, p.sh_stride,
                                gid, p.sh_packed, p.sh_bounds,
-                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride));
+                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride),
+                               p.sb_base);
 
     // store (mirrors the kernel epilogue: clamp, degenerate cull, atomics)
     aabb.x = clamp(aabb.x, 0.0f, float(p.width) - 1.0f);
@@ -206,7 +200,7 @@ struct Projection3dgutParams {
     uint32_t height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;     // float3 coefficient of the first lobe in a row
 };
 
 void run_projection_3dgut<let cam: CameraModelType, D : ICameraDistortion>(
@@ -253,7 +247,8 @@ void run_projection_3dgut<let cam: CameraModelType, D : ICameraDistortion>(
     if (aabb.z > aabb.x && aabb.w > aabb.y)
         rgb = eval_splat_color(mean, R, t, dc, p.features_sh, p.sh_stride,
                                gid, p.sh_packed, p.sh_bounds,
-                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride));
+                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride),
+                               p.sb_base);
 
     aabb.x = clamp(aabb.x, 0.0f, float(p.width) - 1.0f);
     aabb.y = clamp(aabb.y, 0.0f, float(p.height) - 1.0f);
@@ -430,7 +425,7 @@ struct PackedFwdParams {
     uint32_t height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;     // float3 coefficient of the first lobe in a row
 };
 
 void run_packed_fwd<let cam: CameraModelType, D : ICameraDistortion,
@@ -477,7 +472,8 @@ void run_packed_fwd<let cam: CameraModelType, D : ICameraDistortion,
     if (aabb.z > aabb.x && aabb.w > aabb.y)
         rgb = eval_splat_color(mean, R, t, dc, p.features_sh, p.sh_stride,
                                gid, p.sh_packed, p.sh_bounds,
-                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride));
+                               p.num_sh_buffer, i64mem_get(p.sh_bounds_stride),
+                               p.sb_base);
 
     p.out_camera_ids[out_idx] = int(cid);
     p.out_gaussian_ids[out_idx] = int(gid);

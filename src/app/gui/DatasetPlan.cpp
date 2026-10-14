@@ -634,6 +634,9 @@ StepFields frames_fields(const PrepJob& job) {
         const bool every = every_frame(job, in);
         rate = rate || !every;
         add(f, "fps", scope, every ? "every" : num(input_fps(job, in)));
+        if (in.clipped())
+            add(f, "clip", scope,
+                num(in.clip_start) + "-" + (in.clip_end > 0.0 ? num(in.clip_end) : "end"));
         // The colours are baked into the frames, so another LUT is other frames.
         if (const std::string lut = input_lut(job, in); !lut.empty())
             add(f, "lut", scope, app::is_builtin_lut(lut) ? lut : norm_path(lut));
@@ -1190,6 +1193,8 @@ void restore_record_inputs(const DatasetRecord& rec, PrepJob& job,
             for (size_t i = 0; i < rows.size(); i++) {
                 rows[i].fps = rates.rows[i].fps;
                 rows[i].lut = rates.rows[i].lut;
+                rows[i].clip_start = rates.rows[i].clip_start;
+                rows[i].clip_end = rates.rows[i].clip_end;
             }
         if (same_rows(clicks)) job.mask_clicks = clicks.clicks;
         if (!rows.empty()) camera_model = rows[0].camera_model;

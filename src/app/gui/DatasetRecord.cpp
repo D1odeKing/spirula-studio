@@ -135,6 +135,7 @@ StepRecord decode_step(const JsonValue& v) {
             pc.subdir = text(c, "subdir");
             pc.path = text(c, "path");
             pc.fps = c.get_double("fps", 0.0);
+            pc.time_offset = c.get_double("time_offset", 0.0);
             pc.lockstep = c.find("lockstep") && c.find("lockstep")->as_bool();
             if (!pc.path.empty()) r.captures.push_back(std::move(pc));
         }
@@ -167,6 +168,7 @@ JsonValue encode_step(const StepRecord& r) {
             set(c, "subdir", str(pc.subdir));
             set(c, "path", str(pc.path));
             set(c, "fps", num(pc.fps));
+            if (pc.time_offset != 0.0) set(c, "time_offset", num(pc.time_offset));
             set(c, "lockstep", boolean(pc.lockstep));
             captures.arr.push_back(std::move(c));
         }
@@ -267,6 +269,10 @@ std::string encode_record_inputs(const RecordInputs& in) {
         w.field("is_video", s.is_video);
         w.field("subdir", s.subdir);
         w.field("fps", s.fps);
+        if (s.clipped()) {
+            w.field("clip_start", s.clip_start);
+            w.field("clip_end", s.clip_end);
+        }
         w.field("lut", s.lut);
         w.field("sequential", s.sequential);
         w.field("imu", s.use_imu);
@@ -316,6 +322,8 @@ RecordInputs decode_record_inputs(const JsonValue& v) {
             s.is_video = r.find("is_video") && r.find("is_video")->as_bool();
             s.subdir = text(r, "subdir");
             s.fps = (float)r.get_double("fps", 0.0);
+            s.clip_start = r.get_double("clip_start", 0.0);
+            s.clip_end = r.get_double("clip_end", 0.0);
             s.lut = text(r, "lut");
             s.sequential = r.find("sequential") && r.find("sequential")->as_bool();
             s.use_imu = !r.find("imu") || r.find("imu")->as_bool();

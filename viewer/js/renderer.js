@@ -121,7 +121,7 @@ export class Renderer {
     const gl = this.gl, m = this.model;
     if (!m) return;
     if (m.type === 'splat') {
-      for (const t of [m.posT,m.rotT,m.scaleT,m.colT,...(m.shT||[])]) if (t) gl.deleteTexture(t);
+      for (const t of [m.posT,m.rotT,m.scaleT,m.colT,...(m.shT||[]),...(m.sbT||[])]) if (t) gl.deleteTexture(t);
       gl.deleteBuffer(m.indexBuf); gl.deleteVertexArray(m.vao);
     } else if (m.type === 'mesh') {
       for (const b of [m.posB,m.nrmB,m.colB,m.uvB]) if (b) gl.deleteBuffer(b);
@@ -241,6 +241,29 @@ export class Renderer {
       }
     }
 
+    // Spherical-beta lobes: 2 RGBA16F texels per lobe, in up to 2 layer-range
+    // chunks for the same per-resource limits as SH.
+    let sbT = null, sbLay = { W:1, H:1, L:1 }, sbChunkLayers = 1;
+    if (data.sbLobes > 0 && data.sb && data.sb.length) {
+      const M = N * data.sbLobes * 2;
+      sbLay = layout(M, this.maxTex, maxLayers);
+      const layerBytes = sbLay.W * sbLay.H * 8;
+      const nChunks = Math.min(2, Math.max(1, Math.ceil(sbLay.L * layerBytes / (512 << 20))));
+      sbChunkLayers = Math.ceil(sbLay.L / nChunks);
+      sbT = [];
+      for (let l0 = 0; l0 < sbLay.L; l0 += sbChunkLayers) {
+        const Lc = Math.min(sbChunkLayers, sbLay.L - l0);
+        const t0 = l0 * sbLay.W * sbLay.H;
+        const cnt = Math.min(M - t0, sbLay.W * sbLay.H * Lc);
+        sbT.push(uploadLayered(gl, data.sb.subarray(t0*4), cnt, 4,
+                               gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT, sbLay.W, sbLay.H, Lc));
+        if (gl.getError() !== gl.NO_ERROR) {
+          for (const t of [...baseT, ...(shT||[]), ...sbT]) gl.deleteTexture(t);
+          throw new Error('out of GPU memory (spherical-beta lobes)');
+        }
+      }
+    }
+
     // sorted-index instanced buffer (initialized 0..N-1)
     const idx = new Uint32Array(N); for (let i=0;i<N;i++) idx[i]=i;
     const indexBuf = gl.createBuffer();
@@ -256,7 +279,9 @@ export class Renderer {
 
     this.model = {
       type:'splat', count:N, shDegree:data.shDegree, shRest:data.shRest,
-      posT, rotT, scaleT, colT, shT, shChunkLayers, lay, shLay, indexBuf, vao,
+      sbLobes:data.sbLobes|0,
+      posT, rotT, scaleT, colT, shT, shChunkLayers, lay, shLay,
+      sbT, sbChunkLayers, sbLay, indexBuf, vao,
     };
     return true;
   }
@@ -568,6 +593,11 @@ export class Renderer {
     bind(u.uPos, m.posT, 0); bind(u.uRot, m.rotT, 1); bind(u.uScale, m.scaleT, 2); bind(u.uCol, m.colT, 3);
     const sh = m.shT || [];
     for (let c = 0; c < 4; c++) bind(u['uSh'+c], sh[c] || sh[0] || m.colT, 4+c);
+    gl.uniform1i(u.uSbLobes, opts.showLobes === false ? 0 : m.sbLobes);
+    gl.uniform2i(u.uSbDim, m.sbLay.W, m.sbLay.H);
+    gl.uniform1i(u.uSbChunkLayers, Math.max(m.sbChunkLayers || 1, 1));
+    const sb = m.sbT || [];
+    for (let c = 0; c < 2; c++) bind(u['uSb'+c], sb[c] || sb[0] || m.posT, 8+c);
   }
 
   _drawSplats(viewR, camPos, U, intr, cameraModel, w, h, opts) {

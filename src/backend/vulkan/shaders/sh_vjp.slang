@@ -1,23 +1,12 @@
-// Register-array SH color VJP (Vulkan backend).
-//
-// Mirrors harmonics.slang's (mean, R, t)-form `_sh_coeffs_to_color_vjp<1>`
-// (dtype float3) with the same operation order, restructured for SPIR-V:
-//  - `v_coeffs` writes accumulate into an `inout float3[24]` register array
-//    instead of a physical float3* -- SPIR-V physical pointers cannot address
-//    function locals, and the CUDA `_vjp_atomic` variant needs float
-//    InterlockedAdd (not in the device baseline). Callers either keep the
-//    array in registers (quantgrad / FPBO camera loops) or scatter it to the
-//    global gradient buffer with atomic_add_f32 (plain projection backward).
-//  - source coefficients are decoded ONCE into a local float3[24]; QBITS
-//    selects fp32 loads (0) or the word-based q8/q16 codec from
-//    sh_quant.slang (8 / 16), matching the sh{N}_to_color_q{8,16}_vjp_*
-//    CUDA exports (decode order does not change any value: the codec is a
-//    pure per-cell function).
-//
-// Include AFTER harmonics.slang (mean_viewmat_to_unnormalized_viewdir) and
-// sh_quant.slang (_sh_load_qw).
+// Register-array SH colour VJP pieces (Vulkan backend), assembled by
+// view_color.slang's color_vjp. Mirrors harmonics.slang's (mean, R, t)-form
+// `_sh_coeffs_to_color_vjp<1>` op for op, restructured for SPIR-V: v_coeffs
+// accumulate into an `inout float3[24]` (physical pointers cannot address
+// function locals, and the `_vjp_atomic` form needs float InterlockedAdd),
+// and the source decodes once into a local float3[24] -- fp32 or the q8/q16
+// word codec, a pure per-cell function, so the order changes no value.
+// Include AFTER harmonics.slang and sh_quant.slang.
 
-// Source coefficient load: fp32 [3*K] layout or word-based q8/q16 codec.
 #include "int64_compat.slang"
 
 [ForceInline]
@@ -340,46 +329,4 @@ void _shv_dir_vjp(const int degree, const float3 dir, float3 C[24],
     v_dir += (v_dir_n - dot(v_dir_n, dir_n) * dir_n) * inorm;
 
     #undef sv
-}
-
-// (mean, R, t)-form wrapper: mirror of harmonics.slang's float3-dtype
-// `_sh_coeffs_to_color_vjp<1>` -- forward eval for the clamp mask, dir VJP,
-// then bwd_diff through the viewdir computation. All v_* accumulate.
-[ForceInline]
-void sh_color_vjp<let QBITS : int>(
-    const int degree,
-    const float3 mean, const float3x3 R, const float3 t,
-    float3 coeff_dc,
-    float* coeffs,                   // fp32 source [3*K] (QBITS == 0)
-    uint* qpacked, float2* qbounds,  // q8/q16 source (QBITS 8/16)
-    gindex_t qbase, gindex_t qstride, gindex_t qpitch,
-    float3 v_colors,
-    inout float3 v_coeff_dc,
-    inout float3 v_coeffs[24],
-    inout float3 v_mean, inout float3x3 v_R, inout float3 v_t
-) {
-    const int K = degree * (degree + 2);
-    float3 C[24];
-    for (int j = 0; j < 24; j++)
-        C[j] = (j < K)
-            ? _shv_C<QBITS>(coeffs, qpacked, qbounds, qbase, qstride, qpitch, j)
-            : float3(0.0f);
-
-    float3 viewdir = mean_viewmat_to_unnormalized_viewdir(mean, R, t);
-    float3 rgb = _shv_forward(degree, viewdir, coeff_dc, C);
-    v_colors *= float3(float(rgb.x >= -0.5f), float(rgb.y >= -0.5f),
-                       float(rgb.z >= -0.5f));
-
-    float3 v_viewdir = float3(0.0f);
-    _shv_dir_vjp(degree, viewdir, C, v_colors, v_coeff_dc, v_coeffs,
-                 v_viewdir);
-
-    DifferentialPair<float3> dp_mean = diffPair(mean);
-    DifferentialPair<float3x3> dp_R = diffPair(R);
-    DifferentialPair<float3> dp_t = diffPair(t);
-    bwd_diff(mean_viewmat_to_unnormalized_viewdir)(dp_mean, dp_R, dp_t,
-                                                   v_viewdir);
-    v_mean += dp_mean.d;
-    v_R += dp_R.d;
-    v_t += dp_t.d;
 }

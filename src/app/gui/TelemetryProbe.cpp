@@ -35,7 +35,7 @@ TelemetryInfo probe(const std::string& path, bool is_video) {
         out.gyro = !t.gyro.empty();
         out.accel = !t.accel.empty();
         out.attitude = !t.orientation.empty() || !t.gravity.empty();
-        out.gps = !t.gps.empty();
+        out.gps = std::any_of(t.gps.begin(), t.gps.end(), sfm::gps_valid);
         if (t.carrier != sfm::TelemetryCarrier::None)
             out.carrier = sfm::telemetry_carrier_name(t.carrier);
         return out;

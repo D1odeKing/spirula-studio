@@ -790,6 +790,16 @@ differs -- a different rate, a different unwrap, another clip in the list --
 asks before it goes back to the video, and drops the features and matches that
 describe the old frames.
 
+### A clip of a video
+
+Only part of a video can be used: drag the handles under the dataset screen's
+preview, or `spirula sam extract --start 1:30 --end 2:45`. Frames keep the
+**source** frame index as their name in both decoders, which is what keeps a
+clip's frames on the camera's IMU and GPS; the GUI's ffmpeg fallback, which
+numbers its candidates from where it started reading, records that start as
+the capture's `time_offset` instead. The clip is part of what the frames were
+extracted with, so changing it re-extracts. docs/notes/source-preview.md.
+
 ### Colour LUTs
 
 Log footage is flat; a video row can name a 3D LUT that is baked into its

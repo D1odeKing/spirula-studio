@@ -34,7 +34,7 @@ struct PackedFwdParams {
     uint32_t sh_stride;
     uint32_t C, N, width, height, wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;
 };
 static_assert(sizeof(PackedFwdParams) == 20 * 8 + 8 * 4,
               "params layout must match the slang struct");
@@ -47,7 +47,7 @@ launch_projection_packed_vk(
     const bool eval3d, const bool antialiased,
     const int64_t N,
     const std::vector<DeviceTensorFloatND>& in_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
     const std::string& camera_model, const std::string& distortion,
@@ -68,8 +68,8 @@ launch_projection_packed_vk(
     const vkk::CamDistSpec cd = vkk::cam_dist_spec(camera_model, distortion);
 
     Vanilla3DGS<0>::WorldBuffer wb(in_splats);
-    int sh_degree = wb.sh_degree();
-    sh_degree = std::min(sh_degree, max_sh_degree);
+    const vkk::ColorSpec cs =
+        vkk::color_spec(color, vkk::row_coeffs(wb, num_sh_buffer));
     const uint32_t C = (uint32_t)std::get<2>(viewmats)[0];
 
     packed_check_pair_count(C, (uint32_t)N);
@@ -104,11 +104,12 @@ launch_projection_packed_vk(
     mp.wgs_per_row = per_row;
 
     // Spec IDs: 0 = camera model, 1 = SH degree (unused by the mask),
-    // 2 = antialiased, 3 = SH value bits (unused by the mask), 4 = eval3d,
-    // 5 = distortion tier.
-    backend::vk::SpecList spec{cd.cam, (uint32_t)sh_degree,
+    // 2 = antialiased, 3 = SH value bits (unused by the mask), 4 = SB lobes
+    // (unused by the mask), 5 = eval3d, 6 = distortion tier.
+    backend::vk::SpecList spec{cd.cam,      cs.sh_degree,
                                antialiased ? 1u : 0u, spec_bits,
-                               eval3d ? 1u : 0u, cd.dist};
+                               cs.sb_lobes, eval3d ? 1u : 0u,
+                               cd.dist};
     vkk::dispatch("projection_fwd.projection_packed_mask", spec, per_row,
                   rows, 1, &mp, sizeof(mp));
 
@@ -165,6 +166,7 @@ launch_projection_packed_vk(
         p.sh_bounds = q_bounds;
         p.sh_bounds_stride = q_stride;
         p.num_sh_buffer = num_sh_buffer;
+        p.sb_base = cs.sb_base;
         p.C = C;
         p.N = (uint32_t)N;
         p.width = image_width;
@@ -189,7 +191,7 @@ std::tuple<                                                                  \
     DeviceVector<float>, std::vector<DeviceTensorFloatND>                    \
 > name(                                                                      \
     const int64_t num_splats,                                                \
-    const int max_sh_degree,                                                 \
+    const ColorBasis color,                                                  \
     const std::vector<DeviceTensorFloatND> &in_splats,                       \
     TorchTensorView viewmats,                                                \
     TorchTensorView intrins,                                                 \
@@ -206,7 +208,7 @@ std::tuple<                                                                  \
     const int64_t sh_bounds_stride                                           \
 ) {                                                                          \
     return launch_projection_packed_vk(                                      \
-        eval3d, antialiased, num_splats, in_splats, max_sh_degree,           \
+        eval3d, antialiased, num_splats, in_splats, color,                   \
         viewmats, intrins, image_width, image_height, camera_model,          \
         distortion, dist_coeffs, radii, sh_value_packed, sh_value_bounds,    \
         num_sh_buffer, sh_value_bits, sh_bounds_stride);                     \

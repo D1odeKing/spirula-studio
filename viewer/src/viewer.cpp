@@ -99,11 +99,16 @@ struct SplatData {
     std::vector<uint16_t> fdc;    // count*3 : raw f_dc — f16
     std::vector<int8_t> sh;       // count*sh_rest*3 : [coeff][channel] —
                                   //   snorm8, x scale[i*4+3]
+    // Spherical-beta lobes, activated at load as PlayCanvas does: per lobe
+    // two f16 texels, (axis xyz, 4 exp(beta)) and (softplus rgb, 0).
+    int sb_lobes = 0;
+    std::vector<uint16_t> sb;     // count*sb_lobes*8
     void clear() {
-        count = 0; sh_degree = 0; sh_rest = 0;
+        count = 0; sh_degree = 0; sh_rest = 0; sb_lobes = 0;
         posop.clear(); quat.clear(); scale.clear(); fdc.clear(); sh.clear();
+        sb.clear();
         posop.shrink_to_fit(); quat.shrink_to_fit(); scale.shrink_to_fit();
-        fdc.shrink_to_fit(); sh.shrink_to_fit();
+        fdc.shrink_to_fit(); sh.shrink_to_fit(); sb.shrink_to_fit();
     }
 };
 
@@ -277,10 +282,17 @@ struct SplatRecCtx {
     int id0=-1,id1=-1,id2=-1;
     int ired=-1,igrn=-1,iblu=-1;
     std::vector<int> irest;                     // f_rest_* in file order (3*Kf)
-    int K=0, Kf=0;
+    std::vector<int> isb;                       // sb_params_* (6*L, field-major)
+    int K=0, Kf=0, L=0;
     bool has_fdc=false, has_rgb=false;
     double rd(const uint8_t* rec, int k) const { return read_scalar_le(rec+off[k], type[k]); }
 };
+
+// Lobes a count of sb_params_* properties holds: six floats each, at most
+// eight; anything else is not a lobe layout this viewer knows, and is skipped.
+static int splat_sb_lobes(int n_params){
+    return (n_params % 6 == 0 && n_params / 6 <= 8) ? n_params / 6 : 0;
+}
 
 static bool splat_ctx_init(SplatRecCtx& ctx, const PlyElem& ve) {
     uint64_t N = ve.count;
@@ -316,8 +328,27 @@ static bool splat_ctx_init(SplatRecCtx& ctx, const PlyElem& ve) {
     ctx.ired=gi("red"); ctx.igrn=gi("green"); ctx.iblu=gi("blue");
     ctx.irest.resize(rest);
     for(int r=0;r<rest;r++) ctx.irest[r]=gi(("f_rest_"+std::to_string(r)).c_str());
+    int sbn=0; while(has(("sb_params_"+std::to_string(sbn)).c_str())) sbn++;
+    ctx.L = splat_sb_lobes(sbn);
+    ctx.isb.resize(6*ctx.L);
+    for(int r=0;r<6*ctx.L;r++) ctx.isb[r]=gi(("sb_params_"+std::to_string(r)).c_str());
+    g_splat.sb_lobes=ctx.L;
+    if(ctx.L>0) g_splat.sb.assign((size_t)N*ctx.L*8, 0);
     ctx.has_fdc=has("f_dc_0"); ctx.has_rgb=has("red")&&has("green")&&has("blue");
     return ctx.ix>=0 && ctx.iy>=0 && ctx.iz>=0 && stride>0;
+}
+
+// One lobe (r, g, b, theta, phi, beta raw) activated into its two texels:
+// unit axis, sharpness 4 exp(beta) capped at the f16 range, softplus amplitude
+// at the trainers' sharpness 10 ln 2.
+static inline void splat_store_lobe(uint64_t i, int l, int L, const float* p){
+    auto sp=[](float x){ float b=6.931471805599453f*x;
+        return (std::max(b,0.f)+std::log1p(std::exp(-std::fabs(b))))/6.931471805599453f; };
+    const float st=std::sin(p[3]);
+    uint16_t* d=&g_splat.sb[((size_t)i*L+l)*8];
+    d[0]=f2h(st*std::cos(p[4])); d[1]=f2h(st*std::sin(p[4])); d[2]=f2h(std::cos(p[3]));
+    d[3]=f2h(std::min(4.f*std::exp(p[5]), 65504.f));
+    d[4]=f2h(sp(p[0])); d[5]=f2h(sp(p[1])); d[6]=f2h(sp(p[2])); d[7]=0;
 }
 
 // quat: input wxyz (rot_0=w), stored xyzw normalized f16
@@ -376,6 +407,11 @@ static inline void splat_parse_record(const SplatRecCtx& c, const uint8_t* rec, 
             }
         splat_store_sh(i, c.K, r);
     } else g_splat.scale[i*4+3]=0;
+    for (int l=0;l<c.L;l++){
+        float p[6];
+        for (int f=0;f<6;f++) p[f]=(float)c.rd(rec,c.isb[f*c.L+l]);
+        splat_store_lobe(i,l,c.L,p);
+    }
 }
 
 static bool parse_splat_ply(const uint8_t* data, size_t len, const PlyHeader& h,
@@ -407,6 +443,11 @@ static bool parse_splat_ply(const uint8_t* data, size_t len, const PlyHeader& h,
 
     bool has_fdc = has("f_dc_0");
     bool has_rgb = has("red") && has("green") && has("blue");
+    int sbn = 0;
+    while (has(("sb_params_"+std::to_string(sbn)).c_str())) sbn++;
+    const int L = splat_sb_lobes(sbn);
+    g_splat.sb_lobes = L;
+    if (L>0) g_splat.sb.assign((size_t)N*L*8, 0);
 
     if (h.format == 1) {
         SplatRecCtx ctx;
@@ -445,6 +486,11 @@ static bool parse_splat_ply(const uint8_t* data, size_t len, const PlyHeader& h,
                 for(int c=0;c<3;c++)for(int k=0;k<K;k++) r[k*3+c]=(float)v(("f_rest_"+std::to_string(c*Kf+k)).c_str());
                 splat_store_sh(i,K,r);
             } else g_splat.scale[i*4+3]=0;
+            for(int l=0;l<L;l++){
+                float p[6];
+                for(int f=0;f<6;f++) p[f]=(float)v(("sb_params_"+std::to_string(f*L+l)).c_str());
+                splat_store_lobe(i,l,L,p);
+            }
         }
         return true;
     }
@@ -800,9 +846,11 @@ static void splat_morton_reorder(){
     // in place (cycle walk + visited bitset — no per-attribute temp copy,
     // which would double peak memory for the multi-GB SH array)
     const int K = g_splat.sh_rest;
+    const int SBH = 8 * g_splat.sb_lobes;    // halfs of lobes per splat
     std::vector<uint64_t> vis((N + 63) / 64, 0);
-    float tp[4]; uint16_t tq[4], ts[4], tf[3]; int8_t tsh[24*3];
+    float tp[4]; uint16_t tq[4], ts[4], tf[3], tsb[8*8]; int8_t tsh[24*3];
     int8_t* SH = g_splat.sh.empty() ? nullptr : g_splat.sh.data();
+    uint16_t* SB = g_splat.sb.empty() ? nullptr : g_splat.sb.data();
     for (uint32_t s = 0; s < N; s++) {
         if ((vis[s >> 6] >> (s & 63)) & 1u) continue;
         if (order[s] == s) continue;
@@ -811,6 +859,7 @@ static void splat_morton_reorder(){
         memcpy(ts, &g_splat.scale[(size_t)s*4], 8);
         memcpy(tf, &g_splat.fdc[(size_t)s*3], 6);
         if (SH) memcpy(tsh, SH + (size_t)s*K*3, K*3);
+        if (SB) memcpy(tsb, SB + (size_t)s*SBH, SBH*2);
         uint32_t cur = s;
         for (;;) {
             vis[cur >> 6] |= 1ull << (cur & 63);
@@ -821,6 +870,7 @@ static void splat_morton_reorder(){
                 memcpy(&g_splat.scale[(size_t)cur*4], ts, 8);
                 memcpy(&g_splat.fdc[(size_t)cur*3], tf, 6);
                 if (SH) memcpy(SH + (size_t)cur*K*3, tsh, K*3);
+                if (SB) memcpy(SB + (size_t)cur*SBH, tsb, SBH*2);
                 break;
             }
             memcpy(&g_splat.posop[(size_t)cur*4], &g_splat.posop[(size_t)src*4], 16);
@@ -828,6 +878,7 @@ static void splat_morton_reorder(){
             memcpy(&g_splat.scale[(size_t)cur*4], &g_splat.scale[(size_t)src*4], 8);
             memcpy(&g_splat.fdc[(size_t)cur*3], &g_splat.fdc[(size_t)src*3], 6);
             if (SH) memcpy(SH + (size_t)cur*K*3, SH + (size_t)src*K*3, K*3);
+            if (SB) memcpy(SB + (size_t)cur*SBH, SB + (size_t)src*SBH, SBH*2);
             cur = src;
         }
     }
@@ -1088,6 +1139,7 @@ KEEP int ssv_stream_end() {
 // uploaded to the GPU; sorting / histograms / picking never read them
 KEEP void ssv_free_splat_sh(){
     g_splat.sh.clear(); g_splat.sh.shrink_to_fit();
+    g_splat.sb.clear(); g_splat.sb.shrink_to_fit();
     g_splat.quat.clear(); g_splat.quat.shrink_to_fit();
 }
 
@@ -1129,6 +1181,8 @@ KEEP uint16_t* ssv_splat_quat(){ return g_splat.quat.data(); }
 KEEP uint16_t* ssv_splat_scale(){ return g_splat.scale.data(); }
 KEEP uint16_t* ssv_splat_fdc(){ return g_splat.fdc.data(); }
 KEEP int8_t* ssv_splat_sh(){ return g_splat.sh.data(); }
+KEEP int ssv_splat_sb_lobes(){ return g_splat.sb_lobes; }
+KEEP uint16_t* ssv_splat_sb(){ return g_splat.sb.data(); }
 
 KEEP uint32_t ssv_mesh_nv(){ return g_mesh.nv; }
 KEEP uint32_t ssv_mesh_nt(){ return g_mesh.nt; }

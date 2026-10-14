@@ -41,7 +41,8 @@ cmake/                      build modules (options, backends, apps) + sources.tx
                               the source list BOTH build systems read
 build_develop.bash/.bat     the dev build entry points — USE THESE
 AGENTS.md  CLAUDE.md        this file (CLAUDE.md is a pointer to it)
-docs/                       architecture, build, backends, codegen, testing, notes
+docs/                       architecture, build, backends, codegen, testing, notes;
+                              docs/cli/ is the command-line reference
 src/                        ALL native code (see below)
 assets/fonts/               the five embedded UI faces + the full-CJK face
                               table (assets/fonts/README.md). The CJK subsets
@@ -76,7 +77,9 @@ src/
 ├── core/                   Tensor.h, Camera.h, Common.cuh, GradQuant.cuh, …
 │                             GraphCut.h -- the normalized cut the SfM mapper
 │                             and the scene partitioner both use; HostMemory.h
-│                             -- physical, available and per-process RAM
+│                             -- physical, available and per-process RAM;
+│                             ColorBasis.h -- what a splat's colour row holds
+│                             (SH bands, then spherical-beta lobes)
 │                             the types and device helpers everything uses
 ├── primitives/             Primitive*.cuh — 3DGS / Mip / 3DGUT traits
 │                             (compile-time types, not runtime branches)
@@ -186,6 +189,9 @@ src/
 │   ├── CrashLog.{h,cpp}    the stack trace every tool leaves in <config>/crash.log
 │   │                         when it faults -- armed for all of them in Main.cpp
 │   ├── gui/                Dear ImGui desktop app (`spirula` with no arguments)
+│   │                         SourcePreview.h: the dataset screen's look at an
+│   │                         input before it runs -- frames and the clip, photos,
+│   │                         GPS/IMU, scans -- docs/notes/source-preview.md
 │   │   └── edit/             selecting parts of a model (by region, by
 │   │                           attribute, by colour), deleting them, and
 │   │                           placing the whole model: one document /
@@ -318,7 +324,10 @@ Rules:
    `config.json` is flat so neither reaches disk. What the row does NOT carry
    is the flag's human name and help sentence: those are translated and live
    in `src/i18n/catalog/TrainFields.h`, resolved by member name at compile
-   time, so a row without an entry there fails to build.
+   time, so a row without an entry there fails to build. After changing a
+   row here or in `src/sfm/SfmConfig.h`, run `python3 tools/gen_cli_reference.py`
+   to refresh `docs/cli/train-flags.md` / `sfm-flags.md`; a flag a CLI parses by
+   hand is documented by hand in `docs/cli/`.
 5. `.cuh` declaration sections must stay CUDA-include-free — they have to
    parse under `-DSS_BACKEND_VULKAN` without the CUDA toolkit.
 
@@ -747,6 +756,16 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   wrong by signs a casual render does not show. `sh_rotation_test` holds it to
   a sampled fit of that basis and `splat_transform_render` to the engine
   itself. Touch the basis and both have to follow. docs/notes/sh-rotation.md.
+  Spherical-beta lobes turn too -- their axis, `core/SphericalBeta.h` -- and
+  the same render test covers them on Vulkan.
+- **`features_sh` is a splat's colour row, not only its SH.** With
+  `--sb-lobes N` the row ends in N spherical-beta lobes, two float3 each, so
+  a row's width no longer says the SH degree: `ColorBasis` (`core/ColorBasis.h`)
+  does, and it travels with the row -- `set_data_3dgs`, the scene slots, the
+  launch APIs, `SplatCloud`, `state.json`. Everything that only moves rows
+  (densify, the codecs, checkpoints) needs nothing; what evaluates or steps
+  them must know the split. Vulkan only: the CUDA launchers refuse lobes.
+  docs/notes/spherical-beta.md.
 - **An edited model's placement is applied by the VIEWER until it is saved**
   (`EditDoc::placement`), so there are two frames on screen: the elements'
   own, and the saved coordinates the grid, the pivot and the alignment helpers

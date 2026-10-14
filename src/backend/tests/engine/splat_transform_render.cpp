@@ -1,9 +1,10 @@
 // Baking a placement into a model must not change what it looks like: render
 // a scene, move the splats AND the camera by one similarity, render again.
 // Every attribute checkpoint/SplatTransform.h touches is on that path -- the
-// means, the orientation, the log scales, and the SH bands, whose rotation is
-// the part a wrong sign survives everywhere except here. The control renders
-// the moved model with its SH left alone and must NOT match.
+// means, the orientation, the log scales, the SH bands, whose rotation is the
+// part a wrong sign survives everywhere except here, and the spherical-beta
+// lobes (Vulkan builds). The control renders the moved model with its colour
+// rows left alone and must NOT match.
 //
 //   ./splat_transform_render        (either backend, no reference file)
 
@@ -37,7 +38,7 @@ static void check(bool ok, const std::string& what) {
 static std::vector<float> render(const spirula::SplatCloud& c,
                                  const std::vector<float>& viewmat,
                                  const char* prim, const char* cam, int degree) {
-    const int64_t K = c.dim_sh() - 1;
+    const int64_t K = c.coeffs();
     // set_data_3dgs is a no-op on an initialized world.
     engine_reset();
     set_data_3dgs(c.num, ttv(c.means.data(), {c.num, 3}),
@@ -45,7 +46,7 @@ static std::vector<float> render(const spirula::SplatCloud& c,
                   ttv(c.scales.data(), {c.num, 3}),
                   ttv(c.opacities.data(), {c.num, 1}),
                   ttv(c.features_dc.data(), {c.num, 3}),
-                  ttv(c.features_sh.data(), {c.num, K, 3}));
+                  ttv(c.features_sh.data(), {c.num, K, 3}), c.sb_lobes);
     const std::vector<float> intr = {150, 150, W * 0.5f, H * 0.5f};
     const std::vector<float> dist(kCameraDistortionParams, 0.0f);
     set_camera_params(W, H, cam, "NONE", ttv(viewmat.data(), {1, 4, 4}),
@@ -65,11 +66,19 @@ int main() {
         return lo + (hi - lo) * (float)(rng() & 0xffffff) / 16777215.0f;
     };
 
-    for (int degree : {3, 4}) {
+    struct Basis { int degree, lobes; };
+    std::vector<Basis> bases = {{3, 0}, {4, 0}};
+#ifdef SS_BACKEND_VULKAN
+    bases.push_back({0, 2});
+    bases.push_back({3, 4});
+#endif
+    for (const Basis& basis : bases) {
+        const int degree = basis.degree;
         spirula::SplatCloud c;
         c.num = N;
         c.sh_degree = degree;
-        const int64_t K = c.dim_sh() - 1;
+        c.sb_lobes = basis.lobes;
+        const int64_t K = c.coeffs();
         c.means.resize(N * 3); c.quats.resize(N * 4); c.scales.resize(N * 3);
         c.opacities.resize(N); c.features_dc.resize(N * 3);
         c.features_sh.resize(N * K * 3);
@@ -86,8 +95,19 @@ int main() {
             c.opacities[i] = uf(-1.f, 3.f);
             for (int k = 0; k < 3; k++) c.features_dc[3*i+k] = uf(0.f, 1.5f);
         }
-        // Strong view dependence, so a wrong band matrix is a wrong image.
+        // Strong view dependence, so a wrong band matrix is a wrong image;
+        // lobes bright and sharp enough that a wrong axis is one too.
         for (float& v : c.features_sh) v = uf(-0.6f, 0.6f);
+        for (int64_t i = 0; i < N; i++) {
+            float* lobe =
+                c.features_sh.data() + (i * K + c.basis().sh_coeffs()) * 3;
+            for (int l = 0; l < c.sb_lobes; l++, lobe += 6) {
+                for (int k = 0; k < 3; k++) lobe[k] = uf(-0.3f, 0.6f);
+                lobe[3] = uf(0.f, 3.1416f);
+                lobe[4] = uf(0.f, 6.2832f);
+                lobe[5] = uf(-1.f, 2.f);
+            }
+        }
         // Unit, as FusedGeometryOptim.cu leaves them after every step: the
         // 3dgut rasterizer builds its rotation from the stored value as is.
         for (int64_t i = 0; i < N; i++) {
@@ -150,15 +170,17 @@ int main() {
             mean /= (double)a.size();
             lit /= (double)a.size();
             stale_mean /= (double)a.size();
-            std::printf("     SH %d %-5s %-8s  mean |d| %.2e  max %.2e  "
-                        "(image mean %.3f; SH left alone: %.2e)\n",
-                        degree, cfg.prim, cfg.cam, mean, worst, lit, stale_mean);
+            std::printf("     SH %d SB %d %-5s %-8s  mean |d| %.2e  max %.2e  "
+                        "(image mean %.3f; colour left alone: %.2e)\n",
+                        degree, c.sb_lobes, cfg.prim, cfg.cam, mean, worst, lit,
+                        stale_mean);
             const std::string tag = std::string("SH ") + std::to_string(degree) +
-                                    " " + cfg.prim + " " + cfg.cam;
+                                    " SB " + std::to_string(c.sb_lobes) + " " +
+                                    cfg.prim + " " + cfg.cam;
             check(lit > 0.05, tag + ": the render is not empty");
             check(mean < 2e-4 && worst < 2e-2, tag + ": moved model = same image");
             check(stale_mean > 20.0 * std::max(mean, 1e-6),
-                  tag + ": un-rotated SH is visibly wrong");
+                  tag + ": un-rotated colour is visibly wrong");
         }
     }
     std::printf("%s\n", g_failures ? "FAILED" : "all passed");

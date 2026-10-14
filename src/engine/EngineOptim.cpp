@@ -15,6 +15,42 @@
 static constexpr int64_t kFpboBlock = 256;
 
 
+// Hands the seeded fp32 rows to the value codec, whose zeroed init only
+// stands for all-zero rows. Host-side through core/Tensor.h's codec, as
+// checkpoint/Adapt.cpp re-encodes; once per run.
+template <int BITS>
+static void _encode_seeded_sh(QuantizedTensor<BITS, 256>& q,
+                              const std::vector<float>& rows, int64_t N,
+                              int K, bool fpbo) {
+    const ShQuantAddr a = sh_quant_addr((uint32_t)K, fpbo ? 0 : 256);
+    const int64_t R = 3 * (int64_t)K;
+    std::vector<float2> mm((size_t)q.n_bounds, float2{1e30f, -1e30f});
+    auto each = [&](auto&& fn) {
+        for (int64_t i = 0; i < N; i++) {
+            const int64_t base = a.base(i);
+            for (int c = 0; c < R; c++) {
+                const int64_t cell = a.cell(base, c);
+                fn(cell, cell / a.bounds_stride, rows[(size_t)(i * R + c)]);
+            }
+        }
+    };
+    each([&](int64_t, int64_t b, float v) {
+        mm[(size_t)b].x = std::min(mm[(size_t)b].x, v);
+        mm[(size_t)b].y = std::max(mm[(size_t)b].y, v);
+    });
+    for (auto& m : mm)
+        if (m.x > m.y) m = float2{0.0f, 0.0f};
+    std::vector<uint8_t> packed((size_t)q.packed_bytes(), 0);
+    each([&](int64_t cell, int64_t b, float v) {
+        QuantizedTensor<BITS, 256>::encode_v(packed.data(), cell, v,
+                                             mm[(size_t)b]);
+    });
+    backend::memcpy_sync(q.packed_ptr(), packed.data(), packed.size(),
+                         backend::MemcpyKind::HostToDevice);
+    backend::memcpy_sync(q.bounds_ptr(), mm.data(), mm.size() * sizeof(float2),
+                         backend::MemcpyKind::HostToDevice);
+}
+
 static void _ensure_optim_state(int sh_optim_bits, int sh_value_bits,
                                 int non_sh_optim_bits,
                                 bool use_per_splat_bias_correction = false) {
@@ -74,7 +110,16 @@ static void _ensure_optim_state(int sh_optim_bits, int sh_value_bits,
     // largest world buffer on big scenes) and keep only its [N, K] shape
     // descriptor so downstream consumers that derive sh_degree from the
     // TensorArray stride still work. Re-alloc on flip back to fp32.
+    std::vector<float> seeded_sh;
     if (quantize_sh_value) {
+        if (engine().world.features_sh_seeded &&
+            engine().world.features_sh.data_ptr() != nullptr) {
+            seeded_sh.resize((size_t)(N * K * 3));
+            backend::memcpy_sync(seeded_sh.data(),
+                                 engine().world.features_sh.data_ptr(),
+                                 seeded_sh.size() * sizeof(float),
+                                 backend::MemcpyKind::DeviceToHost);
+        }
         DevicePool::global().free(PoolSlot::WorldFeaturesSh);
         engine().world.features_sh.set_shape_no_alloc(N, K);
     } else if (engine().world.features_sh.data_ptr() == nullptr && N > 0 && K > 0) {
@@ -252,15 +297,20 @@ static void _ensure_optim_state(int sh_optim_bits, int sh_value_bits,
         engine().optim.g1_features_sh.zero();
         engine().optim.g2_features_sh.zero();
     }
-    // SH VALUE-quant zero-init. Initial features_sh is zero (only DC has
-    // non-zero defaults), so zeroing both packed bytes and bounds is a valid
-    // initial state -- the codec decodes byte=0 against bound=(0,0) to 0.0f.
-    // If non-zero initial values ever get baked in upstream, this needs an
-    // encode pass instead.
+    // SH VALUE-quant init: the codec decodes byte=0 against bound=(0,0) to
+    // 0.0f, which is all-zero rows; seeded rows are encoded instead.
     if (engine().world.features_sh_quant8.initialized())       engine().world.features_sh_quant8.zero();
     if (engine().world.features_sh_quant16.initialized())      engine().world.features_sh_quant16.zero();
     if (engine().world.features_sh_quant8_fpbo.initialized())  engine().world.features_sh_quant8_fpbo.zero();
     if (engine().world.features_sh_quant16_fpbo.initialized()) engine().world.features_sh_quant16_fpbo.zero();
+    if (!seeded_sh.empty()) {
+        auto& w = engine().world;
+        if (w.features_sh_quant8.initialized())       _encode_seeded_sh(w.features_sh_quant8, seeded_sh, N, (int)K, false);
+        if (w.features_sh_quant16.initialized())      _encode_seeded_sh(w.features_sh_quant16, seeded_sh, N, (int)K, false);
+        if (w.features_sh_quant8_fpbo.initialized())  _encode_seeded_sh(w.features_sh_quant8_fpbo, seeded_sh, N, (int)K, true);
+        if (w.features_sh_quant16_fpbo.initialized()) _encode_seeded_sh(w.features_sh_quant16_fpbo, seeded_sh, N, (int)K, true);
+        w.features_sh_seeded = false;
+    }
     engine().optim.accum_buffer.zero();
     engine().optim.bias_correction_steps.zero();
     engine().optim.visit_counters.zero();
@@ -385,11 +435,9 @@ void engine_fused_proj_bwd_optim_step(int step, const OptimConfig& cfg) {
 
     auto& aabb_q = engine().fwd.aabb;
 
-    // Dispatch on primitive. Pass engine().sh_degree (= sh_degree_to_use) so
-    // the kernel-template SH degree matches the forward pass during warmup --
-    // otherwise SH backward computes spurious gradients on unused bands which
-    // contaminate v_mean through the viewdir chain.
-    int max_sh_degree = engine().sh_degree;
+    // The warmup's SH degree, as the forward used: gradients on unused bands
+    // would contaminate v_mean through the viewdir chain.
+    const ColorBasis color = engine_color();
     // SH VALUE-quant: pass packed + per-splat-block bounds when active. The
     // FPBO kernel expects the per-splat-block layout (1 float2 per 256 splats)
     // -- the allocation in _ensure_optim_state above set that up in
@@ -447,7 +495,7 @@ void engine_fused_proj_bwd_optim_step(int step, const OptimConfig& cfg) {
 
     auto call_dispatch = [&](auto fn) {
         fn(
-            N, max_sh_degree, splats_w,
+            N, color, splats_w,
             _dt2d_tv(engine().camera.viewmats),
             _dv_tv(engine().camera.intrins),
             (uint32_t)engine().camera.width,
@@ -468,6 +516,7 @@ void engine_fused_proj_bwd_optim_step(int step, const OptimConfig& cfg) {
             densify_score,
             cfg.lr_means, cfg.lr_quats, cfg.lr_scales,
             cfg.lr_opacities, cfg.lr_features_dc, cfg.lr_features_sh,
+            cfg.lr_features_sb,
             cfg.max_gauss_ratio, cfg.scale_regularization_weight,
             cfg.mcmc_opacity_reg_weight, cfg.mcmc_scale_reg_weight,
             cfg.erank_reg_weight, cfg.erank_reg_weight_s3,
@@ -637,8 +686,14 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
                 // fused_adam_step divides l2_reg by the parameter count;
                 // FPBO applies 2*dc_reg/3 per splat, so pre-multiply by N.
                 cfg.dc_reg_weight * (float)N, 0.5f / 0.28209479177387814f,
-                grad_scale, zero_grad);
+                SbOptimCells{}, grad_scale, zero_grad);
         }
+    }
+
+    SbOptimCells sb;
+    if (engine().sb_lobes > 0) {
+        sb.first_cell = 3 * (engine().num_sh - 2 * engine().sb_lobes);
+        sb.lr = cfg.lr_features_sb;
     }
 
     // SH update: pick the right kernel based on (quant value, quant optim,
@@ -677,7 +732,7 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
             engine().world.features_sh_quant8.bounds_ptr(),
             cfg.lr_features_sh, step + 1, per_splat_steps,
             cfg.sh_reg_weight, 0.0f,
-            cfg.sh_optim_bits, /*value_bits=*/8, color_trust,
+            cfg.sh_optim_bits, /*value_bits=*/8, color_trust, sb,
             grad_scale, zero_grad);
     } else if (cfg.sh_value_bits != 32
                && engine().world.features_sh_quant16.initialized()) {
@@ -693,7 +748,7 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
             engine().world.features_sh_quant16.bounds_ptr(),
             cfg.lr_features_sh, step + 1, per_splat_steps,
             cfg.sh_reg_weight, 0.0f,
-            cfg.sh_optim_bits, /*value_bits=*/16, color_trust,
+            cfg.sh_optim_bits, /*value_bits=*/16, color_trust, sb,
             grad_scale, zero_grad);
     } else if (cfg.sh_optim_bits != 32 && engine().optim.sh_quant_state.initialized()) {
         // SH-quant (optim) only -- fp32 SH values. Plain quantized Adam kernel.
@@ -706,7 +761,7 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
             engine().optim.sh_quant_state.bounds_ptr(),
             cfg.lr_features_sh, step + 1, per_splat_steps,
             cfg.sh_reg_weight, 0.0f,
-            cfg.sh_optim_bits, color_trust,
+            cfg.sh_optim_bits, color_trust, sb,
             grad_scale, zero_grad);
     } else if (cfg.use_color_trust_region) {
         const int s1 = step + 1;
@@ -719,7 +774,7 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
             _dv_tv(engine().world.features_dc),
             _dv_tv(engine().world.opacities),
             cfg.lr_features_sh,
-            beta1, beta2, eps, cfg.eps_tr, cfg.sh_reg_weight, s1,
+            beta1, beta2, eps, cfg.eps_tr, cfg.sh_reg_weight, s1, sb,
             grad_scale, zero_grad
         );
     } else {
@@ -729,7 +784,7 @@ void engine_optim_step(int step, const OptimConfig& cfg) {
             DeviceTensorFloatND(engine().optim.g1_features_sh),
             DeviceTensorFloatND(engine().optim.g2_features_sh),
             cfg.lr_features_sh, step + 1, per_splat_steps,
-            cfg.sh_reg_weight, 0.0f,
+            cfg.sh_reg_weight, 0.0f, sb,
             grad_scale, zero_grad);
     }
 }

@@ -28,11 +28,13 @@
 
 #include <kernels/densify/Densify.cuh>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <random>
 #include <vector>
 
@@ -527,6 +529,61 @@ int main(int argc, char** argv) {
         }
     };
 
+    // A splat MCMC copies sits on its source's mean, so splats sharing a mean
+    // must decode the same value-codec row. Parity cannot see a clipped copy
+    // on its own: both backends clipping alike compares equal.
+    bool inherit_ok = true;
+    auto check_inherited = [&](const Model& m, int64_t n, const char* what) {
+        std::vector<float> means(3 * n), bd(m.sh_value_bound_f);
+        std::vector<uint8_t> pk(m.sh_value_bytes);
+        backend::memcpy_sync(means.data(), m.means, means.size() * 4,
+                             MemcpyKind::DeviceToHost);
+        backend::memcpy_sync(bd.data(), m.sh_value_bounds, bd.size() * 4,
+                             MemcpyKind::DeviceToHost);
+        backend::memcpy_sync(pk.data(), m.sh_value_packed, pk.size(),
+                             MemcpyKind::DeviceToHost);
+        const int64_t R = 3 * m.num_sh_buffer;
+        const double qmax = m.sh_value_bits == 16 ? 65535.0 : 255.0;
+        auto cell_value = [&](int64_t g, int64_t c, double* quantum) {
+            int64_t cell = m.bounds_per_splat
+                               ? (g >> 8) * ((R + 1) >> 1) * 512 +
+                                     (g & 255) * 2 + (c >> 1) * 512 + (c & 1)
+                               : g * R + c;
+            int64_t b = m.bounds_per_splat ? g / 256 : cell / 256;
+            double q = m.sh_value_bits == 16
+                           ? (double)(pk[2 * cell] | (pk[2 * cell + 1] << 8))
+                           : (double)pk[cell];
+            double lo = bd[2 * b], hi = bd[2 * b + 1];
+            *quantum = (hi - lo) / qmax;
+            return lo + (hi - lo) * q / qmax;
+        };
+        std::map<std::array<float, 3>, int64_t> first;
+        int64_t pairs = 0, bad = 0;
+        double worst = 0;
+        for (int64_t g = 0; g < n; g++) {
+            std::array<float, 3> key{means[3 * g], means[3 * g + 1],
+                                     means[3 * g + 2]};
+            auto [it, fresh] = first.emplace(key, g);
+            if (fresh) continue;
+            pairs++;
+            bool row_ok = true;
+            for (int64_t c = 0; c < 3 * m.num_sh; c++) {
+                double qa = 0, qb = 0;
+                double d = std::fabs(cell_value(it->second, c, &qa) -
+                                     cell_value(g, c, &qb));
+                worst = std::max(worst, d / (qa + qb));
+                row_ok = row_ok && d <= qa + qb;
+            }
+            bad += row_ok ? 0 : 1;
+        }
+        if (pairs == 0 || bad != 0) {
+            std::printf("densify_parity: %s: %lld of %lld copied rows differ "
+                        "from their source (worst %.3g quanta)\n", what,
+                        (long long)bad, (long long)pairs, worst);
+            inherit_ok = false;
+        }
+    };
+
     // relocate (long-axis split): exactly one relocating splat per config
     {
         // fp32, low-opacity trigger
@@ -654,6 +711,7 @@ int main(int argc, char** argv) {
         Model m = build_model(8, 16, true, true, 15, 15, -1, -1, -1);
         lower_some_opacs(m);
         call_relocate_mcmc(m, 0.005f, 88u);
+        check_inherited(m, N, "relocate_mcmc q16");
         readback_model(m);
     }
 
@@ -675,6 +733,13 @@ int main(int argc, char** argv) {
     {
         Model m = build_model(4, 8, false, false, 8, 15, -1, -1, -1);
         call_add_mcmc(m, 512, 0.005f, 111u);
+        check_inherited(m, N + 512, "add_mcmc q8");
+        readback_model(m);
+    }
+    {
+        Model m = build_model(8, 16, true, true, 15, 15, -1, -1, -1);
+        call_add_mcmc(m, 600, 0.005f, 112u);
+        check_inherited(m, N + 600, "add_mcmc q16");
         readback_model(m);
     }
 
@@ -691,7 +756,7 @@ int main(int argc, char** argv) {
         std::printf("densify_parity: dumped %lld + %lld floats + %lld codes "
                     "to %s\n",
                     (long long)nf, (long long)nl, (long long)nc, argv[2]);
-        return revived_ok ? 0 : 1;
+        return revived_ok && inherit_ok ? 0 : 1;
     }
 
     // Diagnostics: DENSIFY_DUMP_GOT=<path> writes this run's outputs in the
@@ -776,7 +841,8 @@ int main(int argc, char** argv) {
         (long long)nf, fmax, (long long)fviol, 100.0 * ffrac, (long long)nl,
         lmax, (long long)lviol, 100.0 * lfrac, (long long)nc,
         (long long)max_c, (long long)cviol, 100.0 * cfrac);
-    bool pass = ffrac <= 1e-3 && lfrac <= 2e-2 && cfrac <= 2e-2 && revived_ok;
+    bool pass = ffrac <= 1e-3 && lfrac <= 2e-2 && cfrac <= 2e-2 && revived_ok &&
+                inherit_ok;
     std::printf(pass ? "densify_parity: PASSED\n"
                      : "densify_parity: FAILED\n");
     return pass ? 0 : 1;

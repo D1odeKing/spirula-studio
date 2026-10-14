@@ -8,6 +8,7 @@
 
 #include <core/Tensor.h>
 #include <core/Common.cuh>
+#include <core/ColorBasis.h>
 
 
 // Per-attribute block-wise quantized GRADIENT accumulator pointers (non-FPBO
@@ -33,7 +34,7 @@ struct GradQuantBuffers {
 
 void projection_3dgs_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -58,7 +59,7 @@ void projection_3dgs_backward_quantgrad(
 
 void projection_mip_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -83,7 +84,7 @@ void projection_mip_backward_quantgrad(
 
 void projection_3dgut_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,

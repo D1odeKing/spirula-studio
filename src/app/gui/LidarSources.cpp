@@ -100,6 +100,7 @@ bool GuiApp::read_lidar_input(const std::string& path, LidarInput& in) {
 }
 
 void GuiApp::add_lidar_sources(const std::vector<std::string>& paths) {
+    const size_t first_new = _lidar.size();
     for (const std::string& p : paths) {
         if (p.empty()) continue;
         LidarInput in;
@@ -108,6 +109,7 @@ void GuiApp::add_lidar_sources(const std::vector<std::string>& paths) {
                          [&](const LidarInput& l) { return l.path == in.path; }))
             _lidar.push_back(std::move(in));
     }
+    if (first_new < _lidar.size()) select_source(_lidar[first_new].path, true);
     refresh_sources();
 }
 
@@ -173,10 +175,16 @@ LidarJob GuiApp::lidar_job() const {
 void GuiApp::draw_lidar_rows(float path_w, bool one_line) {
     int remove = -1;
     ImGui::PushID("lidar");
+    _lidar_row_h.resize(_lidar.size(), 0.0f);
+    const int selected = selected_scan();
     for (size_t i = 0; i < _lidar.size(); i++) {
         ImGui::PushID((int)i);
+        const float row_y = ImGui::GetCursorScreenPos().y;
+        if (row_select_begin(_lidar_row_h[i], (int)i == selected))
+            select_source(_lidar[i].path, true);
         ImGui::SetNextItemWidth(path_w);
         ui::InputTextRaw("##in", &_lidar[i].edit);
+        if (ImGui::IsItemActivated()) select_source(_lidar[i].path, true);
         if (ImGui::IsItemDeactivatedAfterEdit() && _lidar[i].edit != _lidar[i].path)
             replace_lidar_source(i, _lidar[i].edit);
         ImGui::SameLine();
@@ -189,6 +197,7 @@ void GuiApp::draw_lidar_rows(float path_w, bool one_line) {
         if (ui::Button(dmsg::remove)) remove = (int)i;
         if (one_line) ImGui::SameLine();
         ui::Text(ldmsg::scan_row, {(long long)_lidar[i].points, (long long)_lidar[i].photos});
+        _lidar_row_h[i] = ImGui::GetCursorScreenPos().y - row_y - ImGui::GetStyle().ItemSpacing.y;
         ImGui::PopID();
     }
     ImGui::PopID();

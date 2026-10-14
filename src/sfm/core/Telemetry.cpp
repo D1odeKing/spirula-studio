@@ -1290,8 +1290,8 @@ bool read_insta360(const Source& own, const Movie* mv, Telemetry& out, std::stri
 // Driver
 // ================
 
-bool read_any(const Source& src, Telemetry& out, std::string& error,
-              const Source* original = nullptr, const std::string& original_name = {}) {
+bool read_carrier(const Source& src, Telemetry& out, std::string& error,
+                  const Source* original, const std::string& original_name) {
     out = Telemetry();
     Movie mv;
     bool is_mp4 = false;
@@ -1316,6 +1316,22 @@ bool read_any(const Source& src, Telemetry& out, std::string& error,
         else if (tk.sample_type == fourcc("djmd")) { if (!read_dji(src, tk, out, error)) return false; }
         if (out.carrier != TelemetryCarrier::None) break;
     }
+    return true;
+}
+
+// A receiver without a fix writes 0, 0 on several cameras (a GoPro before
+// lock, an Insta360 without its phone), and nothing downstream should read
+// that as a position in the Gulf of Guinea.
+bool read_any(const Source& src, Telemetry& out, std::string& error,
+              const Source* original = nullptr, const std::string& original_name = {}) {
+    if (!read_carrier(src, out, error, original, original_name)) return false;
+    const size_t before = out.gps.size();
+    out.gps.erase(std::remove_if(out.gps.begin(), out.gps.end(),
+                                 [](const TelemetryGps& g) { return g.lat == 0 && g.lon == 0; }),
+                  out.gps.end());
+    out.gps_zero = before - out.gps.size();
+    if (out.gps_zero)
+        out.notes.push_back(std::to_string(out.gps_zero) + " GPS samples at 0, 0 (no fix) ignored");
     return true;
 }
 

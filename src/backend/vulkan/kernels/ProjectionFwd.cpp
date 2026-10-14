@@ -1,7 +1,8 @@
 // Vulkan implementation of the projection-forward launch API
 // (kernels/projection/ProjectionFwd.cuh). Mirrors ProjectionFwd.cu's launcher logic; the
 // device work runs shaders/projection_fwd.slang with camera model /
-// distortion tier / SH degree / antialiased as specialization constants.
+// distortion tier / SH degree / SB lobes / antialiased as specialization
+// constants.
 
 #include <kernels/projection/ProjectionFwd.cuh>
 
@@ -22,7 +23,7 @@ struct ProjectionFwdParams {
     uint32_t width, height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;
 };
 static_assert(sizeof(ProjectionFwdParams) == 16 * 8 + 8 * 4,
               "params layout must match the slang struct");
@@ -40,7 +41,7 @@ struct Projection3dgutParams {
     uint32_t width, height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;
 };
 static_assert(sizeof(Projection3dgutParams) == 16 * 8 + 8 * 4,
               "params layout must match the slang struct");
@@ -53,7 +54,7 @@ launch_projection_fwd_vk(
     const bool antialiased,
     const int64_t N,
     const std::vector<DeviceTensorFloatND>& in_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
     const std::string& camera_model, const std::string& distortion,
@@ -74,8 +75,8 @@ launch_projection_fwd_vk(
     const vkk::CamDistSpec cd = vkk::cam_dist_spec(camera_model, distortion);
 
     Vanilla3DGS<0>::WorldBuffer wb(in_splats);
-    int sh_degree = wb.sh_degree();
-    sh_degree = std::min(sh_degree, max_sh_degree);
+    const vkk::ColorSpec cs =
+        vkk::color_spec(color, vkk::row_coeffs(wb, num_sh_buffer));
 
     const uint32_t C = (uint32_t)std::get<2>(viewmats)[0];
 
@@ -112,14 +113,16 @@ launch_projection_fwd_vk(
     p.sh_bounds = q_bounds;
     p.sh_bounds_stride = q_stride;
     p.num_sh_buffer = num_sh_buffer;
+    p.sb_base = cs.sb_base;
     p.C = C;
     p.N = (uint32_t)N;
     p.width = image_width;
     p.height = image_height;
     p.wgs_per_row = per_row;
 
-    backend::vk::SpecList spec{cd.cam, (uint32_t)sh_degree,
-                               antialiased ? 1u : 0u, spec_bits, 0u, cd.dist};
+    backend::vk::SpecList spec{cd.cam,      cs.sh_degree, antialiased ? 1u : 0u,
+                               spec_bits,   cs.sb_lobes,  0u,
+                               cd.dist};
     vkk::dispatch_ring("projection_fwd.projection_fwd_3dgs", spec, per_row,
                        rows, 1, &p, sizeof(p));
 
@@ -133,7 +136,7 @@ launch_projection_fwd_vk(
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgs_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -147,7 +150,7 @@ std::tuple<
     const int64_t sh_bounds_stride
 ) {
     return launch_projection_fwd_vk(
-        /*antialiased=*/false, num_splats, in_splats, max_sh_degree,
+        /*antialiased=*/false, num_splats, in_splats, color,
         viewmats, intrins, image_width, image_height, camera_model,
         distortion, dist_coeffs, radii, sh_value_packed, sh_value_bounds,
         num_sh_buffer, sh_value_bits, sh_bounds_stride);
@@ -156,7 +159,7 @@ std::tuple<
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_mip_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -170,7 +173,7 @@ std::tuple<
     const int64_t sh_bounds_stride
 ) {
     return launch_projection_fwd_vk(
-        /*antialiased=*/true, num_splats, in_splats, max_sh_degree,
+        /*antialiased=*/true, num_splats, in_splats, color,
         viewmats, intrins, image_width, image_height, camera_model,
         distortion, dist_coeffs, radii, sh_value_packed, sh_value_bounds,
         num_sh_buffer, sh_value_bits, sh_bounds_stride);
@@ -179,7 +182,7 @@ std::tuple<
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgut_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -203,8 +206,8 @@ std::tuple<
 
     const int64_t N = num_splats;
     Vanilla3DGUT<0>::WorldBuffer wb(in_splats);
-    int sh_degree = wb.sh_degree();
-    sh_degree = std::min(sh_degree, max_sh_degree);
+    const vkk::ColorSpec cs =
+        vkk::color_spec(color, vkk::row_coeffs(wb, num_sh_buffer));
 
     const uint32_t C = (uint32_t)std::get<2>(viewmats)[0];
 
@@ -241,14 +244,15 @@ std::tuple<
     p.sh_bounds = q_bounds;
     p.sh_bounds_stride = q_stride;
     p.num_sh_buffer = num_sh_buffer;
+    p.sb_base = cs.sb_base;
     p.C = C;
     p.N = (uint32_t)N;
     p.width = image_width;
     p.height = image_height;
     p.wgs_per_row = per_row;
 
-    backend::vk::SpecList spec{cd.cam, (uint32_t)sh_degree, 0u, spec_bits, 0u,
-                               cd.dist};
+    backend::vk::SpecList spec{cd.cam, cs.sh_degree, 0u, spec_bits,
+                               cs.sb_lobes, 0u, cd.dist};
     vkk::dispatch_ring("projection_fwd.projection_fwd_3dgut", spec, per_row,
                        rows, 1, &p, sizeof(p));
 

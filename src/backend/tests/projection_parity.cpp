@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
                               : prim == 1 ? projection_mip_forward
                                           : projection_3dgut_forward;
                     auto out = fn(
-                        N, shd, in_splats, ttv(d_vm, {C, 16}),
+                        N, ColorBasis{shd, 0}, in_splats, ttv(d_vm, {C, 16}),
                         ttv(d_intr, {C, 4}), W, H, cams[ci],
                         dist_fixture::kTierNames[tier],
                         shd ? dist_tv(tier)
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
                                       : projection_3dgut_forward;
                 auto [packed_tv, bounds_tv] = quant_args(bits, fpbo);
                 auto out = fn(
-                    N, 3, in_splats_q, ttv(d_vm, {C, 16}),
+                    N, ColorBasis{3, 0}, in_splats_q, ttv(d_vm, {C, 16}),
                     ttv(d_intr, {C, 4}), W, H, cams[prim],
                     dist_fixture::kTierNames[tier], dist_tv(tier), radii,
                     packed_tv, bounds_tv,
@@ -261,7 +261,7 @@ int main(int argc, char** argv) {
             auto fn = prim == 0   ? projection_3dgs_packed_forward
                       : prim == 1 ? projection_mip_packed_forward
                                   : projection_3dgut_packed_forward;
-            auto out = fn(N, 3, in_splats, ttv(d_vm, {C, 16}),
+            auto out = fn(N, ColorBasis{3, 0}, in_splats, ttv(d_vm, {C, 16}),
                           ttv(d_intr, {C, 4}), W, H, cams[ci],
                           dist_fixture::kTierNames[tier], dist_tv(tier),
                           radii, std::nullopt, std::nullopt, 0, 32, 0);
@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
         auto fn = prim == 0 ? projection_3dgs_packed_forward
                             : projection_3dgut_packed_forward;
         auto [packed_tv, bounds_tv] = quant_args(bits, fpbo);
-        auto out = fn(N, 3, in_splats_q, ttv(d_vm, {C, 16}),
+        auto out = fn(N, ColorBasis{3, 0}, in_splats_q, ttv(d_vm, {C, 16}),
                       ttv(d_intr, {C, 4}), W, H, cams[k],
                       dist_fixture::kTierNames[tier], dist_tv(tier), radii,
                       packed_tv, bounds_tv,

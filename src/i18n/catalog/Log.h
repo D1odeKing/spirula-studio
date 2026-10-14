@@ -2478,6 +2478,40 @@ SS_MSG(bad_quantization_level,
     NL("quantization_level moet 0 of 1 zijn"),
     RU("quantization_level должен быть 0 или 1"),
     TR("quantization_level 0 ya da 1 olmalı"));
+SS_MSG(bad_sb_lobes,
+    EN("sb_lobes must be between 0 and {0}"),
+    JA("sb_lobes は 0 から {0} の間にしてください"),
+    ZH_HANS("sb_lobes 必须在 0 到 {0} 之间"),
+    ZH_HANT("sb_lobes 必須在 0 到 {0} 之間"),
+    KO("sb_lobes는 0에서 {0} 사이여야 합니다"),
+    DE("sb_lobes muss zwischen 0 und {0} liegen"),
+    FR("sb_lobes doit être compris entre 0 et {0}"),
+    ES("sb_lobes debe estar entre 0 y {0}"),
+    PT("sb_lobes precisa estar entre 0 e {0}"),
+    IT("sb_lobes deve essere compreso tra 0 e {0}"),
+    NL("sb_lobes moet tussen 0 en {0} liggen"),
+    RU("sb_lobes должен быть от 0 до {0}"),
+    TR("sb_lobes 0 ile {0} arasında olmalı"));
+SS_MSG(sb_lobes_need_vulkan,
+    EN("spherical-beta lobes (--sb-lobes) need the Vulkan build of spirula"),
+    JA("球面ベータのローブ（--sb-lobes）には Vulkan 版の spirula が必要です"),
+    ZH_HANS("球面 Beta 波瓣（--sb-lobes）需要 Vulkan 版本的 spirula"),
+    ZH_HANT("球面 Beta 波瓣（--sb-lobes）需要 Vulkan 版本的 spirula"),
+    KO("구면 베타 로브(--sb-lobes)에는 Vulkan 빌드의 spirula가 필요합니다"),
+    DE("sphärische Beta-Keulen (--sb-lobes) brauchen den Vulkan-Build von "
+       "spirula"),
+    FR("les lobes bêta sphériques (--sb-lobes) nécessitent la version Vulkan "
+       "de spirula"),
+    ES("los lóbulos beta esféricos (--sb-lobes) requieren la compilación "
+       "Vulkan de spirula"),
+    PT("os lóbulos beta esféricos (--sb-lobes) exigem a compilação Vulkan do "
+       "spirula"),
+    IT("i lobi beta sferici (--sb-lobes) richiedono la build Vulkan di spirula"),
+    NL("sferische bètalobben (--sb-lobes) vereisen de Vulkan-build van "
+       "spirula"),
+    RU("сферическим бета-лепесткам (--sb-lobes) нужна сборка spirula с Vulkan"),
+    TR("küresel beta lobları (--sb-lobes) spirula'nın Vulkan derlemesini "
+       "gerektirir"));
 SS_MSG(warn_init_ply_ignored,
     EN("warning: --resume restores the checkpoint's own splats, so --init-ply "
        "is ignored"),

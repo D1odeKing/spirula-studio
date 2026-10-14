@@ -152,6 +152,13 @@ uniform ivec2 uDim;                 // layout for pos/rot/scale/col (T=1)
 uniform ivec2 uShDim;               // layout for sh texture
 uniform int   uShDegree;
 uniform int   uShRest;
+// Spherical-beta lobes, 2 RGBA16F texels each -- (axis, sharpness),
+// (amplitude, 0) -- in up to 2 layer-range chunks like SH.
+uniform sampler2DArray uSb0;
+uniform sampler2DArray uSb1;
+uniform int   uSbChunkLayers;
+uniform ivec2 uSbDim;
+uniform int   uSbLobes;
 
 uniform mat3  uViewR;               // world -> camera rotation
 uniform vec3  uCamPos;
@@ -183,6 +190,13 @@ vec3 fetchSh(int i, int k) {
        : (ch == 1) ? texelFetch(uSh1, c, 0).rgb
        : (ch == 2) ? texelFetch(uSh2, c, 0).rgb
        :             texelFetch(uSh3, c, 0).rgb;
+}
+
+vec4 fetchSb(int i, int k) {
+  ivec3 c = texCoord(i*2*uSbLobes + k, uSbDim);
+  int ch = c.z / uSbChunkLayers;
+  c.z -= ch * uSbChunkLayers;
+  return (ch == 0) ? texelFetch(uSb0, c, 0) : texelFetch(uSb1, c, 0);
 }
 
 mat3 quatToMat3(vec4 q) {
@@ -243,7 +257,19 @@ vec3 evalColor(vec3 pw, float shScale) {
     }
     c += shScale * r;
   }
-  return max(c + 0.5, 0.0);
+  vec3 col = max(c + 0.5, 0.0);
+  // Lobes add onto the clamped colour, as the trainers do; renormalized,
+  // since an f16 axis can run past unit length and overshoot a sharp peak.
+  if (uSbLobes > 0) {
+    vec3 d = normalize(pw - uCamPos);
+    for (int l = 0; l < 8; l++) {
+      if (l >= uSbLobes) break;
+      vec4 a = fetchSb(int(aIndex), 2*l);
+      float w = dot(d, normalize(a.xyz));
+      if (w > 0.0) col += pow(w, a.w) * fetchSb(int(aIndex), 2*l + 1).rgb;
+    }
+  }
+  return col;
 }
 
 void cull() { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); }

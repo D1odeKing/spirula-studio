@@ -762,7 +762,7 @@ std::vector<std::vector<int64_t>> plan_by_motion(
         t.min_gap = std::max<int64_t>(std::max(1, m.window),
                                       (int64_t)((double)m.skip / range));
         t.max_gap = std::max<int64_t>(t.min_gap, (int64_t)((double)m.skip * range));
-        t.want = std::max<int64_t>(1, m.frames / m.skip);
+        t.want = std::max<int64_t>(1, (m.span > 0 ? m.span : m.frames) / m.skip);
         if (m.max_frames > 0) t.want = std::min<int64_t>(t.want, m.max_frames);
         tracks.push_back(std::move(t));
     }

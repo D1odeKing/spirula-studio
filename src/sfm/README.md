@@ -306,7 +306,8 @@ spirula sfm ba      sparse/0 sparse/0 --real cpu  # ... in place, on the host
 their defaults and worked examples, and `spirula sfm --version` prints the
 package version. A usage error names the flag, says what was wrong with it and
 points at `--help`; it always exits 1, because `auto` spends exit codes 2 and 3
-on *the reconstruction* being absent or partial.
+on *the reconstruction* being absent or partial. Every flag of every command
+is listed in `docs/cli/sfm.md` and `docs/cli/sfm-flags.md`.
 
 A manifest camera can provide complete calibrated intrinsics in `params`, using
 the named model's COLMAP parameter order and the original image's pixel units:

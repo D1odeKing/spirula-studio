@@ -3,6 +3,7 @@
 #include "checkpoint/SplatPly.h"
 
 #include "checkpoint/SplatTransform.h"
+#include "core/SphericalBeta.h"
 
 #include <algorithm>
 #include <cmath>
@@ -156,7 +157,56 @@ int sh_degree_from_rest(int n_rest, const std::string& path) {
                              " SH coefficients per channel is not a whole degree");
 }
 
+// The lobe count an sb_params count encodes: six floats per lobe.
+int sb_lobes_from_params(int n_params, const std::string& path) {
+    if (n_params % 6 != 0)
+        throw std::runtime_error(path + ": " + std::to_string(n_params) +
+                                 " sb_params properties is not a whole number "
+                                 "of spherical-beta lobes (6 each)");
+    if (n_params / 6 > ColorBasis::kMaxSbLobes)
+        throw std::runtime_error(path + ": " + std::to_string(n_params / 6) +
+                                 " spherical-beta lobes; at most " +
+                                 std::to_string(ColorBasis::kMaxSbLobes) +
+                                 " are supported");
+    return n_params / 6;
+}
+
 }  // namespace
+
+
+std::string splat_ply_header(int64_t vertices, const ColorBasis& basis) {
+    std::ostringstream h;
+    h << "ply\n";
+    h << "format binary_little_endian 1.0\n";
+    h << "element vertex " << vertices << "\n";
+    h << "property float x\nproperty float y\nproperty float z\n";
+    h << "property float nx\nproperty float ny\nproperty float nz\n";
+    h << "property float f_dc_0\nproperty float f_dc_1\nproperty float f_dc_2\n";
+    for (int j = 0; j < 3 * basis.sh_coeffs(); j++)
+        h << "property float f_rest_" << j << "\n";
+    for (int j = 0; j < sb::kLobeFloats * basis.sb_lobes; j++)
+        h << "property float sb_params_" << j << "\n";
+    h << "property float opacity\n";
+    h << "property float scale_0\nproperty float scale_1\nproperty float scale_2\n";
+    h << "property float rot_0\nproperty float rot_1\nproperty float rot_2\nproperty float rot_3\n";
+    h << "end_header\n";
+    return h.str();
+}
+
+int splat_ply_row_floats(const ColorBasis& basis) {
+    return 3 + 3 + 3 + 3 * basis.coeffs() + 1 + 3 + 4;
+}
+
+void splat_ply_put_rest(const float* rest, const ColorBasis& basis, float* out) {
+    const int K = basis.sh_coeffs(), L = basis.sb_lobes;
+    for (int ch = 0; ch < 3; ch++)
+        for (int j = 0; j < K; j++)
+            *out++ = rest[j * 3 + ch];
+    const float* lobes = rest + 3 * K;
+    for (int f = 0; f < sb::kLobeFloats; f++)
+        for (int l = 0; l < L; l++)
+            *out++ = lobes[l * sb::kLobeFloats + f];
+}
 
 
 bool is_splat_ply(const std::string& path) {
@@ -188,19 +238,28 @@ SplatCloud read_splat_ply(const std::string& path, bool want_sh) {
     const int co = col("opacity");
     const int cd[3] = {col("f_dc_0"), col("f_dc_1"), col("f_dc_2")};
 
-    // f_rest_<i>: red 0..K-1, then green, then blue (channel-major).
-    std::vector<int> crest;
+    // f_rest_<i>: red 0..K-1, then green, then blue (channel-major);
+    // sb_params_<f * L + l>: field f of lobe l.
+    std::vector<int> crest, csb;
     if (want_sh) {
         for (int i = 0;; i++) {
             int c = find_prop(h, "f_rest_" + std::to_string(i));
             if (c < 0) break;
             crest.push_back(c);
         }
+        for (int i = 0;; i++) {
+            int c = find_prop(h, "sb_params_" + std::to_string(i));
+            if (c < 0) break;
+            csb.push_back(c);
+        }
     }
     SplatCloud out;
     out.sh_degree = sh_degree_from_rest((int)crest.size(), path);
-    const int64_t K = out.dim_sh() - 1;           // coefficients past the DC
+    out.sb_lobes = sb_lobes_from_params((int)csb.size(), path);
+    const int64_t K_sh = out.dim_sh() - 1;        // SH coefficients past the DC
+    const int64_t K = out.coeffs();
     const int64_t K_file = (int64_t)crest.size() / 3;
+    const int L = out.sb_lobes;
     const int64_t n = h.num_vertex;
     out.num = n;
     out.means.resize((size_t)n * 3);
@@ -217,9 +276,13 @@ SplatCloud read_splat_ply(const std::string& path, bool want_sh) {
         out.opacities[i] = v[co];
         for (int k = 0; k < 3; k++) out.features_dc[i*3+k] = v[cd[k]];
         // Channel-major in the file, coefficient-major in the engine.
-        for (int ch = 0; ch < 3 && K > 0; ch++)
-            for (int64_t j = 0; j < K; j++)
+        for (int ch = 0; ch < 3 && K_sh > 0; ch++)
+            for (int64_t j = 0; j < K_sh; j++)
                 out.features_sh[(i * K + j) * 3 + ch] = v[crest[(size_t)(ch * K_file + j)]];
+        float* lobes = L > 0 ? &out.features_sh[(size_t)((i * K + K_sh) * 3)] : nullptr;
+        for (int f = 0; f < sb::kLobeFloats && L > 0; f++)
+            for (int l = 0; l < L; l++)
+                lobes[l * sb::kLobeFloats + f] = v[csb[(size_t)(f * L + l)]];
     };
 
     if (h.ascii) {
@@ -259,7 +322,8 @@ SplatCloud read_splat_ply(const std::string& path, bool want_sh) {
 
 void write_splat_ply(const SplatCloud& c, const std::string& path,
                      const uint8_t* keep, const SplatTransform* moved) {
-    const int64_t K = c.dim_sh() - 1;
+    const ColorBasis basis = c.basis();
+    const int64_t K = c.coeffs();
     int64_t kept = c.num;
     if (keep) {
         kept = 0;
@@ -269,19 +333,9 @@ void write_splat_ply(const SplatCloud& c, const std::string& path,
     fs::create_directories(fs::path(path).parent_path(), ec);
     std::ofstream ply(path, std::ios::binary);
     if (!ply) throw std::runtime_error("cannot open for writing: " + path);
-    ply << "ply\n";
-    ply << "format binary_little_endian 1.0\n";
-    ply << "element vertex " << kept << "\n";
-    ply << "property float x\nproperty float y\nproperty float z\n";
-    ply << "property float nx\nproperty float ny\nproperty float nz\n";
-    ply << "property float f_dc_0\nproperty float f_dc_1\nproperty float f_dc_2\n";
-    for (int64_t j = 0; j < 3 * K; j++) ply << "property float f_rest_" << j << "\n";
-    ply << "property float opacity\n";
-    ply << "property float scale_0\nproperty float scale_1\nproperty float scale_2\n";
-    ply << "property float rot_0\nproperty float rot_1\nproperty float rot_2\nproperty float rot_3\n";
-    ply << "end_header\n";
+    ply << splat_ply_header(kept, basis);
 
-    const int row_floats = (int)(3 + 3 + 3 + 3 * K + 1 + 3 + 4);
+    const int row_floats = splat_ply_row_floats(basis);
     constexpr int kRowsPerFlush = 1024;
     std::vector<float> buf((size_t)row_floats * kRowsPerFlush);
     int rows = 0;
@@ -302,7 +356,7 @@ void write_splat_ply(const SplatCloud& c, const std::string& path,
         const float* rest = K > 0 ? &c.features_sh[(size_t)i * K * 3] : nullptr;
         if (move) {
             if (K > 0) std::copy(rest, rest + K * 3, sh.begin());
-            moved->apply(mean, quat, scale, K > 0 ? sh.data() : nullptr, (int)K);
+            moved->apply(mean, quat, scale, K > 0 ? sh.data() : nullptr);
             rest = sh.data();
         }
         float* row = buf.data() + (size_t)rows * row_floats;
@@ -310,11 +364,8 @@ void write_splat_ply(const SplatCloud& c, const std::string& path,
         for (int a = 0; a < 3; a++) row[p++] = mean[a];
         row[p++] = 0.0f; row[p++] = 0.0f; row[p++] = 0.0f;   // nx ny nz
         for (int a = 0; a < 3; a++) row[p++] = c.features_dc[(size_t)i * 3 + a];
-        // A PLY stores f_rest channel-major; SplatCloud holds it
-        // coefficient-major, which is the transposition read_splat_ply undoes.
-        for (int ch = 0; ch < 3; ch++)
-            for (int64_t j = 0; j < K; j++)
-                row[p++] = rest[(size_t)j * 3 + ch];
+        if (K > 0) splat_ply_put_rest(rest, basis, row + p);
+        p += 3 * (int)K;
         row[p++] = c.opacities[(size_t)i];
         for (int a = 0; a < 3; a++) row[p++] = scale[a];
         for (int a = 0; a < 4; a++) row[p++] = quat[a];

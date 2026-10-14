@@ -46,6 +46,8 @@ void engine_reset();
 
 // --- Setup ---
 
+// features_sh is [N, K, 3]: SH bands, then `sb_lobes` lobes at the end of
+// each row (core/ColorBasis.h).
 void set_data_3dgs(
     int64_t num_splats,
     TorchTensorView means,
@@ -53,7 +55,8 @@ void set_data_3dgs(
     TorchTensorView scales,
     TorchTensorView opacities,
     TorchTensorView features_dc,
-    TorchTensorView features_sh
+    TorchTensorView features_sh,
+    int sb_lobes
 );
 
 // The region the run may grow in (data/RegionProgram.h): program [n, 6, 4],
@@ -518,7 +521,8 @@ void engine_read_view_stats(std::vector<float>& cam_sum, std::vector<uint32_t>& 
 
 int64_t engine_get_cur_num_splats();
 int64_t engine_get_max_num_splats();
-int engine_get_num_sh();   // non-DC SH coefficients per channel
+int engine_get_num_sh();   // float3 per features_sh row: SH bands, then lobes
+int engine_get_sb_lobes();
 
 // `out_rgb_raw` is the pre-color-space-conversion render (linear / wide-gamut)
 // stashed by the color-space forward hook. Null OK; when the engine has no
@@ -660,7 +664,8 @@ void engine_scene_set_data_3dgs(
     TorchTensorView scales,
     TorchTensorView opacities,
     TorchTensorView features_dc,
-    TorchTensorView features_sh
+    TorchTensorView features_sh,
+    int sb_lobes
 );
 
 // The model's own colour space, applied by engine_scene_activate. Two models

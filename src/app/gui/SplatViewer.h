@@ -51,6 +51,7 @@ public:
     std::string file();          // the .ply actually opened
     int64_t num_splats() const { return _num_splats.load(); }
     int sh_degree() const { return _sh_degree.load(); }
+    int sb_lobes() const { return _sb_lobes.load(); }
 
     // Valid once ready(). The client navigates in a normalized frame centred
     // on the model and sized so it is about one unit across, exactly as it
@@ -113,6 +114,7 @@ private:
     std::atomic<Kind> _kind{Kind::Splats};
     std::atomic<int64_t> _num_splats{0};
     std::atomic<int> _sh_degree{0};
+    std::atomic<int> _sb_lobes{0};
     std::atomic<int64_t> _num_faces{0};
     // The engine scene slot this object filled, or < 0 for none: what close()
     // has to free, and what says a half-finished load still left one behind.

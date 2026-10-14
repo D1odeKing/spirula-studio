@@ -12,6 +12,7 @@
 #include "engine/EngineInternal.h"
 #include "engine/EngineState.h"
 
+#include "checkpoint/SplatPly.h"
 #include "core/CheckpointIO.h"
 #include "external/npy.hpp"
 #include <cmath>
@@ -85,6 +86,7 @@ static std::string _build_state_json(EngineState& s, int step, bool full) {
     j << "  \"max_num_splats\": " << s.max_num_splats << ",\n";
     j << "  \"num_sh\": " << s.num_sh << ",\n";
     j << "  \"sh_degree\": " << s.sh_degree << ",\n";
+    j << "  \"sb_lobes\": " << s.sb_lobes << ",\n";
     j << "  \"packed\": " << b(s.packed) << ",\n";
     j << "  \"sh_optim_bits\": " << s.optim.sh_optim_bits << ",\n";
     j << "  \"sh_value_bits\": " << s.world.sh_value_bits << ",\n";
@@ -295,28 +297,26 @@ void engine_save_checkpoint(
         kept++;
     }
 
-    // --- PLY (binary little-endian) ---
-    const int vertex_floats = 3 + 3 + 3 + 3 * K + 1 + 3 + 4;  // pos + normal + dc + sh + opa + scale + rot
+    // --- PLY (binary little-endian), checkpoint/SplatPly.h's layout ---
+    ColorBasis basis{0, s.sb_lobes};
+    while (ColorBasis::sh_coeffs_of(basis.sh_degree + 1) <= K - basis.sb_coeffs())
+        basis.sh_degree++;
+    if (basis.coeffs() != K)
+        throw std::runtime_error("engine_save_checkpoint: " + std::to_string(K) +
+                                 " colour coefficients are no whole SH degree "
+                                 "plus " + std::to_string(s.sb_lobes) + " lobes");
+    const int vertex_floats = spirula::splat_ply_row_floats(basis);
     fs::path ply_path = out_root / "splat.ply";
     {
         std::ofstream ply(ply_path, std::ios::binary);
         if (!ply) throw std::runtime_error("Failed to open PLY for write: " + ply_path.string());
-        ply << "ply\n";
-        ply << "format binary_little_endian 1.0\n";
-        ply << "element vertex " << kept << "\n";
-        ply << "property float x\nproperty float y\nproperty float z\n";
-        ply << "property float nx\nproperty float ny\nproperty float nz\n";
-        ply << "property float f_dc_0\nproperty float f_dc_1\nproperty float f_dc_2\n";
-        for (int j = 0; j < 3 * K; j++) ply << "property float f_rest_" << j << "\n";
-        ply << "property float opacity\n";
-        ply << "property float scale_0\nproperty float scale_1\nproperty float scale_2\n";
-        ply << "property float rot_0\nproperty float rot_1\nproperty float rot_2\nproperty float rot_3\n";
-        ply << "end_header\n";
+        ply << spirula::splat_ply_header(kept, basis);
 
         // Buffer multiple rows per write for throughput.
         constexpr int ROWS_PER_FLUSH = 1024;
         std::vector<float> buf((size_t)vertex_floats * ROWS_PER_FLUSH);
         int rows_in_buf = 0;
+        std::vector<float> rest_row((size_t)std::max(K, 1) * 3);
         auto flush = [&]() {
             if (rows_in_buf == 0) return;
             ply.write(reinterpret_cast<const char*>(buf.data()),
@@ -330,17 +330,17 @@ void engine_save_checkpoint(
             row[p++] = h_means[i].x; row[p++] = h_means[i].y; row[p++] = h_means[i].z;
             row[p++] = 0.f; row[p++] = 0.f; row[p++] = 0.f;  // nx, ny, nz
             row[p++] = h_features_dc[i].x; row[p++] = h_features_dc[i].y; row[p++] = h_features_dc[i].z;
-            // SH rest in (3, K) order: r0..r_{K-1}, g0..g_{K-1}, b0..b_{K-1}.
-            // Branch hoisted out of the inner loops so the codec decode only
-            // runs when value-quant is active.
-            if (quant_sh_value) {
-                for (int j = 0; j < K; j++) row[p++] = decode_sh(i, j, 0);
-                for (int j = 0; j < K; j++) row[p++] = decode_sh(i, j, 1);
-                for (int j = 0; j < K; j++) row[p++] = decode_sh(i, j, 2);
-            } else {
-                for (int j = 0; j < K; j++) row[p++] = h_features_sh[i*K + j].x;
-                for (int j = 0; j < K; j++) row[p++] = h_features_sh[i*K + j].y;
-                for (int j = 0; j < K; j++) row[p++] = h_features_sh[i*K + j].z;
+            if (K > 0) {
+                const float* rest = rest_row.data();
+                if (quant_sh_value) {
+                    for (int j = 0; j < K; j++)
+                        for (int ch = 0; ch < 3; ch++)
+                            rest_row[(size_t)(j * 3 + ch)] = decode_sh(i, j, ch);
+                } else {
+                    rest = &h_features_sh[(size_t)(i * K)].x;
+                }
+                spirula::splat_ply_put_rest(rest, basis, row + p);
+                p += 3 * K;
             }
             row[p++] = h_opacities[i];
             row[p++] = h_scales[i].x; row[p++] = h_scales[i].y; row[p++] = h_scales[i].z;
@@ -413,6 +413,7 @@ int engine_load_checkpoint(std::string input_dir) {
     const int64_t max_n         = _json_int(sj, "max_num_splats", 0);
     const int     num_sh        = (int)_json_int(sj, "num_sh", 0);
     const int     sh_degree     = (int)_json_int(sj, "sh_degree", 0);
+    const int     sb_lobes      = (int)_json_int(sj, "sb_lobes", 0);
     const int     packed        = (int)_json_int(sj, "packed", 0);
     const int     sh_opt_bits   = (int)_json_int(sj, "sh_optim_bits", 32);
     const int     sh_val_bits   = (int)_json_int(sj, "sh_value_bits", 32);
@@ -432,8 +433,15 @@ int engine_load_checkpoint(std::string input_dir) {
     s.cur_num_splats = cur_n;
     s.max_num_splats = max_n;
     DevicePool::global().set_splat_counts(cur_n, max_n);
+    if (s.num_sh != 0 && (s.num_sh != num_sh || s.sb_lobes != sb_lobes))
+        throw std::runtime_error(
+            "engine_load_checkpoint: colour row mismatch (engine " +
+            std::to_string(s.num_sh) + " coefficients, " +
+            std::to_string(s.sb_lobes) + " lobes vs checkpoint " +
+            std::to_string(num_sh) + ", " + std::to_string(sb_lobes) + ")");
     s.num_sh         = num_sh;
     s.sh_degree      = sh_degree;
+    s.sb_lobes       = sb_lobes;
     s.packed         = (packed != 0);
     if (!primitive.empty()) s.primitive = primitive;
     s.optim.use_per_splat_bias_correction = (bias != 0);

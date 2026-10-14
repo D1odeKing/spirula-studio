@@ -4,6 +4,7 @@
 
 #include "checkpoint/Resume.h"
 #include "checkpoint/SplatTransform.h"
+#include "core/SphericalBeta.h"
 #include "data/RegionProgram.h"
 #include "data/SceneTransform.h"
 
@@ -18,19 +19,26 @@ namespace spirula {
 
 namespace {
 
-// Raises the cloud to `deg` bands with zero coefficients, so parts trained
-// at different --sh-degree still share one file.
-void pad_sh(SplatCloud& c, int deg) {
-    if (c.sh_degree >= deg) return;
-    const int64_t old_k = c.dim_sh() - 1;
-    const int64_t new_k = (int64_t)(deg + 1) * (deg + 1) - 1;
-    std::vector<float> sh((size_t)(c.num * new_k * 3), 0.0f);
-    for (int64_t i = 0; i < c.num; i++)
-        for (int64_t k = 0; k < old_k; k++)
-            for (int ch = 0; ch < 3; ch++)
-                sh[(size_t)((i * new_k + k) * 3 + ch)] = c.features_sh[(size_t)((i * old_k + k) * 3 + ch)];
-    c.features_sh.swap(sh);
-    c.sh_degree = deg;
+// Raises the cloud to `to`'s bands (zero coefficients) and lobes (dark ones),
+// so parts trained with different colour bases still share one file.
+void pad_color(SplatCloud& c, const ColorBasis& to) {
+    if (c.basis() == to) return;
+    const ColorBasis from = c.basis();
+    const int64_t old_k = from.coeffs(), new_k = to.coeffs();
+    std::vector<float> rows((size_t)(c.num * new_k * 3), 0.0f);
+    for (int64_t i = 0; i < c.num; i++) {
+        const float* src = c.features_sh.data() + i * old_k * 3;
+        float* dst = rows.data() + i * new_k * 3;
+        std::copy(src, src + 3 * from.sh_coeffs(), dst);
+        dst += 3 * to.sh_coeffs();
+        src += 3 * from.sh_coeffs();
+        std::copy(src, src + 3 * from.sb_coeffs(), dst);
+        for (int l = from.sb_lobes; l < to.sb_lobes; l++)
+            sb::dark_lobe(dst + sb::kLobeFloats * l);
+    }
+    c.features_sh.swap(rows);
+    c.sh_degree = to.sh_degree;
+    c.sb_lobes = to.sb_lobes;
 }
 
 void append(SplatCloud& out, const SplatCloud& in, const std::vector<uint8_t>& keep) {
@@ -44,7 +52,7 @@ void append(SplatCloud& out, const SplatCloud& in, const std::vector<uint8_t>& k
     push(out.scales, in.scales, 3);
     push(out.opacities, in.opacities, 1);
     push(out.features_dc, in.features_dc, 3);
-    if (in.sh_degree > 0) push(out.features_sh, in.features_sh, (in.dim_sh() - 1) * 3);
+    if (in.coeffs() > 0) push(out.features_sh, in.features_sh, in.coeffs() * 3);
     for (uint8_t k : keep) out.num += k;
 }
 
@@ -57,7 +65,7 @@ SplatCloud merge_partition_splats(const ScenePartition& p, const std::vector<std
     stats.parts.resize((size_t)p.num_parts);
     std::vector<SplatCloud> clouds((size_t)p.num_parts);
     std::vector<std::vector<uint8_t>> keeps((size_t)p.num_parts);
-    int deg = 0;
+    ColorBasis basis;
     for (int k = 0; k < p.num_parts; k++) {
         if (k >= (int)part_paths.size() || part_paths[(size_t)k].empty()) continue;
         auto [ply, run_dir] = find_splat_ply(part_paths[(size_t)k]);
@@ -111,7 +119,8 @@ SplatCloud merge_partition_splats(const ScenePartition& p, const std::vector<std
             keep[(size_t)i] = p.field && p.field->label(q, np) == k;
         }
         st.kept = std::count(keep.begin(), keep.end(), (uint8_t)1);
-        deg = std::max(deg, c.sh_degree);
+        basis.sh_degree = std::max(basis.sh_degree, c.sh_degree);
+        basis.sb_lobes = std::max(basis.sb_lobes, c.sb_lobes);
         if (log) {
             char buf[256];
             std::snprintf(buf, sizeof buf, "part %d: %lld splats read, %lld inside its region (%s)", k,
@@ -121,15 +130,17 @@ SplatCloud merge_partition_splats(const ScenePartition& p, const std::vector<std
     }
     SplatCloud out;
     out.num = 0;
-    out.sh_degree = deg;
+    out.sh_degree = basis.sh_degree;
+    out.sb_lobes = basis.sb_lobes;
     for (int k = 0; k < p.num_parts; k++) {
         if (clouds[(size_t)k].num == 0 && keeps[(size_t)k].empty()) continue;
-        pad_sh(clouds[(size_t)k], deg);
+        pad_color(clouds[(size_t)k], basis);
         append(out, clouds[(size_t)k], keeps[(size_t)k]);
         clouds[(size_t)k] = SplatCloud{};
     }
     stats.total = out.num;
-    stats.sh_degree = deg;
+    stats.sh_degree = basis.sh_degree;
+    stats.sb_lobes = basis.sb_lobes;
     return out;
 }
 

@@ -36,6 +36,7 @@
 #include "app/gui/SfmRunner.h"
 #include "app/gui/SourceList.h"
 #include "app/gui/SourceProbe.h"
+#include "app/gui/SourcePreview.h"
 #include "app/gui/StageEta.h"
 #include "app/gui/TelemetryProbe.h"
 #include "app/gui/TrainPreset.h"
@@ -90,7 +91,7 @@ public:
     void frame();
     // Something is moving without the user touching anything -- a render
     // playing back or being written -- so frames must keep coming.
-    bool animating() const { return _compare.animating() || _mask_editor.animating(); }
+    bool animating() const { return _compare.animating() || _mask_editor.animating() || _source_view.animating(); }
 
     // What a script needs to know that is not on screen as a widget: the
     // screen, what is running, what is open. A JSON object body without the
@@ -950,6 +951,36 @@ private:
     // What each input's IMU / GPS holds, read on its own thread and keyed by
     // path, so re-choosing a file already read costs nothing.
     TelemetryProbe _telemetry;
+    // The input the right-hand column previews: a row of _sources, or of
+    // _lidar when `_source_sel_scan`. Kept by path, so a row removed or moved
+    // above it does not move the selection onto another file.
+    SourcePreview _source_view;
+    std::string _source_sel;
+    bool _source_sel_scan = false;
+    // Whether that column shows the input or the run, when there is both.
+    bool _right_input = true;
+    // Each row's height on the last frame: what its selection highlight spans.
+    std::vector<float> _source_row_h, _lidar_row_h;
+    float _source_preview_h = 540.0f;   // unscaled; the one-column layout's share
+    std::string _ffmpeg_checked;
+    bool _ffmpeg_found = false;
+    bool _source_gpu_asked = false;   // a video preview froze the device, or tried to
+    void select_source(const std::string& path, bool scan);
+    // -1 when nothing is selected, or the selection names no row.
+    int selected_source() const;
+    int selected_scan() const;
+    bool source_preview_available() const;
+    bool run_preview_available();
+    PreviewInput source_preview_input() const;
+    // Who may decode video on the inference device now, and the ffmpeg that
+    // can stand in for it.
+    void update_source_preview_gpu();
+    // The run's preview or the input's, in the column or under the form.
+    void draw_dataset_right(float height);
+    void draw_source_preview(float height);
+    void close_source_preview();
+    // Selectable highlight behind an input row, sized from the last frame.
+    bool row_select_begin(float last_h, bool selected);
     std::string _workspace;
     // The output folder this screen derived from the inputs. Kept so a folder
     // the user typed is never overwritten when the input list changes.

@@ -93,48 +93,97 @@ bool load_photo(const PreviewSource& src, const std::string& path,
 }
 
 // One still through the external ffmpeg, processed the way the run's own
-// ffmpeg path leaves it: `-noautorotate` where extraction passes it, and the
-// EAC canvas warped here because ffmpeg's own sampler insets every face.
+// ffmpeg path leaves it.
 bool load_ffmpeg_frame(const PreviewSource& src, double at, int folder, int& w,
                        int& h, std::vector<uint8_t>& rgb,
                        const std::atomic<bool>& cancel) {
-    FfmpegStillOpts opts;
-    opts.track = src.look.packed_lenses >= 2 ? 0 : folder;
-    opts.auto_rotate = src.look.auto_rotate;
-    if (src.look.pano()) opts.eac = src.look.eac;
-    const fs::path tmp = temp_still("preview");
-    const bool ok =
-        ffmpeg_extract_frame(src.ffmpeg_exe, src.input, at, tmp.string(), cancel,
-                             opts);
-    if (ok && !cancel.load() && app::load_rgb(tmp.string(), w, h, rgb)) {
-        // First, as the run's ffmpeg filter graph and the built-in decoder do.
-        std::string lut_error;
-        if (!src.look.lut.empty())
-            if (auto lut = app::cube_lut_cached(src.look.lut, lut_error))
-                app::apply_cube_lut(*lut, rgb.data(), rgb.size() / 3);
-        convert_to_srgb(src, rgb);
-    }
-    std::error_code rm;
-    fs::remove(tmp, rm);
-    if (rgb.empty()) return false;
-    if (!src.look.pano()) {
-        crop_packed(src, folder, w, h, rgb);
-        return true;
-    }
-
-    const size_t view =
-        std::min((size_t)std::max(folder, 0), src.look.views.size() - 1);
-    app::Pano360Remap map;
-    app::pano360_remap(src.look.eac, src.look.views[view], map);
-    std::vector<uint8_t> out((size_t)map.width * map.height * 3);
-    app::pano360_apply(map, rgb.data(), w, h, 0, out.data());
-    rgb.swap(out);
-    w = map.width;
-    h = map.height;
+    std::vector<PreviewPixels> out;
+    if (!load_ffmpeg_stills(src, at, {folder}, false, 0, out, cancel)) return false;
+    w = out[0].w;
+    h = out[0].h;
+    rgb = std::move(out[0].rgb);
     return true;
 }
 
 }  // namespace
+
+void preview_to_srgb(const PreviewSource& src, std::vector<uint8_t>& rgb) {
+    convert_to_srgb(src, rgb);
+}
+
+// `-noautorotate` where extraction passes it, and the EAC canvas warped here
+// because ffmpeg's own sampler insets every face.
+bool load_ffmpeg_stills(const PreviewSource& src, double seconds,
+                        const std::vector<int>& folders, bool keyframe, int max_side,
+                        std::vector<PreviewPixels>& out, const std::atomic<bool>& cancel) {
+    out.clear();
+    if (folders.empty()) return false;
+    FfmpegStillOpts opts;
+    opts.auto_rotate = src.look.auto_rotate;
+    opts.keyframe = keyframe;
+    opts.max_side = max_side;
+    if (src.look.pano()) opts.eac = src.look.eac;
+    // Lenses packed in one picture are all cut from track 0.
+    std::vector<int> tracks;
+    for (int f : folders) {
+        const int t = src.look.pano() || src.look.packed_lenses >= 2 ? 0 : f;
+        if (std::find(tracks.begin(), tracks.end(), t) == tracks.end()) tracks.push_back(t);
+    }
+    std::vector<std::string> paths;
+    for (size_t i = 0; i < tracks.size(); i++)
+        paths.push_back(temp_still(("preview" + std::to_string(i)).c_str()).string());
+    const bool ok = ffmpeg_extract_frames(src.ffmpeg_exe, src.input, seconds, tracks, paths,
+                                          cancel, opts);
+    std::vector<PreviewPixels> read(tracks.size());
+    for (size_t i = 0; ok && i < tracks.size() && !cancel.load(); i++) {
+        PreviewPixels& p = read[i];
+        if (!app::load_rgb(paths[i], p.w, p.h, p.rgb)) continue;
+        // First, as the run's ffmpeg filter graph and the built-in decoder do.
+        std::string lut_error;
+        if (!src.look.lut.empty())
+            if (auto lut = app::cube_lut_cached(src.look.lut, lut_error))
+                app::apply_cube_lut(*lut, p.rgb.data(), p.rgb.size() / 3);
+        convert_to_srgb(src, p.rgb);
+    }
+    std::error_code rm;
+    for (const std::string& path : paths) fs::remove(path, rm);
+    if (!ok || cancel.load()) return false;
+
+    for (int f : folders) {
+        const int t = src.look.pano() || src.look.packed_lenses >= 2 ? 0 : f;
+        const size_t i = (size_t)(std::find(tracks.begin(), tracks.end(), t) - tracks.begin());
+        PreviewPixels p = read[i];
+        if (p.rgb.empty()) return false;
+        if (!src.look.pano()) {
+            crop_packed(src, f, p.w, p.h, p.rgb);
+            out.push_back(std::move(p));
+            continue;
+        }
+        const size_t view = std::min((size_t)std::max(f, 0), src.look.views.size() - 1);
+        app::Pano360Remap map;
+        app::pano360_remap(src.look.eac, src.look.views[view], map);
+        PreviewPixels v;
+        v.w = map.width;
+        v.h = map.height;
+        v.rgb.resize((size_t)map.width * map.height * 3);
+        app::pano360_apply(map, p.rgb.data(), p.w, p.h, 0, v.rgb.data());
+        out.push_back(std::move(v));
+    }
+    return true;
+}
+
+PreviewSource gated(const PreviewSource& src, DecodeGate& gate,
+                    std::unique_lock<std::mutex>& hold) {
+    PreviewSource s = src;
+    if (s.builtin_decode && gate.allowed.load()) {
+        hold = std::unique_lock<std::mutex>(gate.busy);
+        s.builtin_decode = gate.allowed.load();
+        if (!s.builtin_decode) hold.unlock();
+    } else {
+        s.builtin_decode = false;
+    }
+    return s;
+}
 
 std::vector<std::string> preview_folders(const PreviewSource& src) {
     if (!src.is_video && src.look.packed_lenses < 2) return {std::string()};
@@ -153,15 +202,16 @@ void collect_preview_frames(PreviewSource& src, int offers,
 
     if (src.is_video) {
         // Frames are decoded on demand; the list is just how many offers the
-        // slider makes. Seeking is not supported by the decoder, so "frame N"
-        // means "the Nth frame we sample while reading forward".
+        // slider makes.
         long long total = 0;
+        double fps = 0.0;
 #ifdef SS_HAVE_VIDEO
         if (!cancel.load() && src.builtin_decode) {
             video::VideoProbe probe;
             std::string error;
             if (video::probe_video(src.input, probe, error)) {
                 total = probe.frame_count;
+                fps = probe.fps;
                 if (probe.fps > 0.0)
                     src.video_seconds = (double)total / probe.fps;
                 if (src.tracks < probe.tracks) src.tracks = probe.tracks;
@@ -177,18 +227,24 @@ void collect_preview_frames(PreviewSource& src, int offers,
             if (ffmpeg_probe_video(src.ffmpeg_exe, src.input, facts, cancel)) {
                 src.video_seconds = facts.duration;
                 total = facts.frames;
+                fps = facts.fps;
                 if (src.tracks < (int)facts.tracks.size())
                     src.tracks = (int)facts.tracks.size();
             }
         }
         total = std::max(total, (long long)offers);
         src.video_frames = total;
+        const app::FrameSpan clip = app::clip_frames(src.clip_start, src.clip_end, fps);
+        const long long first = std::min<long long>(clip.first, total - 1);
+        const long long end = clip.end >= 0 ? std::min<long long>(clip.end, total) : total;
+        const long long span = std::max(1LL, end - first);
+        src.clip_first = first;
+        src.clip_frames = span;
         for (int i = 0; i < offers; i++) {
             PreviewFrame f;
-            f.index = offers > 1
-                ? (long long)i * (total - 1) / (offers - 1)
-                : 0;
-            f.position = (float)((double)f.index / (double)std::max(1LL, total - 1));
+            const long long at = offers > 1 ? (long long)i * (span - 1) / (offers - 1) : 0;
+            f.index = first + at;
+            f.position = (float)((double)at / (double)std::max(1LL, span - 1));
             frames.push_back(f);
         }
         return;
@@ -282,7 +338,11 @@ bool load_preview_frame(const PreviewSource& src, const PreviewFrame& frame,
         }
         // ffmpeg seeks by time, and the very end of a file is past the last
         // frame often enough to be worth backing away from.
-        const double at = std::min((double)frame.position * src.video_seconds,
+        const double end = src.clip_end > src.clip_start
+                               ? std::min(src.clip_end, src.video_seconds)
+                               : src.video_seconds;
+        const double from = std::min(src.clip_start, end);
+        const double at = std::min(from + (double)frame.position * (end - from),
                                    std::max(0.0, src.video_seconds - 0.1));
         load_ffmpeg_frame(src, at, folder, w, h, rgb, cancel);
         if (cancel.load()) return false;
@@ -314,12 +374,14 @@ std::vector<PreviewFrame> spread_preview_frames(
     // 720 is about half a minute, and the fit wants a moving camera rather
     // than a long one: reading further costs a decode per frame for nothing.
     const long long total = std::max(1LL, src.video_frames);
-    const long long span = std::min(total, 720LL);
+    const long long first = std::clamp(src.clip_first, 0LL, total - 1);
+    const long long clip = src.clip_frames > 0 ? src.clip_frames : total - first;
+    const long long span = std::min(clip, 720LL);
     const long long stride = std::max(1LL, span / samples);
     for (long long i = 0; i < span; i += stride) {
         PreviewFrame f;
-        f.index = i;
-        f.position = (float)((double)i / (double)std::max(1LL, total - 1));
+        f.index = first + i;
+        f.position = (float)((double)i / (double)std::max(1LL, clip - 1));
         out.push_back(f);
     }
     return out;

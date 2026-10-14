@@ -48,17 +48,21 @@ async function fileToHeap(file) {
 // uploaded to RGBA16F textures as HALF_FLOAT with zero conversion). scale is
 // 4-strided: [3] holds the per-splat SH quantization scale. sh is snorm8
 // (Int8Array, uploaded to RGB8_SNORM): coeff = (sh/127) * scale[i*4+3].
+// sb is the spherical-beta lobes, two RGBA16F texels each: (axis, sharpness)
+// and (amplitude, 0), already activated.
 function readSplat() {
   const count = call('ssv_splat_count');
   const shDegree = call('ssv_splat_sh_degree');
   const shRest = call('ssv_splat_sh_rest');
+  const sbLobes = call('ssv_splat_sb_lobes');
   const data = {
-    count, shDegree, shRest,
+    count, shDegree, shRest, sbLobes,
     posop: f32(call('ssv_splat_posop'), count*4),
     quat:  u16(call('ssv_splat_quat'), count*4),
     scale: u16(call('ssv_splat_scale'), count*4),
     fdc:   u16(call('ssv_splat_fdc'), count*3),
     sh:    shRest>0 ? i8(call('ssv_splat_sh'), count*shRest*3) : null,
+    sb:    sbLobes>0 ? u16(call('ssv_splat_sb'), count*sbLobes*8) : null,
   };
   return data;
 }
