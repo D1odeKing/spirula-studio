@@ -144,6 +144,14 @@ int main() {
         expect(!(frames_fields(a.prep) == frames_fields(b.prep)),
                "a video's rate is part of its frames");
         b = made;
+        b.prep.inputs[0].clip_start = 12.5;
+        expect(!(frames_fields(a.prep) == frames_fields(b.prep)),
+               "a video's clip is part of its frames");
+        SfmJob c = b;
+        c.prep.inputs[0].clip_end = 40.0;
+        expect(!(frames_fields(b.prep) == frames_fields(c.prep)),
+               "... and so is where it ends");
+        b = made;
         b.prep.mask_prompt = "person; car";
         expect(frames_fields(a.prep) == frames_fields(b.prep),
                "a mask prompt is not part of the frames");
@@ -707,6 +715,15 @@ int main() {
         expect(back.prep.inputs[0].sequential, "a video that ran in order comes back in order");
         expect(!back.prep.inputs[0].use_gps && back.prep.inputs[0].use_imu,
                "... with its sensor switches as they were");
+        SfmJob clipped = video_job(w);
+        clipped.prep.inputs[0].clip_start = 3.25;
+        clipped.prep.inputs[0].clip_end = 61.5;
+        build(w, clipped);
+        back = video_job(w);
+        restore_record_inputs(read_dataset_record(w.string()), back.prep, back.camera_model);
+        expect(back.prep.inputs[0].clip_start == 3.25 && back.prep.inputs[0].clip_end == 61.5,
+               "a video's clip comes back from the record");
+        expect(plan(back)[Step::Frames].act == Act::Reuse, "... and its frames are reused");
         expect(plan(back)[Step::Model].act == Act::Reuse, "... and its model is reused");
         fs::remove_all(w);
     }
@@ -759,6 +776,13 @@ int main() {
         c = recorded_captures(ws.string(), made.prep);
         expect(c.size() == 1 && c[0].fps == 7.5 && c[0].lockstep,
                "what the extraction recorded wins over the fields");
+        PrepCapture offset{"", video.string(), 6.0, false};
+        offset.time_offset = 12.5;
+        r.begin(Step::Frames, frames_fields(made.prep));
+        r.finish(Step::Frames, {offset});
+        c = recorded_captures(ws.string(), made.prep);
+        expect(c.size() == 1 && c[0].time_offset == 12.5,
+               "a clip's start, where ffmpeg numbered from, is kept with the frames");
         SfmJob d = dropped_images(ws, made);
         c = captures_behind(d.prep);
         expect(c.size() == 1 && c[0].path == video.string() && c[0].subdir.empty(),

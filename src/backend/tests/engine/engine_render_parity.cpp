@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     set_data_3dgs(N, ttv(means.data(), {N, 3}), ttv(quats.data(), {N, 4}),
                   ttv(scales.data(), {N, 3}), ttv(opac.data(), {N, 1}),
                   ttv(dc.data(), {N, 3}),
-                  ttv(sh.data(), {N, NUM_SH, 3}));
+                  ttv(sh.data(), {N, NUM_SH, 3}), 0);
 
     // --- render cameras (2) ---
     const float cy_ = std::cos(0.15f), sy_ = std::sin(0.15f);

@@ -356,7 +356,7 @@ static void _engine_raster_proj_backward(
             if (g.features_dc_q.initialized()) { gq.dc_packed     = g.features_dc_q.packed_ptr(); gq.dc_bounds     = g.features_dc_q.bounds_ptr(); }
             if (g.features_sh_q.initialized()) { gq.sh_packed     = g.features_sh_q.packed_ptr(); gq.sh_bounds     = g.features_sh_q.bounds_ptr(); }
             auto call_qg = [&](auto fn) {
-                fn(engine().cur_num_splats, engine().sh_degree, engine().fwd.splats_w,
+                fn(engine().cur_num_splats, engine_color(), engine().fwd.splats_w,
                    _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                    (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                    engine().camera.model_str,
@@ -371,7 +371,7 @@ static void _engine_raster_proj_backward(
             else throw std::runtime_error("grad-quant projection backward: unknown primitive: " + engine().primitive);
         } else if (engine().primitive == "3dgs") {
             projection_3dgs_backward(
-                engine().cur_num_splats, engine().sh_degree, engine().fwd.splats_w,
+                engine().cur_num_splats, engine_color(), engine().fwd.splats_w,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -381,7 +381,7 @@ static void _engine_raster_proj_backward(
                 vp_opt, vb_opt, num_sh_buffer, sh_value_bits, sh_bounds_stride);
         } else if (engine().primitive == "mip") {
             projection_mip_backward(
-                engine().cur_num_splats, engine().sh_degree, engine().fwd.splats_w,
+                engine().cur_num_splats, engine_color(), engine().fwd.splats_w,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,
@@ -391,7 +391,7 @@ static void _engine_raster_proj_backward(
                 vp_opt, vb_opt, num_sh_buffer, sh_value_bits, sh_bounds_stride);
         } else if (engine().primitive == "3dgut") {
             projection_3dgut_backward(
-                engine().cur_num_splats, engine().sh_degree, engine().fwd.splats_w,
+                engine().cur_num_splats, engine_color(), engine().fwd.splats_w,
                 _dt2d_tv(engine().camera.viewmats), _dv_tv(engine().camera.intrins),
                 (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
                 engine().camera.model_str,

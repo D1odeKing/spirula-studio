@@ -26,6 +26,7 @@ struct MergeStats {
     std::vector<MergePartStats> parts;
     int64_t total = 0;
     int sh_degree = 0;
+    int sb_lobes = 0;
 };
 
 // `part_paths[k]` is part k's run folder, checkpoint folder or splat.ply; an

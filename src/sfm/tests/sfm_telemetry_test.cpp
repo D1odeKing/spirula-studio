@@ -256,6 +256,17 @@ static void test_gpmf() {
         check(close_to(tm.gps[0].t, 0.0, 1e-9) && close_to(tm.gps[2].t, 1.0, 1e-9), "gpmf: GPS anchored to its own first payload");
     }
     check(tm.gravity.size() == 4 && close_to(tm.gravity[0].y, -1.0, 1e-4) && tm.orientation_axes == "XYZ", "gpmf: GRAV swapped into the ORIN frame");
+
+    // A receiver without a fix: the first payload's first row is 0, 0.
+    TrackSpec z{"gpmd", "meta", "GoPro MET", 1000, 1000, {}};
+    z.samples.push_back(gpmf_payload(1000000, 100, 200, 4170, 0, 0));
+    z.samples.push_back(gpmf_payload(2000000, 100, 200, 4170, 435001000, -794000000));
+    const Bytes zfile = build_mp4({z}, 1000, 2000, 0);
+    Telemetry zt;
+    check(telemetry_read(zfile.data(), zfile.size(), zt, err), "gpmf zeros: read (" + err + ")");
+    bool any_zero = false;
+    for (const TelemetryGps& g : zt.gps) any_zero = any_zero || (g.lat == 0 && g.lon == 0);
+    check(zt.gps.size() == 3 && !any_zero, "gpmf zeros: the fix at 0, 0 is dropped");
 }
 
 static Bytes insta_trailer(const Bytes& meta, const Bytes& gyro, const Bytes& gps) {

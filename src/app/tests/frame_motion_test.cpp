@@ -182,6 +182,24 @@ int main() {
                                        std::to_string(b));
     }
 
+    // A clip is budgeted on its own length, not the video's: 300 of 3000
+    // frames measured at a skip of 15 is 20 kept frames, all inside it.
+    {
+        app::MotionPlanInput in;
+        for (int64_t i = 1000; i < 1300; i++) {
+            in.cost.push_back(0.02f);
+            in.ends.push_back(i);
+        }
+        in.frames = 3000;
+        in.span = 300;
+        in.skip = 15;
+        in.window = 3;
+        const std::vector<std::vector<int64_t>> got = app::plan_by_motion({in}, 4.0f);
+        const size_t n = got.empty() ? 0 : got[0].size();
+        expect(n >= 18 && n <= 20, "clip: its own budget, got " + std::to_string(n));
+        expect(n > 0 && got[0].front() >= 1000 && got[0].back() < 1300, "clip: inside it");
+    }
+
     // Nothing to plan from.
     expect(app::plan_by_motion({}, {}, 0, 15, 3, 4.0f, 0).empty(),
            "empty: no samples, no plan");

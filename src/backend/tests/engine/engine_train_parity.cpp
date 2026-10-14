@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
                   ttv(quats.data(), 4, {N, 4}),
                   ttv(scales.data(), 4, {N, 3}),
                   ttv(opac.data(), 4, {N, 1}), ttv(dc.data(), 4, {N, 3}),
-                  ttv(sh.data(), 4, {N, NUM_SH, 3}));
+                  ttv(sh.data(), 4, {N, NUM_SH, 3}), 0);
 
     // --- shared step config: multi-scale loss + SSIM + Adam, no densify ---
     EngineStepConfig cfg{};

@@ -24,8 +24,9 @@ or a dataset folder that has since been moved or deleted.
 
 Opening a different dataset clears the pending resume, so a checkpoint is never
 applied to the wrong scene. Settings can still be changed before pressing
-Start. Layout changes such as a different SH degree or splat cap are adapted on
-load, as with `--resume`.
+Start. Layout changes such as a different SH degree, lobe count or splat cap
+are adapted on load, as with `--resume`; a lobe the checkpoint lacks starts
+fresh.
 
 ## What a save contains
 

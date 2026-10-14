@@ -276,7 +276,7 @@ uint _dn_hash_u3(uint a, uint b, uint c) {
 
 // Spec axes shared by the relocate/MCMC kernels.
 //   kShOptimBits:  0 = fp32 SH Adam state, 8 / 4 = QuantizedAdamState bits
-//   kShValueBits:  8 / 16 (densify_copy_qsh_* only)
+//   kShValueBits:  8 / 16 (the SH value-codec copy kernels only)
 [SpecializationConstant]
 const int kShOptimBits = 0;
 [SpecializationConstant]
@@ -663,14 +663,29 @@ void densify_relocate_las(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 }
 
 // ---------------------------------------------------------------------------
-// SH VALUE-codec copies (decode src cells, encode into dst against dst's
-// CURRENT bounds; clipping accepted — see DensifyQuantCopy.cuh).
+// SH VALUE-codec copies: decode src cells, encode into dst. A grow pass
+// first records in `ext` what each dst bound must widen to, and
+// densify_widen_qsh_value re-encodes those slots (DensifyQuantCopy.cuh).
 // ---------------------------------------------------------------------------
 
+// Order-preserving u32 image of a float: unsigned InterlockedMin on it is a
+// float min of either sign. Max is kept as min of -v, so one 0xff fill
+// empties both halves.
 [ForceInline]
-void _dn_copy_qsh_value(uint* packed, float2* bounds, uint src_splat,
-                        uint dst_splat, uint num_sh, uint num_sh_buffer,
-                        bool bounds_per_splat) {
+uint _dn_qv_key(float f) {
+    uint b = asuint(f);
+    return (b & 0x80000000u) != 0u ? ~b : (b | 0x80000000u);
+}
+[ForceInline]
+float _dn_qv_unkey(uint k) {
+    return asfloat((k & 0x80000000u) != 0u ? (k & 0x7fffffffu) : ~k);
+}
+
+[ForceInline]
+void _dn_copy_qsh_value(uint* packed, float2* bounds, uint* ext,
+                        uint src_splat, uint dst_splat, uint num_sh,
+                        uint num_sh_buffer, bool bounds_per_splat,
+                        bool grow) {
     // bounds_per_splat is the FPBO layout, whose cells are word-paired and
     // block-transposed (docs/notes/sh-quant-layout.md).
     ShAddrW a = sh_quant_addr_w(num_sh_buffer, bounds_per_splat ? 0 : 256);
@@ -681,6 +696,8 @@ void _dn_copy_qsh_value(uint* packed, float2* bounds, uint src_splat,
         src_mm = bounds[src_splat / 256u];
         dst_mm = bounds[dst_splat / 256u];
     }
+    uint slot = 0xffffffffu;
+    uint lo = 0xffffffffu, neg_hi = 0xffffffffu;
     uint cells = 3u * num_sh;
     for (uint c = 0; c < cells; c++) {
         gindex_t src_cell = sh_cell_at_w(src_base, int(c), a.pair_pitch);
@@ -689,22 +706,41 @@ void _dn_copy_qsh_value(uint* packed, float2* bounds, uint src_splat,
             src_mm = bounds[uint(src_cell >> 8)];
             dst_mm = bounds[uint(dst_cell >> 8)];
         }
-        if (kShValueBits == 16) {
-            float v = qtensor_decode_v<16>(packed, src_cell, src_mm);
+        float v = kShValueBits == 16
+                      ? qtensor_decode_v<16>(packed, src_cell, src_mm)
+                      : qtensor_decode_v<8>(packed, src_cell, src_mm);
+        if (grow) {
+            uint s = bounds_per_splat ? dst_splat / 256u
+                                      : uint(dst_cell >> 8);
+            if (s != slot && slot != 0xffffffffu) {
+                InterlockedMin(ext[2u * slot], lo);
+                InterlockedMin(ext[2u * slot + 1u], neg_hi);
+                lo = 0xffffffffu;
+                neg_hi = 0xffffffffu;
+            }
+            slot = s;
+            if (!_dn_finitef(v)) continue;
+            lo = min(lo, _dn_qv_key(v));
+            neg_hi = min(neg_hi, _dn_qv_key(-v));
+        } else if (kShValueBits == 16) {
             vkq_store_u16(packed, dst_cell,
                           qtensor_quantize_v<16>(v, dst_mm));
         } else {
-            float v = qtensor_decode_v<8>(packed, src_cell, src_mm);
             vkq_store_u8(packed, dst_cell, qtensor_quantize_v<8>(v, dst_mm));
         }
     }
+    if (grow && slot != 0xffffffffu) {
+        InterlockedMin(ext[2u * slot], lo);
+        InterlockedMin(ext[2u * slot + 1u], neg_hi);
+    }
 }
 
-struct CopyQshPairsParams {  // 64 bytes: pushed directly
+struct CopyQshPairsParams {  // 72 bytes: pushed directly
     int* src_indices;  // [num_pairs]
     int* dst_indices;  // [num_pairs] (has_dst; else dst = cur_num + pair)
     uint* packed;
     float2* bounds;
+    uint* ext;         // [slots, 2] widening keys
     uint cur_num_splats;
     uint num_pairs;
     uint num_sh;
@@ -712,7 +748,7 @@ struct CopyQshPairsParams {  // 64 bytes: pushed directly
     uint has_dst;
     uint bounds_per_splat;
     uint wgs_per_row;
-    uint _pad0;
+    uint grow;
 };
 
 [shader("compute")]
@@ -724,20 +760,22 @@ void densify_copy_qsh_pairs(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     uint src = uint(p.src_indices[pair]);
     uint dst = p.has_dst != 0 ? uint(p.dst_indices[pair])
                               : p.cur_num_splats + pair;
-    _dn_copy_qsh_value(p.packed, p.bounds, src, dst, p.num_sh,
-                       p.num_sh_buffer, p.bounds_per_splat != 0);
+    _dn_copy_qsh_value(p.packed, p.bounds, p.ext, src, dst, p.num_sh,
+                       p.num_sh_buffer, p.bounds_per_splat != 0,
+                       p.grow != 0);
 }
 
-struct CopyQshMapParams {  // 48 bytes: pushed directly
+struct CopyQshMapParams {  // 56 bytes: pushed directly
     int* index_map;  // [num_splats]; copy only when index_map[dst] != dst
     uint* packed;
     float2* bounds;
+    uint* ext;
     uint num_splats;
     uint num_sh;
     uint num_sh_buffer;
     uint bounds_per_splat;
     uint wgs_per_row;
-    uint _pad0;
+    uint grow;
 };
 
 [shader("compute")]
@@ -748,8 +786,58 @@ void densify_copy_qsh_map(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     if (dst >= p.num_splats) return;
     uint src = uint(p.index_map[dst]);
     if (src == dst) return;
-    _dn_copy_qsh_value(p.packed, p.bounds, src, dst, p.num_sh,
-                       p.num_sh_buffer, p.bounds_per_splat != 0);
+    _dn_copy_qsh_value(p.packed, p.bounds, p.ext, src, dst, p.num_sh,
+                       p.num_sh_buffer, p.bounds_per_splat != 0,
+                       p.grow != 0);
+}
+
+struct WidenQshValueParams {  // 40 bytes: pushed directly
+    uint* packed;
+    float2* bounds;
+    uint* ext;
+    uint slot_cells;   // a multiple of 4: whole words
+    uint num_slots;
+    uint wgs_per_row;
+    uint _pad0;
+};
+
+// One workgroup per bound slot. Each word belongs to one thread, so the
+// re-encode stores whole words.
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void densify_widen_qsh_value(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
+                             uniform WidenQshValueParams p) {
+    const uint slot = wg.y * p.wgs_per_row + wg.x;
+    if (slot >= p.num_slots) return;
+    const float2 old = p.bounds[slot];
+    const uint ex = p.ext[2u * slot], ey = p.ext[2u * slot + 1u];
+    float2 nw = old;
+    if (ex != 0xffffffffu) nw.x = min(old.x, _dn_qv_unkey(ex));
+    if (ey != 0xffffffffu) nw.y = max(old.y, -_dn_qv_unkey(ey));
+    if (nw.x == old.x && nw.y == old.y) return;
+    const uint per_word = kShValueBits == 16 ? 2u : 4u;
+    const uint words = p.slot_cells / per_word;
+    const gindex_t cell0 = (gindex_t)slot * (gindex_t)p.slot_cells;
+    for (uint w = tid; w < words; w += 256u) {
+        const gindex_t c = cell0 + (gindex_t)(w * per_word);
+        uint word = 0u;
+        if (kShValueBits == 16) {
+            [ForceUnroll]
+            for (uint k = 0; k < 2u; k++)
+                word |= qtensor_quantize_v<16>(
+                            qtensor_decode_v<16>(p.packed, c + k, old), nw)
+                        << (16u * k);
+        } else {
+            [ForceUnroll]
+            for (uint k = 0; k < 4u; k++)
+                word |= qtensor_quantize_v<8>(
+                            qtensor_decode_v<8>(p.packed, c + k, old), nw)
+                        << (8u * k);
+        }
+        elem_at(p.packed, c / (gindex_t)per_word)[0] = word;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (tid == 0u) p.bounds[slot] = nw;
 }
 
 // ---------------------------------------------------------------------------

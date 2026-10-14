@@ -439,7 +439,7 @@ int main(int argc, char** argv) {
         const int cam = 0;
         backend::memset_sync(d_radii, 0, N * sizeof(float));
         auto [aabb_2d, depths_2d, splats_s] = projection_3dgut_forward(
-            (int64_t)N, 0, in_splats, ttv(d_vm + 16 * cam, {1, 4, 4}),
+            (int64_t)N, ColorBasis{}, in_splats, ttv(d_vm + 16 * cam, {1, 4, 4}),
             ttv(d_intr + 4 * cam, {1, 4}), W, H, "PINHOLE", "THIN_PRISM",
             ttv(d_dist + dist_fixture::row_offset(2, NCAM, cam),
                 {1, kCameraDistortionParams}),
@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
 
         backend::memset_sync(d_radii, 0, N * sizeof(float));
         auto [aabb_2d, depths_2d, splats_s] = projection_3dgut_forward(
-            (int64_t)N, 0, in_splats, ttv(d_equi_vm, {1, 4, 4}),
+            (int64_t)N, ColorBasis{}, in_splats, ttv(d_equi_vm, {1, 4, 4}),
             ttv(d_equi_intr, {1, 4}), equi_W, equi_H, "EQUIRECTANGULAR", "NONE",
             ttv(d_dist, {1, kCameraDistortionParams}),
             radii, std::nullopt, std::nullopt, 0, 32, 0);

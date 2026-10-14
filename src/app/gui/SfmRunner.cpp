@@ -508,6 +508,7 @@ sfm::Manifest SfmRunner::build_manifest(const SfmJob& job, const PrepResult& pre
         c.prefix = pc.subdir;
         c.telemetry = pc.path;
         c.fps = pc.fps;
+        c.time_offset = pc.time_offset;
         for (const PrepInput& in : job.prep.inputs)
             if (in.is_video && in.path == pc.path && in.subdir == pc.subdir) {
                 c.imu = in.use_imu;

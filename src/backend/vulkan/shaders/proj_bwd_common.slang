@@ -1,17 +1,12 @@
-// Shared machinery for the projection-backward family (plain backward,
-// grad-quant backward, fused projection-bwd-optimizer): splat/camera
-// loaders, the per-intersection projection VJP wrappers (2D and 3DGUT
-// flavors over the autodiff exports in primitive_3dgs.slang), the SH color
-// VJP dispatch, and the CAS scatter helpers.
+// Shared machinery for the projection-backward family (plain, grad-quant,
+// fused projection-bwd-optimizer): splat/camera loaders, the per-intersection
+// projection VJPs over primitive_3dgs.slang's autodiff exports, the colour
+// VJP, and the CAS scatter helpers.
 //
-// Declares the spec constants shared by every kernel in the family --
-// includers must list their extra spec constants AFTER this include so the
-// auto-assigned constant IDs stay 0..4 here and 5.. in the includer,
-// matching the host-side SpecList order. kDistortion is the one exception:
-// every includer declares it LAST, after its own constants.
-//
+// Declares spec constants 0..5 for the whole family: an includer lists its
+// own AFTER this include and kDistortion last, matching its host SpecList.
 // Include AFTER primitive_3dgs.slang / harmonics.slang / sh_quant.slang /
-// sh_vjp.slang / atomic_float.slang.
+// sh_vjp.slang / view_color.slang / atomic_float.slang.
 
 #include "int64_compat.slang"
 #include "dist_spec.slang"
@@ -26,6 +21,8 @@ const int kAntialiased = 0;
 const int kShValueBits = 0;
 [SpecializationConstant]
 const int kPacked = 0;
+[SpecializationConstant]
+const int kSbLobes = 0;
 
 struct PbSplat {
     float3 mean;
@@ -79,7 +76,8 @@ struct PbGrads {
     float3 v_scale;
     float v_opacity;
     float3 v_dc;
-    float3 v_sh[24];
+    float3 v_sh[kVcMaxShCoeffs];
+    float3 v_sb[kVcMaxSbCoeffs];
     float3x3 v_R;
     float3 v_t;
 };
@@ -92,8 +90,10 @@ PbGrads pb_grads_zero() {
     g.v_scale = float3(0.0f);
     g.v_opacity = 0.0f;
     g.v_dc = float3(0.0f);
-    for (int j = 0; j < 24; j++)
+    for (int j = 0; j < kVcMaxShCoeffs; j++)
         g.v_sh[j] = float3(0.0f);
+    for (int j = 0; j < kVcMaxSbCoeffs; j++)
+        g.v_sb[j] = float3(0.0f);
     g.v_R = float3x3(0.0f);
     g.v_t = float3(0.0f);
     return g;
@@ -141,26 +141,24 @@ void pb_vjp_3dgut<let cam : CameraModelType, D : ICameraDistortion>(
         g.v_opacity, g.v_R, g.v_t);
 }
 
-// SH color VJP with the value-quant bit depth folded from kShValueBits
+// Colour VJP with the value-quant bit depth folded from kShValueBits
 // (generic args must be parse-time constants; the branch folds away).
-// `coeffs` is the splat's fp32 SH pointer (unused when kShValueBits != 0).
 [ForceInline]
-void pb_sh_vjp<D : ICameraDistortion>(
-    PbSplat s, PbCamera<D> c, float* coeffs, uint* qpacked, float2* qbounds,
-    gindex_t qbase, gindex_t qstride, gindex_t qpitch, float3 v_rgb,
-    inout PbGrads g) {
+void pb_color_vjp<D : ICameraDistortion>(PbSplat s, PbCamera<D> c,
+                                         ColorRow row, int sb_base,
+                                         float3 v_rgb, inout PbGrads g) {
     if (kShValueBits == 8)
-        sh_color_vjp<8>(kShDegree, s.mean, c.R, c.t, s.dc, coeffs, qpacked,
-                        qbounds, qbase, qstride, qpitch, v_rgb, g.v_dc, g.v_sh,
-                        g.v_mean, g.v_R, g.v_t);
+        color_vjp<8>(kShDegree, kSbLobes, sb_base, s.mean, c.R, c.t, s.dc,
+                     row, v_rgb, g.v_dc, g.v_sh, g.v_sb, g.v_mean, g.v_R,
+                     g.v_t);
     else if (kShValueBits == 16)
-        sh_color_vjp<16>(kShDegree, s.mean, c.R, c.t, s.dc, coeffs, qpacked,
-                         qbounds, qbase, qstride, qpitch, v_rgb, g.v_dc, g.v_sh,
-                         g.v_mean, g.v_R, g.v_t);
+        color_vjp<16>(kShDegree, kSbLobes, sb_base, s.mean, c.R, c.t, s.dc,
+                      row, v_rgb, g.v_dc, g.v_sh, g.v_sb, g.v_mean, g.v_R,
+                      g.v_t);
     else
-        sh_color_vjp<0>(kShDegree, s.mean, c.R, c.t, s.dc, coeffs, qpacked,
-                        qbounds, qbase, qstride, qpitch, v_rgb, g.v_dc, g.v_sh,
-                        g.v_mean, g.v_R, g.v_t);
+        color_vjp<0>(kShDegree, kSbLobes, sb_base, s.mean, c.R, c.t, s.dc,
+                     row, v_rgb, g.v_dc, g.v_sh, g.v_sb, g.v_mean, g.v_R,
+                     g.v_t);
 }
 
 // ---- CAS scatter helpers (mirror atomicAddFVec / the atomic SH writes) ----
@@ -183,21 +181,26 @@ void pb_add4(float* dst, float4 v) {
     pb_add1(dst + 3, v.w);
 }
 
-// Scatter the SH gradient array: CUDA's per-coefficient predicate
-// (isfinite(dot) && dot != 0) from _sh_coeffs_to_color_vjp<2>, then one CAS
-// add per channel.
+// CUDA's per-coefficient predicate (isfinite(dot) && dot != 0) from
+// _sh_coeffs_to_color_vjp<2>, then one CAS add per channel.
 [ForceInline]
-void pb_scatter_sh(float* v_sh, float3 v_coeffs[24], int degree) {
-    const int K = degree * (degree + 2);
-    for (int j = 0; j < K; j++) {
-        float3 v = v_coeffs[j];
-        float d = dot(v, v);
-        if (isfinite(d) && d != 0.0f) {
-            atomic_add_f32(v_sh + 3 * j, v.x);
-            atomic_add_f32(v_sh + 3 * j + 1, v.y);
-            atomic_add_f32(v_sh + 3 * j + 2, v.z);
-        }
+void pb_scatter_coeff(float* dst, float3 v) {
+    float d = dot(v, v);
+    if (isfinite(d) && d != 0.0f) {
+        atomic_add_f32(dst, v.x);
+        atomic_add_f32(dst + 1, v.y);
+        atomic_add_f32(dst + 2, v.z);
     }
+}
+
+// The colour gradients into the splat's features_sh gradient row `v_row`.
+[ForceInline]
+void pb_scatter_color(float* v_row, PbGrads g, int sb_base) {
+    const int K = kShDegree * (kShDegree + 2);
+    for (int j = 0; j < K; j++)
+        pb_scatter_coeff(v_row + 3 * j, g.v_sh[j]);
+    for (int j = 0; j < 2 * kSbLobes; j++)
+        pb_scatter_coeff(v_row + 3 * (sb_base + j), g.v_sb[j]);
 }
 
 // v_R / v_t -> v_viewmats[cid] (row-major [4,4]; only the 3x4 block).

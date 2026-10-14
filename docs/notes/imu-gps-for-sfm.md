@@ -266,6 +266,11 @@ than whether they are precise:
   held (over 30 s or a fifth of the clip is stale), DOP and implied-speed
   outliers, spread and path length of what is left
 
+A sample at exactly latitude 0, longitude 0 is what a receiver without a fix
+writes, and the reader drops it before any of this (`Telemetry::gps_zero`
+counts them); an EXIF position of 0, 0 is not a position either
+(`ExifData::gps_zero`).
+
 `imu_usable` and `gps_usable` are the summary; the warnings say why not.
 
 ### 2.5 Looking at it
@@ -277,7 +282,9 @@ with real altitude, the attitude drawn along the track, and every stream as a
 plot on a shared, scrubbable time axis. It reads a file in place through the
 File API rather than buffering it, so a 4 GB capture is fine, and a
 screenshot-safe toggle hides everything that says where the capture was taken.
-`viewer/README.md` has the details.
+`viewer/README.md` has the details. The GUI's dataset screen draws the same
+reader's output for the selected input, on a metric map without tiles, beside
+the video's frames (docs/notes/source-preview.md).
 
 ## 3. Background: what the sensors measure
 

@@ -195,6 +195,7 @@ inline bool train_choices_free_form(const char* choices) {
     /* ==== splats -- what a splat is and how the splats start out ==== */   \
     X(std::string, primitive, "3dgs", "splats", "basic", "3dgs|mip|3dgut")   \
     X(int, sh_degree, 3, "splats", "basic", "")                              \
+    X(int, sb_lobes, 0, "splats", "basic", "")                               \
     X(int, sh_degree_warmup_every, 1000, "splats", "expert", "")             \
     X(std::string, background_mode, "color", "splats", "basic", "color|noise|pseudorandom|random|sh") \
     X(TrainVec3f, background_color, train_v3f(0.0f, 0.0f, 0.0f), "splats", "basic", "") \
@@ -383,6 +384,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(float, opacities_lr, 0.025f, "rates", "basic", "")                     \
     X(float, features_dc_lr, 0.005f, "rates", "basic", "")                   \
     X(float, features_sh_lr, 0.00025f, "rates", "basic", "")                 \
+    X(float, features_sb_lr, 0.0025f, "rates", "basic", "")                  \
     X(float, background_dc_lr, 0.0025f, "rates", "advanced", "")             \
     X(float, background_sh_lr, 0.0005f, "rates", "advanced", "")             \
     X(std::optional<int>, max_steps, std::nullopt, "rates", "advanced", "")  \
@@ -657,6 +659,10 @@ inline void train_resolve_macros(TrainConfig& c,
             put("densify_score_mode", c.densify_score_mode, "median");
         }
     }
+
+    // Lobes take the place of the SH bands unless both are asked for. A
+    // resumed run keeps its checkpoint's bands: --sb-lobes there adds lobes.
+    if (c.sb_lobes > 0 && c.resume.empty()) put("sh_degree", c.sh_degree, 0);
 
     // Make each pixel commit to one surface, and stop view-dependent colour
     // from papering over what is left.

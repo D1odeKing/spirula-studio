@@ -4,6 +4,7 @@
 #include "app/ScanDepth.h"
 #include "core/CameraModel.h"
 #include "data/JsonWrite.h"
+#include "data/PointCloudFile.h"
 #include "data/SparseEdit.h"
 #include "external/stb_image.h"
 #include "external/stb_image_write.h"
@@ -708,26 +709,31 @@ bool extract_e57_images(const std::string& input, const std::string& images_dir,
     return true;
 }
 
-E57Preview read_e57_preview(const std::string& path, int64_t max_points,
-                            const std::atomic<bool>* cancel) {
-    E57Preview p;
-    e57::Reader reader(path);
-    for (const e57::Image& im : reader.images()) {
-        E57Camera c;
-        if (e57_camera(im, c) == E57Skip::None) p.cameras.push_back(c);
-    }
-    const uint64_t below = draw_threshold(max_points, reader.total_points());
+ScanPreview read_scan_preview(const std::string& path, int64_t max_points,
+                              const std::atomic<bool>* cancel,
+                              std::atomic<int64_t>* read) {
+    ScanPreview p;
+    spirula::cloud::Reader reader(path);
+    if (e57::Reader* e = reader.e57())
+        for (size_t i = 0; i < e->images().size(); i++) {
+            const e57::Image& im = e->images()[i];
+            E57Camera c;
+            if (e57_camera(im, c) != E57Skip::None) continue;
+            p.cameras.push_back(c);
+            p.names.push_back(im.name.empty() ? std::to_string(i) : im.name);
+        }
+    const uint64_t below = draw_threshold(max_points, reader.info().points);
     uint64_t serial = 0;
-    for (const e57::Scan& s : reader.scans()) {
-        const bool whole = reader.read_points(s, [&](const e57::Point* pt, size_t n) {
-            for (size_t i = 0; i < n; i++) {
-                if (splitmix64(serial++) > below) continue;
-                p.xyz.insert(p.xyz.end(), pt[i].xyz, pt[i].xyz + 3);
-                p.rgb.insert(p.rgb.end(), pt[i].rgb, pt[i].rgb + 3);
-            }
-        }, cancel);
-        if (!whole) return {};
-    }
+    const bool whole = reader.read([&](const e57::Point* pt, size_t n) {
+        if (read) *read += (int64_t)n;
+        for (size_t i = 0; i < n; i++) {
+            if (splitmix64(serial++) > below) continue;
+            p.xyz.insert(p.xyz.end(), pt[i].xyz, pt[i].xyz + 3);
+            p.rgb.insert(p.rgb.end(), pt[i].rgb, pt[i].rgb + 3);
+        }
+    }, cancel);
+    if (!whole) return {};
+    p.streamed = (int64_t)serial;
     return p;
 }
 

@@ -6,6 +6,7 @@
 #include <core/Tensor.h>
 
 #include <core/Common.cuh>
+#include <core/ColorBasis.h>
 
 #include "primitives/Primitive3DGS.cuh"
 #include "primitives/Primitive3DGUT.cuh"
@@ -36,7 +37,7 @@ std::tuple<
     DeviceVector<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgs_packed_forward(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -59,7 +60,7 @@ std::tuple<
     DeviceVector<float>, std::vector<DeviceTensorFloatND>
 > projection_mip_packed_forward(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -82,7 +83,7 @@ std::tuple<
     DeviceVector<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgut_packed_forward(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats,
     TorchTensorView intrins,

@@ -128,7 +128,7 @@ void run_mode(bool packed, DensifyAccumMode accum_mode) {
     DeviceVector<uint2> aabb_vec;
     if (packed) {
         auto out = projection_3dgs_packed_forward(
-            N, 3, in_splats, ttv(d_vm, {(int64_t)C, 16}),
+            N, ColorBasis{3, 0}, in_splats, ttv(d_vm, {(int64_t)C, 16}),
             ttv(d_intr, {(int64_t)C, 4}), W, H, "PINHOLE",
             dist_fixture::kTierNames[0], dist_tv, radii, std::nullopt,
             std::nullopt, 0, 32, 0);
@@ -140,7 +140,7 @@ void run_mode(bool packed, DensifyAccumMode accum_mode) {
         depths_nd = DeviceTensorFloatND(std::get<3>(out));
     } else {
         auto out = projection_3dgs_forward(
-            N, 3, in_splats, ttv(d_vm, {(int64_t)C, 16}),
+            N, ColorBasis{3, 0}, in_splats, ttv(d_vm, {(int64_t)C, 16}),
             ttv(d_intr, {(int64_t)C, 4}), W, H, "PINHOLE",
             dist_fixture::kTierNames[0], dist_tv, radii, std::nullopt,
             std::nullopt, 0, 32, 0);

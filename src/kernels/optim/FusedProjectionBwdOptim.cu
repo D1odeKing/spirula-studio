@@ -393,7 +393,7 @@ static inline void _fused_projection_bwd_optimizer_dispatch(
 /*[AutoHeaderGeneratorExport]*/
 void fused_projection_bwd_optimizer_3dgs(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     std::vector<DeviceTensorFloatND> splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -423,6 +423,7 @@ void fused_projection_bwd_optimizer_3dgs(
     const float lr_opacs,
     const float lr_features_dc,
     const float lr_features_sh,
+    const float lr_features_sb,
     const float max_gauss_ratio,
     const float scale_regularization_weight,
     const float mcmc_opacity_reg_weight,
@@ -440,6 +441,7 @@ void fused_projection_bwd_optimizer_3dgs(
     std::variant<int32_t, TorchTensorView> step,
     int quantization_level
 ) {
+    const int max_sh_degree = sh_only_degree(color, "fused_projection_bwd_optimizer_3dgs");
     _fused_projection_bwd_optimizer_dispatch<Vanilla3DGS>(
         num_splats, max_sh_degree, splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,
@@ -460,7 +462,7 @@ void fused_projection_bwd_optimizer_3dgs(
 /*[AutoHeaderGeneratorExport]*/
 void fused_projection_bwd_optimizer_mip(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     std::vector<DeviceTensorFloatND> splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -490,6 +492,7 @@ void fused_projection_bwd_optimizer_mip(
     const float lr_opacs,
     const float lr_features_dc,
     const float lr_features_sh,
+    const float lr_features_sb,
     const float max_gauss_ratio,
     const float scale_regularization_weight,
     const float mcmc_opacity_reg_weight,
@@ -507,6 +510,7 @@ void fused_projection_bwd_optimizer_mip(
     std::variant<int32_t, TorchTensorView> step,
     int quantization_level
 ) {
+    const int max_sh_degree = sh_only_degree(color, "fused_projection_bwd_optimizer_mip");
     _fused_projection_bwd_optimizer_dispatch<MipSplatting>(
         num_splats, max_sh_degree, splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,
@@ -527,7 +531,7 @@ void fused_projection_bwd_optimizer_mip(
 /*[AutoHeaderGeneratorExport]*/
 void fused_projection_bwd_optimizer_3dgut(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     std::vector<DeviceTensorFloatND> splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -557,6 +561,7 @@ void fused_projection_bwd_optimizer_3dgut(
     const float lr_opacs,
     const float lr_features_dc,
     const float lr_features_sh,
+    const float lr_features_sb,
     const float max_gauss_ratio,
     const float scale_regularization_weight,
     const float mcmc_opacity_reg_weight,
@@ -574,6 +579,7 @@ void fused_projection_bwd_optimizer_3dgut(
     std::variant<int32_t, TorchTensorView> step,
     int quantization_level
 ) {
+    const int max_sh_degree = sh_only_degree(color, "fused_projection_bwd_optimizer_3dgut");
     _fused_projection_bwd_optimizer_dispatch<Vanilla3DGUT>(
         num_splats, max_sh_degree, splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,

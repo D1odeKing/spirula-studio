@@ -41,6 +41,7 @@
       <div id="st-splat-stats" style="display:none">
         <div class="stat"><span>Splats</span><span id="st-count">—</span></div>
         <div class="stat"><span>SH degree</span><span id="st-sh">—</span></div>
+        <div class="stat"><span>SB lobes</span><span id="st-sb">—</span></div>
       </div>
       <div id="st-mesh-stats" style="display:none">
         <div class="stat"><span>Vertices</span><span id="st-verts">—</span></div>
@@ -112,6 +113,11 @@
       <div class="row">
         <div class="label"><span>SH Degree</span><span class="val" id="v-shdeg">0</span></div>
         <input autocomplete="off" type="range" id="shdeg" min="0" max="0" step="1" value="0">
+      </div>
+      <div class="row" id="sb-row" style="display:none">
+        <div class="label"><span>Highlight lobes (SB)</span>
+          <label class="toggle"><input autocomplete="off" type="checkbox" id="show-lobes" checked><span class="track"></span></label>
+        </div>
       </div>
       <div class="row">
         <div class="label"><span>Exposure</span><span class="val" id="v-exposure">1.00</span></div>

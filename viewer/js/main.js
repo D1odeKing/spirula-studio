@@ -368,7 +368,7 @@ async function loadSingleModel(entries) {
     }
     freeSplatSh();   // SH lives on the GPU now; drop the WASM copy (+ quats)
     sortWorkerInitModel(data);
-    model = { type:'splat', count: data.count, shDegree: data.shDegree };
+    model = { type:'splat', count: data.count, shDegree: data.shDegree, sbLobes: data.sbLobes };
     showSplatUI(data);
   } else {
     renderer.setMesh(res.data, res.image || null);
@@ -459,6 +459,8 @@ function showSplatUI(data) {
   // slider range 0..model degree, defaulting to the model's actual degree
   const sh = $('shdeg'); sh.max = data.shDegree; sh.value = data.shDegree;
   opts.shDegree = data.shDegree; $('v-shdeg').textContent = sh.value;
+  $('st-sb').textContent = data.sbLobes || 0;
+  $('sb-row').style.display = data.sbLobes > 0 ? '' : 'none';
 }
 function showMeshUI(data) {
   $('sec-mesh').classList.remove('hidden');
@@ -920,6 +922,7 @@ function wireControls() {
   bind('linear','change', e => { opts.isLinear = e.target.checked; dirty=true; });
   bind('transfer','change', e => { opts.transfer = +e.target.value; dirty=true; });
   bind('shdeg','input', e => { opts.shDegree = +e.target.value; $('v-shdeg').textContent = e.target.value; dirty=true; });
+  bind('show-lobes','change', e => { opts.showLobes = e.target.checked; dirty=true; });
   bind('exposure','input', e => { opts.exposure = Math.pow(10,+e.target.value); $('v-exposure').textContent = opts.exposure.toFixed(2); dirty=true; });
   bind('shade','change', e => { opts.shade = e.target.checked; dirty=true; });
 

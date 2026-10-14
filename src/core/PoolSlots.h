@@ -344,6 +344,7 @@ enum class SaveClass : uint8_t {
   X(DensifyMcmcAddNIdxBuffer       , "densify_mcmc_add_n_idx_buffer",     Splat    , Never) \
   X(DensifyRobustResid             , "densify_robust_resid",              Other    , Never) \
   X(DensifyTukeyC                  , "densify_tukey_c",                   Other    , Never) \
+  X(DensifyQshValueExt             , "densify_qsh_value_ext",             Other    , Never) \
   /* ---- viewer cache/scratch ---- */ \
   X(ViewerThumb                    , "viewer.thumb",                      Viewer   , Never) \
   X(ViewerThumbDone                , "viewer.thumb_done",                 Viewer   , Never) \

@@ -139,8 +139,8 @@ std::vector<SaveTarget> SplatDoc::save_targets() const {
 std::string SplatDoc::default_save_path(int) const { return source_path(); }
 
 void SplatDoc::save(int, const std::string& path, std::atomic<int>* progress) {
-    // Means, orientation, scale AND the view-dependent colour bands.
-    const spirula::SplatTransform moved(file_placement(), _c.sh_degree);
+    // Means, orientation, scale AND the view-dependent colour bands and lobes.
+    const spirula::SplatTransform moved(file_placement(), _c.basis());
     spirula::write_splat_ply(_c, path, alive(), &moved);
     if (progress) (*progress)++;
 }

@@ -4185,6 +4185,21 @@ SS_MSG(viewer_splat_count,
     RU("Сплатов: {0}   Порядок SH: {1}"),
     TR("Splat: {0}   SH derecesi: {1}"));
 
+SS_MSG(viewer_splat_count_sb,
+    EN("Splats: {0}   SH degree: {1}   SB lobes: {2}"),
+    JA("スプラット数: {0}   SH次数: {1}   SBローブ: {2}"),
+    ZH_HANS("泼溅数: {0}   球谐阶数: {1}   SB 波瓣: {2}"),
+    ZH_HANT("潑濺數: {0}   球諧階數: {1}   SB 波瓣: {2}"),
+    KO("스플랫 수: {0}   SH 차수: {1}   SB 로브: {2}"),
+    DE("Splats: {0}   SH-Grad: {1}   SB-Keulen: {2}"),
+    FR("Splats : {0}   Degré SH : {1}   Lobes SB : {2}"),
+    ES("Splats: {0}   Grado SH: {1}   Lóbulos SB: {2}"),
+    PT("Splats: {0}   Grau SH: {1}   Lóbulos SB: {2}"),
+    IT("Splat: {0}   Grado SH: {1}   Lobi SB: {2}"),
+    NL("Splats: {0}   SH-graad: {1}   SB-lobben: {2}"),
+    RU("Сплатов: {0}   Порядок SH: {1}   Лепестков SB: {2}"),
+    TR("Splat: {0}   SH derecesi: {1}   SB lobu: {2}"));
+
 SS_MSG(viewer_point_count,
     EN("Points: {0}"),
     JA("点の数: {0}"),
@@ -4274,6 +4289,21 @@ SS_MSG(viewer_loaded,
     NL("Geladen. Splats: {0}   SH-graad: {1}"),
     RU("Загружено. Сплатов: {0}   Порядок SH: {1}"),
     TR("Yüklendi. Splat: {0}   SH derecesi: {1}"));
+
+SS_MSG(viewer_loaded_sb,
+    EN("Loaded. Splats: {0}   SH degree: {1}   SB lobes: {2}"),
+    JA("読み込みました。スプラット数: {0}   SH次数: {1}   SBローブ: {2}"),
+    ZH_HANS("已载入。泼溅数: {0}   球谐阶数: {1}   SB 波瓣: {2}"),
+    ZH_HANT("已載入。潑濺數: {0}   球諧階數: {1}   SB 波瓣: {2}"),
+    KO("불러왔습니다. 스플랫 수: {0}   SH 차수: {1}   SB 로브: {2}"),
+    DE("Geladen. Splats: {0}   SH-Grad: {1}   SB-Keulen: {2}"),
+    FR("Chargé. Splats : {0}   Degré SH : {1}   Lobes SB : {2}"),
+    ES("Cargado. Splats: {0}   Grado SH: {1}   Lóbulos SB: {2}"),
+    PT("Carregado. Splats: {0}   Grau SH: {1}   Lóbulos SB: {2}"),
+    IT("Caricato. Splat: {0}   Grado SH: {1}   Lobi SB: {2}"),
+    NL("Geladen. Splats: {0}   SH-graad: {1}   SB-lobben: {2}"),
+    RU("Загружено. Сплатов: {0}   Порядок SH: {1}   Лепестков SB: {2}"),
+    TR("Yüklendi. Splat: {0}   SH derecesi: {1}   SB lobu: {2}"));
 
 SS_MSG(viewer_loaded_points,
     EN("That file holds a point cloud, not Gaussians. Points: {0}"),

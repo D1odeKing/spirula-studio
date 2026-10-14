@@ -42,7 +42,9 @@ plain C++17 with no CUDA dependency (see `csrc/CameraModel.h`).
   - **Color gamut** (Rec.709 / DCI-P3 / Rec.2020 / AdobeRGB / ACEScg /
     ACES2065-1) and a **linear-color** toggle, matching the training pipeline's
     `rgb_to_srgb` conventions.
-  - Spherical harmonics up to degree 4, exposure.
+  - Spherical harmonics up to degree 4, spherical-beta lobes (`sb_params_*`,
+    up to 8, activated at load into two half-float texels each and added to
+    the clamped colour, with a toggle), exposure.
   - Depth sorting matches the training code's `get_sorting_depth`: planar for
     perspective/orthographic, distance for equirectangular, and a smooth
     |z|/radial blend for fisheye — content behind the camera composites
@@ -162,7 +164,8 @@ the browser sees exactly what the reconstruction pipeline sees —
 - Per-file verdicts come from the same checks the trainer runs: sample-rate
   regularity, the gravity norm, cross-stream gravity agreement, and whether the
   GPS moves rather than repeating one stale fix. The full text report is in the
-  panel.
+  panel. Fixes at 0, 0 -- a receiver with no fix -- are dropped on read, as
+  the trainer drops them.
 
 English only, by design — this is a diagnostic, and the model viewer's i18n
 would be overkill.

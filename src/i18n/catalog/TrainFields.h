@@ -2940,6 +2940,82 @@ SS_MSG(sh_degree_help,
        "karşılığında bellek ve dosya boyutu artar; 0 bakıştan bağımsız düz renk "
        "verir. 4 ve üstü yaygın görüntüleyicilerde sınırlı desteklenir."));
 
+SS_MSG(sb_lobes,
+    EN("Highlight lobes (SB)"), JA("ハイライトのローブ（SB）"),
+    ZH_HANS("高光波瓣（SB）"), ZH_HANT("高光波瓣（SB）"),
+    KO("하이라이트 로브(SB)"), DE("Glanzlicht-Keulen (SB)"),
+    FR("Lobes de reflets (SB)"), ES("Lóbulos de brillo (SB)"),
+    PT("Lóbulos de brilho (SB)"), IT("Lobi di riflesso (SB)"),
+    NL("Glanslobben (SB)"), RU("Лепестки бликов (SB)"),
+    TR("Parlama lobları (SB)"));
+SS_MSG(sb_lobes_help,
+    EN("Spherical-beta lobes per splat, from Deformable Beta Splatting: each "
+       "adds a sharp highlight that follows the camera, for six numbers. 2 is "
+       "the published setting. Unless the SH degree is set as well it drops to "
+       "0, so the lobes replace the SH bands. Vulkan builds only; viewers that "
+       "do not know the lobes show the base color."),
+    JA("Deformable Beta Splatting の球面ベータのローブを、スプラットごとにいく"
+       "つ持たせるかです。ローブ1つは6つの数値で、カメラに合わせて動く鋭いハ"
+       "イライトを加えます。論文の設定は 2 です。SH の次数も指定しない限り次数"
+       "は 0 になり、ローブが SH の帯を置き換えます。Vulkan 版のみ。ローブに対"
+       "応しないビューアでは基本色だけが表示されます。"),
+    ZH_HANS("每个泼溅带多少个球面 Beta 波瓣（来自 Deformable Beta Splatting）："
+            "每个波瓣用六个数，加上一处随相机移动的锐利高光。论文的设置是 2。"
+            "除非同时设置了 SH 阶数，否则它会降为 0，由波瓣取代 SH 频带。仅限 "
+            "Vulkan 版本；不认识波瓣的查看器只显示基础颜色。"),
+    ZH_HANT("每個潑濺帶多少個球面 Beta 波瓣（來自 Deformable Beta Splatting）："
+            "每個波瓣用六個數，加上一處隨相機移動的銳利高光。論文的設定是 2。"
+            "除非同時設定了 SH 階數，否則它會降為 0，由波瓣取代 SH 頻帶。僅限 "
+            "Vulkan 版本；不認得波瓣的檢視器只顯示基礎顏色。"),
+    KO("스플랫마다 둘 구면 베타 로브의 수입니다(Deformable Beta Splatting). 로브"
+       " 하나는 숫자 여섯 개로 카메라를 따라 움직이는 날카로운 하이라이트를 "
+       "더합니다. 논문의 설정은 2입니다. SH 차수도 지정하지 않으면 차수는 0이 "
+       "되어 로브가 SH 대역을 대신합니다. Vulkan 빌드 전용이며, 로브를 모르는 "
+       "뷰어는 기본 색만 보여 줍니다."),
+    DE("Sphärische Beta-Keulen je Splat, aus Deformable Beta Splatting: jede "
+       "fügt für sechs Zahlen ein scharfes Glanzlicht hinzu, das der Kamera "
+       "folgt. 2 ist die veröffentlichte Einstellung. Sofern der SH-Grad nicht "
+       "ebenfalls gesetzt ist, sinkt er auf 0, und die Keulen ersetzen die "
+       "SH-Bänder. Nur Vulkan-Builds; Betrachter, die die Keulen nicht kennen, "
+       "zeigen die Grundfarbe."),
+    FR("Lobes bêta sphériques par splat, issus de Deformable Beta Splatting : "
+       "chacun ajoute, pour six nombres, un reflet net qui suit la caméra. 2 est "
+       "le réglage publié. Sauf si le degré SH est aussi fixé, il passe à 0 et "
+       "les lobes remplacent les bandes SH. Builds Vulkan uniquement ; les "
+       "visionneuses qui ignorent les lobes montrent la couleur de base."),
+    ES("Lóbulos beta esféricos por splat, de Deformable Beta Splatting: cada "
+       "uno añade, por seis números, un brillo nítido que sigue a la cámara. 2 "
+       "es el ajuste publicado. Salvo que también se fije el grado SH, este "
+       "baja a 0 y los lóbulos sustituyen a las bandas SH. Solo en las "
+       "compilaciones Vulkan; los visores que no conocen los lóbulos muestran "
+       "el color base."),
+    PT("Lóbulos beta esféricos por splat, de Deformable Beta Splatting: cada um"
+       " acrescenta, por seis números, um brilho nítido que acompanha a câmera. "
+       "2 é a configuração publicada. A menos que o grau SH também seja "
+       "definido, ele cai para 0 e os lóbulos substituem as bandas SH. Apenas "
+       "nas compilações Vulkan; visualizadores que não conhecem os lóbulos "
+       "mostram a cor base."),
+    IT("Lobi beta sferici per splat, da Deformable Beta Splatting: ognuno "
+       "aggiunge, per sei numeri, un riflesso netto che segue la fotocamera. 2 "
+       "è l'impostazione pubblicata. Se non si imposta anche il grado SH, "
+       "questo scende a 0 e i lobi sostituiscono le bande SH. Solo nelle build "
+       "Vulkan; i visualizzatori che non conoscono i lobi mostrano il colore "
+       "base."),
+    NL("Sferische bètalobben per splat, uit Deformable Beta Splatting: elke "
+       "lob voegt voor zes getallen een scherpe glans toe die de camera volgt. "
+       "2 is de gepubliceerde instelling. Tenzij de SH-graad ook is ingesteld, "
+       "zakt die naar 0 en vervangen de lobben de SH-banden. Alleen in "
+       "Vulkan-builds; viewers die de lobben niet kennen tonen de basiskleur."),
+    RU("Сферические бета-лепестки на сплат из Deformable Beta Splatting: "
+       "каждый за шесть чисел добавляет резкий блик, следующий за камерой. В "
+       "статье используется 2. Если порядок SH не задан явно, он падает до 0, "
+       "и лепестки заменяют полосы SH. Только в сборках Vulkan; просмотрщики, "
+       "не знающие лепестков, показывают базовый цвет."),
+    TR("Deformable Beta Splatting'ten splat başına küresel beta lobları: her "
+       "biri altı sayı karşılığında kamerayı izleyen keskin bir parlama ekler. "
+       "Yayımlanan ayar 2'dir. SH derecesi de ayarlanmadıkça 0'a düşer ve loblar"
+       " SH bantlarının yerini alır. Yalnızca Vulkan derlemeleri; lobları "
+       "tanımayan görüntüleyiciler temel rengi gösterir."));
 SS_MSG(sh_degree_warmup_every,
     EN("Color detail warm-up interval"), JA("色の細かさを上げる間隔"),
     ZH_HANS("颜色细节提升间隔"), ZH_HANT("顏色細節提升間隔"),
@@ -12368,6 +12444,39 @@ SS_MSG(features_sh_lr_help,
     TR("Bakışa bağlı rengin ne kadar hızlı değiştiği. Yansımaların rengi alıp "
        "götürmemesi için temel renk oranının epey altında tutulur."));
 
+SS_MSG(features_sb_lr,
+    EN("Highlight lobe rate"), JA("ハイライトのローブの学習率"),
+    ZH_HANS("高光波瓣学习率"), ZH_HANT("高光波瓣學習率"),
+    KO("하이라이트 로브 학습률"), DE("Lernrate der Glanzlicht-Keulen"),
+    FR("Taux des lobes de reflets"), ES("Tasa de los lóbulos de brillo"),
+    PT("Taxa dos lóbulos de brilho"), IT("Tasso dei lobi di riflesso"),
+    NL("Snelheid van de glanslobben"), RU("Скорость лепестков бликов"),
+    TR("Parlama lobu oranı"));
+SS_MSG(features_sb_lr_help,
+    EN("How fast the spherical-beta lobes change. Their color, direction and "
+       "sharpness share this rate."),
+    JA("球面ベータのローブがどれだけ速く変わるかです。色、向き、鋭さがこの学"
+       "習率を共有します。"),
+    ZH_HANS("球面 Beta 波瓣变化的快慢。它们的颜色、方向和锐度共用这个学习率。"),
+    ZH_HANT("球面 Beta 波瓣變化的快慢。它們的顏色、方向和銳度共用這個學習率。"),
+    KO("구면 베타 로브가 얼마나 빨리 변하는지입니다. 색, 방향, 날카로움이 이 "
+       "학습률을 함께 씁니다."),
+    DE("Wie schnell sich die sphärischen Beta-Keulen ändern. Farbe, Richtung "
+       "und Schärfe teilen sich diese Rate."),
+    FR("À quelle vitesse les lobes bêta sphériques changent. Leur couleur, leur"
+       " direction et leur netteté partagent ce taux."),
+    ES("Con qué rapidez cambian los lóbulos beta esféricos. Su color, su "
+       "dirección y su nitidez comparten esta tasa."),
+    PT("Com que rapidez os lóbulos beta esféricos mudam. A cor, a direção e a "
+       "nitidez deles compartilham esta taxa."),
+    IT("Quanto in fretta cambiano i lobi beta sferici. Colore, direzione e "
+       "nitidezza condividono questo tasso."),
+    NL("Hoe snel de sferische bètalobben veranderen. Hun kleur, richting en "
+       "scherpte delen deze snelheid."),
+    RU("Как быстро меняются сферические бета-лепестки. Их цвет, направление и "
+       "резкость делят эту скорость."),
+    TR("Küresel beta loblarının ne hızla değiştiği. Renkleri, yönleri ve "
+       "keskinlikleri bu oranı paylaşır."));
 SS_MSG(background_dc_lr,
     EN("Skybox base color rate"), JA("スカイボックス基本色の学習率"),
     ZH_HANS("天空盒基础颜色学习率"), ZH_HANT("天空盒基礎顏色學習率"),

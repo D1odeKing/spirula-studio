@@ -1030,6 +1030,11 @@ void CompareView::draw_pane(int index, const ImVec2& size, const std::function<v
             ui::TextDisabled(msg::viewer_mesh_count,
                              {(long long)m.src.num_splats(),
                               (long long)m.src.num_faces()});
+        else if (m.src.sb_lobes() > 0)
+            ui::TextDisabled(msg::viewer_splat_count_sb,
+                             {(long long)m.src.num_splats(),
+                              (long long)m.src.sh_degree(),
+                              (long long)m.src.sb_lobes()});
         else
             ui::TextDisabled(msg::viewer_splat_count,
                              {(long long)m.src.num_splats(),

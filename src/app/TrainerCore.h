@@ -105,7 +105,9 @@ struct SeedSplats {
     std::vector<float> scales;       // [cap, 3]  (log)
     std::vector<float> opacities;    // [cap, 1]  (logit)
     std::vector<float> features_dc;  // [cap, 3]
-    std::vector<float> features_sh;  // [cap, dim_sh-1, 3]  (zeros)
+    // [cap, K, 3], K = ColorBasis{sh_degree, sb_lobes}.coeffs(): zero bands,
+    // then lobes seeded by core/SphericalBeta.h.
+    std::vector<float> features_sh;
 };
 
 SeedSplats seed_splats(const ColmapPoints3D& pts, const TrainConfig& cfg,

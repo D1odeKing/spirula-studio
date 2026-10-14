@@ -255,7 +255,7 @@ int main(int argc, char** argv) {
             auto fn = cfg.prim == 0   ? projection_3dgs_packed_forward
                       : cfg.prim == 1 ? projection_mip_packed_forward
                                       : projection_3dgut_packed_forward;
-            auto out = fn(N, cfg.max_deg, splats_fwd, ttv(d_vm, {C, 16}),
+            auto out = fn(N, ColorBasis{cfg.max_deg, 0}, splats_fwd, ttv(d_vm, {C, 16}),
                           ttv(d_intr, {C, 4}), W, H, cams[cfg.cam],
                           dist_fixture::kTierNames[cfg.dist],
                           dist_tv(cfg.dist), radii, q_val_packed,
@@ -269,7 +269,7 @@ int main(int argc, char** argv) {
             auto fn = cfg.prim == 0   ? projection_3dgs_forward
                       : cfg.prim == 1 ? projection_mip_forward
                                       : projection_3dgut_forward;
-            auto out = fn(N, cfg.max_deg, splats_fwd, ttv(d_vm, {C, 16}),
+            auto out = fn(N, ColorBasis{cfg.max_deg, 0}, splats_fwd, ttv(d_vm, {C, 16}),
                           ttv(d_intr, {C, 4}), W, H, cams[cfg.cam],
                           dist_fixture::kTierNames[cfg.dist],
                           dist_tv(cfg.dist), radii, q_val_packed,
@@ -402,7 +402,7 @@ int main(int argc, char** argv) {
             if (cfg.packed && call == 1)
                 backend::memcpy_sync(gauss_ids.data_ptr(), gauss_host.data(),
                                      n_isect * 4, MemcpyKind::HostToDevice);
-            fn(N, cfg.max_deg, splats, ttv(d_vm, {C, 16}),
+            fn(N, ColorBasis{cfg.max_deg, 0}, splats, ttv(d_vm, {C, 16}),
                ttv(d_intr, {C, 4}), W, H, cams[cfg.cam],
                dist_fixture::kTierNames[cfg.dist], dist_tv(cfg.dist),
                cam_ids, gauss_ids, aabb_2d, v_world,
@@ -410,7 +410,8 @@ int main(int argc, char** argv) {
                shv_b_tv, non_sh, visit, radii, densify_score,
                /*lr_means=*/1.6e-4f, /*lr_quats=*/1e-3f, /*lr_scales=*/5e-3f,
                /*lr_opacs=*/5e-2f, /*lr_features_dc=*/2.5e-3f,
-               /*lr_features_sh=*/1.25e-4f, /*max_gauss_ratio=*/10.f,
+               /*lr_features_sh=*/1.25e-4f, /*lr_features_sb=*/2.5e-3f,
+               /*max_gauss_ratio=*/10.f,
                /*scale_reg=*/0.1f, /*mcmc_op=*/0.01f, /*mcmc_scale=*/0.01f,
                /*erank=*/0.1f, /*erank_s3=*/0.02f, /*quat_norm=*/0.01f,
                /*dc_reg=*/0.02f, /*sh_reg=*/0.05f,

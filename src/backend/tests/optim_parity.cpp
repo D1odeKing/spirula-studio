@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
                         ttv(d_g1, {N, S, 1}), ttv(d_g2, {N, S, 1}),
                         case_i ? 3e-3f : 1e-2f, 7, steps,
                         case_i ? 0.01f : 0.f, case_i ? 0.1f : 0.f,
-                        case_i ? 0.5f : 1.f, case_i == 1);
+                        SbOptimCells{}, case_i ? 0.5f : 1.f, case_i == 1);
         backend::device_synchronize();
         readback_f(acc, d_param, NUMEL);
         readback_f(acc, d_g1, NUMEL);
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
                                   (float4*)d_bounds, 1e-2f, 12,
                                   DeviceVector<int32_t>{}, 0.f, 0.f, bits,
                                   bits == 8 ? ct : ColorTrustState{},
-                                  1.f, false);
+                                  SbOptimCells{}, 1.f, false);
         backend::device_synchronize();
         readback_f(acc, d_param, NUMEL);
         readback_f(acc, d_bounds, n_blocks * 4);
@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
             N, NUMEL, ttv(d_grad, {N, S, 1}), d_gq, (const float2*)d_gb, d_opt,
             (float4*)d_ob, d_val, (float2*)d_vb, 1e-2f, 9,
             DeviceVector<int32_t>{}, 0.f, 0.f, obits, vbits,
-            vbits == 16 ? ct : ColorTrustState{}, 1.f, !gq);
+            vbits == 16 ? ct : ColorTrustState{}, SbOptimCells{}, 1.f, !gq);
         backend::device_synchronize();
         readback_f(acc, d_ob, n_blocks * 4);
         readback_f(acc, d_vb, n_blocks * 2);

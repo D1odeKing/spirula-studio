@@ -97,6 +97,7 @@ struct MotionPlanInput {
     std::vector<float> cost;
     std::vector<int64_t> ends;
     int64_t frames = 0;
+    int64_t span = 0;    // frames of the clip measured; 0 = all `frames`
     int skip = 1;        // the fixed schedule's spacing
     int window = 1;      // the sharpness window, the closest two frames may be
     int max_frames = 0;  // 0 = no cap

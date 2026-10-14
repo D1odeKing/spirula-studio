@@ -36,7 +36,7 @@ struct ProjectionQgradParams {
     uint32_t width, height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
-    uint32_t _pad0;
+    uint32_t sb_base;
 };
 static_assert(sizeof(ProjectionQgradParams) == 30 * 8 + 8 + 8 * 4,
               "params layout must match the slang struct");
@@ -47,7 +47,7 @@ using vkk::resolve_sh_quant;
 void launch_projection_qgrad_vk(
     const bool eval3d, const bool antialiased,
     const int64_t N,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -77,8 +77,8 @@ void launch_projection_qgrad_vk(
         const_cast<std::vector<DeviceTensorFloatND>&>(splats_world));
     Vanilla3DGS<0>::WorldBuffer vwb(
         const_cast<std::vector<DeviceTensorFloatND>&>(v_splats_world));
-    int sh_degree = wb.sh_degree();
-    sh_degree = std::min(sh_degree, max_sh_degree);
+    const vkk::ColorSpec cs =
+        vkk::color_spec(color, vkk::row_coeffs(wb, num_sh_buffer));
 
     const uint32_t C = (uint32_t)std::get<2>(viewmats)[0];
     const bool packed = (camera_ids.data_ptr() && gaussian_ids.data_ptr());
@@ -146,6 +146,7 @@ void launch_projection_qgrad_vk(
     p.sh_value_bounds = q_bounds;
     p.sh_value_bounds_stride = q_stride;
     p.num_sh_buffer = num_sh_buffer;
+    p.sb_base = cs.sb_base;
     p.C = C;
     p.N = (uint32_t)N;
     p.width = image_width;
@@ -153,11 +154,11 @@ void launch_projection_qgrad_vk(
 
     vkk::Fold f = vkk::fold_1d(N, 256);
     p.wgs_per_row = f.per_row;
-    backend::vk::SpecList spec{cd.cam,              (uint32_t)sh_degree,
+    backend::vk::SpecList spec{cd.cam,              cs.sh_degree,
                                antialiased ? 1u : 0u, spec_bits,
-                               packed ? 1u : 0u,    eval3d ? 1u : 0u,
-                               gq_mask,             world_grad_add ? 1u : 0u,
-                               cd.dist};
+                               packed ? 1u : 0u,    cs.sb_lobes,
+                               eval3d ? 1u : 0u,    gq_mask,
+                               world_grad_add ? 1u : 0u, cd.dist};
     vkk::dispatch_ring("projection_qgrad.projection_qgrad", spec, f.per_row,
                        f.rows, 1, &p, sizeof(p));
 }
@@ -168,7 +169,7 @@ void launch_projection_qgrad_vk(
 
 void projection_3dgs_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -190,7 +191,7 @@ void projection_3dgs_backward_quantgrad(
     const int64_t sh_value_bounds_stride
 ) {
     launch_projection_qgrad_vk(
-        /*eval3d=*/false, /*antialiased=*/false, num_splats, max_sh_degree,
+        /*eval3d=*/false, /*antialiased=*/false, num_splats, color,
         splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,
         v_splats_screen, v_splats_world, gq, sh_value_packed,
@@ -200,7 +201,7 @@ void projection_3dgs_backward_quantgrad(
 
 void projection_mip_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -222,7 +223,7 @@ void projection_mip_backward_quantgrad(
     const int64_t sh_value_bounds_stride
 ) {
     launch_projection_qgrad_vk(
-        /*eval3d=*/false, /*antialiased=*/true, num_splats, max_sh_degree,
+        /*eval3d=*/false, /*antialiased=*/true, num_splats, color,
         splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,
         v_splats_screen, v_splats_world, gq, sh_value_packed,
@@ -232,7 +233,7 @@ void projection_mip_backward_quantgrad(
 
 void projection_3dgut_backward_quantgrad(
     const int64_t num_splats,
-    const int max_sh_degree,
+    const ColorBasis color,
     const std::vector<DeviceTensorFloatND>& splats_world,
     TorchTensorView viewmats,
     TorchTensorView intrins,
@@ -254,7 +255,7 @@ void projection_3dgut_backward_quantgrad(
     const int64_t sh_value_bounds_stride
 ) {
     launch_projection_qgrad_vk(
-        /*eval3d=*/true, /*antialiased=*/false, num_splats, max_sh_degree,
+        /*eval3d=*/true, /*antialiased=*/false, num_splats, color,
         splats_world, viewmats, intrins, image_width, image_height,
         camera_model, distortion, dist_coeffs, camera_ids, gaussian_ids, aabb,
         v_splats_screen, v_splats_world, gq, sh_value_packed,

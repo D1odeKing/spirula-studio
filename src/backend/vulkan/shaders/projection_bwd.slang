@@ -1,20 +1,9 @@
-// Fused projection backward (Vulkan backend), mirroring
-// kernels/projection/ProjectionBwd_kernel.cuh: one thread per (camera, gaussian)
-// intersection; per-intersection VJP machinery in proj_bwd_common.slang,
-// gradients scattered with CAS float atomics (multiple cameras hit the same
-// splat).
-//
-// Variants (specialization constants, matching the CUDA template axes;
-// 0..4 declared in proj_bwd_common.slang):
-//   kCameraModel  = CameraModelType (0..3)
-//   kShDegree     = 0..4  (already capped at max_sh_degree by the host)
-//   kAntialiased  = 0 (Vanilla3DGS) | 1 (MipSplatting); ignored by 3DGUT
-//   kShValueBits  = 0 (fp32 SH source) | 8 | 16 (word-based codec source)
-//   kPacked       = 1: camera_ids/gaussian_ids index nnz intersections
-//   kViewmatGrad  = 1: accumulate v_R / v_t into v_viewmats (per-thread CAS
-//                   adds -- CUDA's labeled-partition warp reduce is a perf
-//                   shortcut with identical, order-nondeterministic sums)
-//   kDistortion   = CameraDistortionType (0..3), declared last
+// Projection backward (Vulkan backend), mirroring
+// kernels/projection/ProjectionBwd_kernel.cuh: one thread per (camera,
+// gaussian) intersection, the VJP machinery in proj_bwd_common.slang, and
+// gradients scattered with CAS float atomics (several cameras hit a splat).
+// kViewmatGrad accumulates v_R / v_t per thread -- CUDA's labeled-partition
+// warp reduce is a perf shortcut with the same order-nondeterministic sums.
 
 #define CudaDeviceExport ForceInline
 #include "aabb16.slang"
@@ -25,6 +14,7 @@
 #undef CudaDeviceExport
 #include "sh_quant.slang"
 #include "sh_vjp.slang"
+#include "view_color.slang"
 #include "atomic_float.slang"
 #include "proj_bwd_common.slang"
 
@@ -73,6 +63,8 @@ struct ProjectionBwd3dgsParams {
     uint32_t height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
+    uint32_t sb_base;  // float3 coefficient of the first lobe in a row
+    uint32_t _pad0;
 };
 
 void _pb_run_3dgs<let cam : CameraModelType, D : ICameraDistortion>(
@@ -105,18 +97,23 @@ void _pb_run_3dgs<let cam : CameraModelType, D : ICameraDistortion>(
                       g);
     ShAddrW a = sh_quant_addr_w(p.num_sh_buffer,
                                 i64mem_get(p.sh_bounds_stride));
-    gindex_t sh_src = (gindex_t)gid * (gindex_t)p.sh_stride_src;
     gindex_t sh_out = (gindex_t)gid * (gindex_t)p.sh_stride_v;
-    pb_sh_vjp<D>(s, c, elem_at(p.features_sh, sh_src), p.sh_packed,
-                 p.sh_bounds, sh_addr_base(a, gid), a.bounds_stride,
-                 a.pair_pitch, v_rgb, g);
+    ColorRow row;
+    row.fp32 =
+        elem_at(p.features_sh, (gindex_t)gid * (gindex_t)p.sh_stride_src);
+    row.packed = p.sh_packed;
+    row.bounds = p.sh_bounds;
+    row.base = sh_addr_base(a, gid);
+    row.bounds_stride = a.bounds_stride;
+    row.pair_pitch = a.pair_pitch;
+    pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
 
     pb_add3(p.vw_means + 3 * gid, g.v_mean);
     pb_add4(p.vw_quats + 4 * gid, g.v_quat);
     pb_add3(p.vw_scales + 3 * gid, g.v_scale);
     pb_add1(p.vw_opacities + gid, g.v_opacity);
     pb_add3(p.vw_dc + 3 * gid, g.v_dc);
-    pb_scatter_sh(elem_at(p.vw_sh, sh_out), g.v_sh, kShDegree);
+    pb_scatter_color(elem_at(p.vw_sh, sh_out), g, int(p.sb_base));
 
     if (kViewmatGrad != 0)
         pb_scatter_viewmat(p.v_viewmats, cid, g.v_R, g.v_t);
@@ -174,6 +171,8 @@ struct ProjectionBwd3dgutParams {
     uint32_t height;
     uint32_t wgs_per_row;
     uint32_t num_sh_buffer;
+    uint32_t sb_base;  // float3 coefficient of the first lobe in a row
+    uint32_t _pad0;
 };
 
 void _pb_run_3dgut<let cam : CameraModelType, D : ICameraDistortion>(
@@ -203,18 +202,23 @@ void _pb_run_3dgut<let cam : CameraModelType, D : ICameraDistortion>(
     pb_vjp_3dgut<cam, D>(s, c, p.width, p.height, v_sscale, v_sopac, g);
     ShAddrW a = sh_quant_addr_w(p.num_sh_buffer,
                                 i64mem_get(p.sh_bounds_stride));
-    gindex_t sh_src = (gindex_t)gid * (gindex_t)p.sh_stride_src;
     gindex_t sh_out = (gindex_t)gid * (gindex_t)p.sh_stride_v;
-    pb_sh_vjp<D>(s, c, elem_at(p.features_sh, sh_src), p.sh_packed,
-                 p.sh_bounds, sh_addr_base(a, gid), a.bounds_stride,
-                 a.pair_pitch, v_rgb, g);
+    ColorRow row;
+    row.fp32 =
+        elem_at(p.features_sh, (gindex_t)gid * (gindex_t)p.sh_stride_src);
+    row.packed = p.sh_packed;
+    row.bounds = p.sh_bounds;
+    row.base = sh_addr_base(a, gid);
+    row.bounds_stride = a.bounds_stride;
+    row.pair_pitch = a.pair_pitch;
+    pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
 
     pb_add3(p.vw_means + 3 * gid, g.v_mean);
     pb_add4(p.vw_quats + 4 * gid, g.v_quat);
     pb_add3(p.vw_scales + 3 * gid, g.v_scale);
     pb_add1(p.vw_opacities + gid, g.v_opacity);
     pb_add3(p.vw_dc + 3 * gid, g.v_dc);
-    pb_scatter_sh(elem_at(p.vw_sh, sh_out), g.v_sh, kShDegree);
+    pb_scatter_color(elem_at(p.vw_sh, sh_out), g, int(p.sb_base));
 
     if (kViewmatGrad != 0)
         pb_scatter_viewmat(p.v_viewmats, cid, g.v_R, g.v_t);

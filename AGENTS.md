@@ -73,7 +73,9 @@ src/
 ├── core/                   Tensor.h, Camera.h, Common.cuh, GradQuant.cuh, …
 │                             GraphCut.h -- the normalized cut the SfM mapper
 │                             and the scene partitioner both use; HostMemory.h
-│                             -- physical, available and per-process RAM
+│                             -- physical, available and per-process RAM;
+│                             ColorBasis.h -- what a splat's colour row holds
+│                             (SH bands, then spherical-beta lobes)
 │                             the types and device helpers everything uses
 ├── primitives/             Primitive*.cuh — 3DGS / Mip / 3DGUT traits
 │                             (compile-time types, not runtime branches)
@@ -183,6 +185,9 @@ src/
 │   ├── CrashLog.{h,cpp}    the stack trace every tool leaves in <config>/crash.log
 │   │                         when it faults -- armed for all of them in Main.cpp
 │   ├── gui/                Dear ImGui desktop app (`spirula` with no arguments)
+│   │                         SourcePreview.h: the dataset screen's look at an
+│   │                         input before it runs -- frames and the clip, photos,
+│   │                         GPS/IMU, scans -- docs/notes/source-preview.md
 │   │   └── edit/             selecting parts of a model (by region, by
 │   │                           attribute, by colour), deleting them, and
 │   │                           placing the whole model: one document /
@@ -740,6 +745,16 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   wrong by signs a casual render does not show. `sh_rotation_test` holds it to
   a sampled fit of that basis and `splat_transform_render` to the engine
   itself. Touch the basis and both have to follow. docs/notes/sh-rotation.md.
+  Spherical-beta lobes turn too -- their axis, `core/SphericalBeta.h` -- and
+  the same render test covers them on Vulkan.
+- **`features_sh` is a splat's colour row, not only its SH.** With
+  `--sb-lobes N` the row ends in N spherical-beta lobes, two float3 each, so
+  a row's width no longer says the SH degree: `ColorBasis` (`core/ColorBasis.h`)
+  does, and it travels with the row -- `set_data_3dgs`, the scene slots, the
+  launch APIs, `SplatCloud`, `state.json`. Everything that only moves rows
+  (densify, the codecs, checkpoints) needs nothing; what evaluates or steps
+  them must know the split. Vulkan only: the CUDA launchers refuse lobes.
+  docs/notes/spherical-beta.md.
 - **An edited model's placement is applied by the VIEWER until it is saved**
   (`EditDoc::placement`), so there are two frames on screen: the elements'
   own, and the saved coordinates the grid, the pivot and the alignment helpers

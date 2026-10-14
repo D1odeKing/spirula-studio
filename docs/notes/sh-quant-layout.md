@@ -9,7 +9,10 @@ same cell addressing over its own buffer. Gradients are never quantized --
 
 One *cell* is one `(splat, SH basis j, channel ch)` triple. A splat owns
 `R = 3 * num_sh_buffer` of them, where `num_sh_buffer` is the buffer's max SH
-count, not the runtime warmup degree.
+count, not the runtime warmup degree. A row with spherical-beta lobes
+(`core/ColorBasis.h`) counts them in `num_sh_buffer` too, after the bands:
+every layout below addresses a lobe's six numbers as cells like any other,
+and they share the bands' bounds.
 
 Two layouts exist, and every reader picks between them with the
 `(bounds_stride, pair_pitch)` pair that `_sh_load_q8` / `_sh_load_q16`

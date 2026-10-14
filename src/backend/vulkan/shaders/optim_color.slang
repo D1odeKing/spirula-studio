@@ -8,6 +8,7 @@
 #define CudaDeviceExport ForceInline
 #include "shaders/pixel_wise.slang"
 #undef CudaDeviceExport
+#include "sb_cells.slang"
 
 [SpecializationConstant]
 const int kIsLinear = 0;    // linear splat colour space
@@ -131,7 +132,7 @@ void fused_adamtr_rgb(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     }
 }
 
-struct AdamTrRgbShParams {  // 96 bytes: pushed directly
+struct AdamTrRgbShParams {  // 104 bytes: pushed directly
     float* param;       // [N, K, 3] (features_sh), scalar-indexed
     float* grad;
     float* exp_avg;
@@ -149,7 +150,8 @@ struct AdamTrRgbShParams {  // 96 bytes: pushed directly
     uint num_params;  // num_gs * num_sh * 3, scalar-indexed
     uint num_sh;
     uint wgs_per_row;
-    uint _pad0;
+    uint sb_first;    // first lobe cell of a row; kSbNoLobes: none
+    float sb_lr;
 };
 
 [shader("compute")]
@@ -163,9 +165,23 @@ void fused_adamtr_rgb_sh(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 
     float x = p.param[idx];
     float v = p.grad[idx];
-    v = v * p.grad_scale + p.sh_reg_weight * x;
     float m_val = p.exp_avg[idx];
     float v_val = p.exp_avg_sq[idx];
+
+    uint c_row = idx % (3 * p.num_sh);
+    if (c_row >= p.sb_first) {
+        v *= p.grad_scale;
+        m_val = kTrBeta1 * m_val + (1.0f - kTrBeta1) * v;
+        v_val = kTrBeta2 * v_val + (1.0f - kTrBeta2) * v * v;
+        float d = -(p.sb_lr / p.bias_correction1) * m_val /
+                  (sqrt(max(v_val / p.bias_correction2, 0.0f)) + p.eps);
+        p.param[idx] = x + (isfinite(d) ? d : 0.0f);
+        p.exp_avg[idx] = m_val;
+        p.exp_avg_sq[idx] = v_val;
+        if (p.zero_grad != 0) p.grad[idx] = 0.0f;
+        return;
+    }
+    v = v * p.grad_scale + p.sh_reg_weight * x;
 
     // SH stays in coefficient space -- the DC reparameterization does not
     // extend here, because linearizing it about the DC colour needs

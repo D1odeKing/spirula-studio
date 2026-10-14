@@ -51,6 +51,14 @@ bool measure_motion_vulkan(const FrameExtractJob& o, const FrameExtractSinks& si
     // third of the spacing being planned: a gap can only land on a sample.
     const int stride = std::max(
         1, std::min((int)std::lround(fps / 15.0), std::max(1, o.skip / 3)));
+    const FrameSpan span = clip_frames(o, fps);
+    const int64_t span_n = span.length(info.frame_count);
+    if (span.first > 0) {
+        // A container with no index stays at frame 0, which only costs time.
+        int64_t landed = 0;
+        std::string seek_error;
+        pipe.seek(span.first, landed, seek_error);
+    }
 
     // Tracking is CPU and decoding is GPU, so they run at the same time: the
     // decoder fills a short queue and one consumer thread owns the tracker.
@@ -108,6 +116,14 @@ bool measure_motion_vulkan(const FrameExtractJob& o, const FrameExtractSinks& si
             }
             break;
         }
+        if (span.past(h.index)) {
+            pipe.release(h);
+            break;
+        }
+        if (h.index < span.first) {
+            pipe.release(h);
+            continue;
+        }
         if (h.index % stride == 0) {
             if (!pipe.toGray(h, mo.width, mo.height, gray, error)) {
                 pipe.release(h);
@@ -121,7 +137,7 @@ bool measure_motion_vulkan(const FrameExtractJob& o, const FrameExtractSinks& si
             work.notify_one();
             ++t.analyzed;
             if (sinks.scanning)
-                sinks.scanning(h.index + 1, info.frame_count);
+                sinks.scanning(h.index + 1 - span.first, span_n);
         }
         last = h.index;
         pipe.release(h);
@@ -132,6 +148,7 @@ bool measure_motion_vulkan(const FrameExtractJob& o, const FrameExtractSinks& si
     out.step = tracker.steps();
     out.ends = tracker.ends();
     out.frames = info.frame_count > 0 ? info.frame_count : last + 1;
+    if (span.first > 0 || span.end >= 0) out.span = span.length(out.frames);
     out.skip = o.skip;
     out.window = std::max(o.keep, 1);
     out.max_frames = o.max_frames;
@@ -166,6 +183,40 @@ bool convert_lut(const std::string& spec, video::ConvertOpts& conv,
     return true;
 }
 
+// One instant's converted tracks as `look` writes `folder` of it: the lens cut
+// out of a packed frame, or the 360 canvas resampled through `map`.
+bool compose_frame(const FrameLook& look, int folder, std::vector<nn::Image>& img,
+                   const Pano360Remap& map, std::vector<uint8_t>& canvas,
+                   nn::Image& out, std::string& error) {
+    if (!look.pano()) {
+        if (look.packed_lenses >= 2) {
+            std::vector<uint8_t> lens;
+            packed_lens_crop(img[0].data.data(), img[0].width, img[0].height,
+                             img[0].channels, look.packed_lenses, folder, lens,
+                             img[0].width);
+            img[0].data.swap(lens);
+        }
+        out = std::move(img[0]);
+        return true;
+    }
+    for (size_t k = 0; k < img.size(); k++)
+        if (img[k].width != look.eac.track_w || img[k].height != look.eac.track_h) {
+            error = "track " + std::to_string(k) + " is not the size the"
+                    " 360 layout was detected at";
+            return false;
+        }
+    canvas.resize((size_t)look.eac.canvasW() * look.eac.canvasH() * 3);
+    pano360_canvas(look.eac, img[0].data.data(),
+                   img.size() > 1 ? img[1].data.data() : nullptr, canvas.data());
+    out.width = map.width;
+    out.height = map.height;
+    out.channels = 3;
+    out.data.resize((size_t)map.width * map.height * 3);
+    pano360_apply(map, canvas.data(), look.eac.canvasW(), look.eac.canvasH(), 0,
+                  out.data.data());
+    return true;
+}
+
 }  // namespace
 
 // Several tracks decoded in lockstep under one sharpness window; the score is
@@ -195,8 +246,34 @@ bool decode_lockstep_vulkan(const FrameExtractJob& o, const FrameExtractSinks& s
     std::deque<Buffered> window;
     const int keep = o.keep;
     SelectClock clock{o.keep, o.skip, plan, 0};
+    clock.span = clip_frames(o, pipe[0]->track().fps > 1.0 ? pipe[0]->track().fps : 30.0);
     int written = 0;
     bool measured_pending = false;
+
+    // To the keyframe before the clip, then every track brought level with
+    // the one that landed latest, the frame each one stops at held for the loop.
+    std::vector<video::FrameHandle> ahead(n);
+    auto release_ahead = [&]() {
+        for (size_t k = 0; k < n; k++)
+            if (ahead[k].valid()) pipe[k]->release(ahead[k]);
+    };
+    if (clock.span.first > 0) {
+        int64_t floor_index = 0;
+        for (size_t k = 0; k < n; k++) {
+            int64_t landed = 0;
+            std::string seek_error;
+            if (pipe[k]->seek(clock.span.first, landed, seek_error))
+                floor_index = std::max(floor_index, landed);
+        }
+        for (size_t k = 0; k < n; k++)
+            while (!ahead[k].valid() || ahead[k].index < floor_index) {
+                if (ahead[k].valid()) pipe[k]->release(ahead[k]);
+                if (!pipe[k]->next(ahead[k], error)) {
+                    release_ahead();
+                    return error.empty();
+                }
+            }
+    }
 
     auto release = [&](Buffered& b) {
         for (size_t k = 0; k < n; k++) pipe[k]->release(b.h[k]);
@@ -252,6 +329,7 @@ bool decode_lockstep_vulkan(const FrameExtractJob& o, const FrameExtractSinks& s
     while (o.max_frames <= 0 || written < o.max_frames) {
         if (sinks.cancel && sinks.cancel->load()) {
             error = "cancelled";
+            release_ahead();
             drain();
             return false;
         }
@@ -259,19 +337,31 @@ bool decode_lockstep_vulkan(const FrameExtractJob& o, const FrameExtractSinks& s
         b.h.resize(n);
         const double t0 = nn::now_ms();
         bool got = true;
-        for (size_t k = 0; k < n && got; k++) got = pipe[k]->next(b.h[k], error);
+        for (size_t k = 0; k < n && got; k++) {
+            if (ahead[k].valid()) {
+                b.h[k] = ahead[k];
+                ahead[k] = {};
+            } else {
+                got = pipe[k]->next(b.h[k], error);
+            }
+        }
         t.decode += nn::now_ms() - t0;
         if (!got) {
             // One track ending first leaves the others' pictures held; release
             // them so a future caller can reopen without a full pool.
             for (size_t k = 0; k < n; k++)
                 if (b.h[k].valid()) pipe[k]->release(b.h[k]);
+            release_ahead();
             drain();
             return error.empty();   // end of stream
         }
         ++t.decoded;
 
         b.index = b.h[0].index;
+        if (clock.span.past(b.index)) {
+            release(b);
+            break;
+        }
         if (!clock.candidate(b.index)) {
             release(b);
             continue;
@@ -428,33 +518,8 @@ bool extract_frames_at(const std::string& input, const FrameLook& look_in,
         std::vector<nn::Image> img(np);
         for (size_t k = 0; k < np; k++)
             if (!pipe[k]->toImage(held[k], conv, img[k], error)) return false;
-        if (!pano) {
-            if (look.packed_lenses >= 2) {
-                std::vector<uint8_t> lens;
-                packed_lens_crop(img[0].data.data(), img[0].width, img[0].height,
-                                 img[0].channels, look.packed_lenses, folder, lens,
-                                 img[0].width);
-                img[0].data.swap(lens);
-            }
-            on_frame(img[0], index);
-            return true;
-        }
-        for (size_t k = 0; k < np; k++)
-            if (img[k].width != look.eac.track_w ||
-                img[k].height != look.eac.track_h) {
-                error = "track " + std::to_string(k) + " is not the size the"
-                        " 360 layout was detected at";
-                return false;
-            }
-        pano360_canvas(look.eac, img[0].data.data(),
-                       np > 1 ? img[1].data.data() : nullptr, canvas.data());
         nn::Image out;
-        out.width = map.width;
-        out.height = map.height;
-        out.channels = 3;
-        out.data.resize((size_t)map.width * map.height * 3);
-        pano360_apply(map, canvas.data(), look.eac.canvasW(),
-                      look.eac.canvasH(), 0, out.data.data());
+        if (!compose_frame(look, folder, img, map, canvas, out, error)) return false;
         on_frame(out, index);
         return true;
     };
@@ -522,6 +587,216 @@ bool extract_one_frame(const std::string& input, const FrameLook& look,
         cancel, error, device);
     if (ok && !got && error.empty()) error = "no frame could be decoded";
     return ok && got;
+}
+
+// ---------------------------------------------------------------------------
+// FrameCursor
+// ---------------------------------------------------------------------------
+
+struct FrameCursor::Impl {
+    std::vector<std::unique_ptr<video::VideoPipeline>> pipe;
+    std::vector<video::FrameHandle> held;
+    std::vector<sfm::ExifTransform> turns;
+    std::string input;
+    int64_t at = -1;
+    int64_t frames = 0;
+    // The last 360 resampling built, kept while the view asked for is the same.
+    Pano360Layout map_layout;
+    Pano360View map_view;
+    Pano360Remap map;
+    std::vector<uint8_t> canvas;
+
+    void release() {
+        for (size_t k = 0; k < pipe.size(); k++)
+            if (held[k].valid()) pipe[k]->release(held[k]);
+    }
+    // Back to the frame at or before `index` -- by the container's index, or,
+    // where it has none, by reopening at the start.
+    bool rewind(size_t k, int64_t index, int64_t& landed, std::string& error) {
+        if (pipe[k]->seek(index, landed, error)) return true;
+        error.clear();
+        pipe[k] = std::make_unique<video::VideoPipeline>();
+        landed = 0;
+        return pipe[k]->open(input, (int)k, 2, error);
+    }
+};
+
+FrameCursor::FrameCursor() : _impl(std::make_unique<Impl>()) {}
+FrameCursor::~FrameCursor() { close(); }
+
+bool FrameCursor::open(const std::string& input, std::string& error,
+                       const std::string& device) {
+    close();
+    if (!sam::freeze_device(device, error)) return false;
+    error = video_decode_availability();
+    if (!error.empty()) return false;
+    Impl& m = *_impl;
+    m.input = input;
+    auto first = std::make_unique<video::VideoPipeline>();
+    if (!first->open(input, 0, 2, error)) return false;
+    for (const video::TrackInfo& t : first->tracks())
+        m.turns.push_back({((t.rotate % 360) + 360) % 360 / 90, t.mirror});
+    m.frames = first->track().frame_count;
+    const size_t n = first->tracks().size();
+    m.pipe.push_back(std::move(first));
+    for (size_t k = 1; k < n; k++) {
+        m.pipe.push_back(std::make_unique<video::VideoPipeline>());
+        if (!m.pipe[k]->open(input, (int)k, 2, error)) {
+            close();
+            return false;
+        }
+    }
+    m.held.assign(n, {});
+    return true;
+}
+
+void FrameCursor::close() {
+    Impl& m = *_impl;
+    m.release();
+    m.pipe.clear();
+    m.held.clear();
+    m.turns.clear();
+    m.at = -1;
+    m.map = Pano360Remap{};
+    m.map_layout = Pano360Layout{};
+    m.canvas.clear();
+    m.canvas.shrink_to_fit();
+}
+
+bool FrameCursor::is_open() const { return !_impl->pipe.empty(); }
+int FrameCursor::tracks() const { return (int)_impl->pipe.size(); }
+int64_t FrameCursor::index() const { return _impl->at; }
+
+bool FrameCursor::go(int64_t index, bool exact, const std::atomic<bool>* cancel,
+                     std::string& error) {
+    Impl& m = *_impl;
+    if (m.pipe.empty()) {
+        error = "no video is open";
+        return false;
+    }
+    index = std::max<int64_t>(index, 0);
+    if (m.frames > 0) index = std::min(index, m.frames - 1);
+    if (exact && index == m.at) return true;
+    const size_t n = m.pipe.size();
+    // Forward within about a GOP decodes on; anything else starts again from
+    // the sync sample before it.
+    constexpr int64_t kForward = 60;
+    int64_t floor_index = m.at + 1;
+    int64_t target = index;
+    if (!exact || m.at < 0 || index < m.at || index - m.at > kForward) {
+        m.release();
+        floor_index = 0;
+        for (size_t k = 0; k < n; k++) {
+            int64_t landed = 0;
+            if (!m.rewind(k, index, landed, error)) {
+                m.at = -1;
+                return false;
+            }
+            floor_index = std::max(floor_index, landed);
+        }
+        if (!exact) target = floor_index;
+    }
+    m.at = -1;
+    for (;;) {
+        if (cancel && cancel->load()) {
+            error = "cancelled";
+            return false;
+        }
+        bool ended = false;
+        for (size_t k = 0; k < n && !ended; k++)
+            while (!m.held[k].valid() || m.held[k].index < floor_index) {
+                video::FrameHandle h;
+                if (!m.pipe[k]->next(h, error)) {
+                    ended = true;
+                    break;
+                }
+                if (m.held[k].valid()) m.pipe[k]->release(m.held[k]);
+                m.held[k] = h;
+            }
+        if (ended) {
+            // Past the last frame: the last one every track still holds.
+            if (!error.empty()) return false;
+            for (size_t k = 0; k < n; k++)
+                if (!m.held[k].valid()) {
+                    error = "no frame could be decoded";
+                    return false;
+                }
+            m.at = m.held[0].index;
+            return true;
+        }
+        int64_t cur = m.held[0].index;
+        bool aligned = true;
+        for (size_t k = 1; k < n; k++) {
+            cur = std::max(cur, m.held[k].index);
+            aligned = aligned && m.held[k].index == m.held[0].index;
+        }
+        floor_index = cur;
+        if (!aligned) continue;
+        if (cur >= target) {
+            m.at = cur;
+            return true;
+        }
+        floor_index = cur + 1;
+    }
+}
+
+bool FrameCursor::image(const FrameLook& look_in, int folder, nn::Image& out,
+                        std::string& error) {
+    Impl& m = *_impl;
+    if (m.at < 0) {
+        error = "no frame is decoded";
+        return false;
+    }
+    const int n = (int)m.pipe.size();
+    FrameLook look = look_in;
+    if (look.auto_rotate && !look.pano()) {
+        bool mixed = false;
+        look.rotate = (look.rotate + 90 * merge_turns(m.turns, {}, mixed).turns_cw) % 360;
+    }
+    if (look.rotate % 90 != 0) {
+        error = "rotation must be a multiple of 90 degrees";
+        return false;
+    }
+    const bool pano = look.pano();
+    if (pano && n < 2) {
+        error = "a 360 capture needs two video tracks";
+        return false;
+    }
+    video::ConvertOpts conv;
+    if (!pano) {
+        conv.scale = look.scale;
+        conv.rotate = look.rotate;
+    }
+    std::shared_ptr<const CubeLut> lut;
+    if (!convert_lut(look.lut, conv, lut, error)) return false;
+
+    std::vector<int> reads;
+    if (pano) {
+        reads.push_back(0);
+        if (pano360_needs_track1(look.eac)) reads.push_back(1);
+        const Pano360View& v =
+            look.views[std::min((size_t)std::max(folder, 0), look.views.size() - 1)];
+        const Pano360Layout& l = look.eac;
+        const Pano360Layout& ml = m.map_layout;
+        const bool same_layout = ml.packing == l.packing && ml.track_w == l.track_w &&
+                                 ml.track_h == l.track_h && ml.face == l.face &&
+                                 ml.strip == l.strip && ml.margin == l.margin;
+        const bool same_view = m.map_view.width == v.width && m.map_view.height == v.height &&
+                               m.map_view.fov == v.fov &&
+                               std::equal(v.rot, v.rot + 9, m.map_view.rot);
+        if (m.map.width == 0 || !same_layout || !same_view) {
+            pano360_remap(l, v, m.map);
+            m.map_layout = l;
+            m.map_view = v;
+        }
+    } else {
+        reads.push_back(look.packed_lenses >= 2 ? 0 : std::clamp(folder, 0, n - 1));
+    }
+    std::vector<nn::Image> img(reads.size());
+    for (size_t i = 0; i < reads.size(); i++)
+        if (!m.pipe[(size_t)reads[i]]->toImage(m.held[(size_t)reads[i]], conv, img[i], error))
+            return false;
+    return compose_frame(look, folder, img, m.map, m.canvas, out, error);
 }
 
 }  // namespace app

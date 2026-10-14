@@ -11,6 +11,7 @@
 #include "backend/vulkan/VulkanPipelines.h"
 #include "backend/common/SortScan.h"
 
+#include <core/ColorBasis.h>
 #include <core/Common.cuh>
 #include <core/Tensor.h>
 
@@ -272,6 +273,41 @@ inline uint32_t resolve_sh_quant(
     // with sh_quant_addr_w (docs/notes/sh-quant-layout.md).
     *out_stride = sh_bounds_stride;
     return (uint32_t)sh_value_bits;
+}
+
+// The kShDegree / kSbLobes values of a launch and where its lobes start: the
+// bands `color` asks for, capped at those the row stores, and the lobes at
+// the end of a `row_coeffs`-float3 features_sh row (core/ColorBasis.h).
+struct ColorSpec {
+    uint32_t sh_degree, sb_lobes, sb_base;
+};
+
+// float3 coefficients in a world buffer's features_sh row. A value-quantized
+// row keeps its shape on a null tensor, so the stride is there either way.
+template <typename WorldBuffer>
+inline int64_t row_coeffs(const WorldBuffer& wb, uint32_t num_sh_buffer) {
+    const int64_t stride = wb.raw_stride(5);
+    return stride > 0 ? stride / 3 : (int64_t)num_sh_buffer;
+}
+
+inline ColorSpec color_spec(const ColorBasis& color, int64_t row_coeffs) {
+    if (color.sb_lobes < 0 || color.sb_lobes > ColorBasis::kMaxSbLobes)
+        throw std::runtime_error(
+            "spherical beta: " + std::to_string(color.sb_lobes) +
+            " lobes is outside 0.." +
+            std::to_string(ColorBasis::kMaxSbLobes));
+    const int64_t sh_row = row_coeffs - 2 * (int64_t)color.sb_lobes;
+    if (sh_row < 0)
+        throw std::runtime_error(
+            "spherical beta: a features_sh row of " +
+            std::to_string(row_coeffs) + " coefficients cannot hold " +
+            std::to_string(color.sb_lobes) + " lobes");
+    int stored = 0;
+    while (stored < ColorBasis::kMaxShDegree &&
+           ColorBasis::sh_coeffs_of(stored + 1) <= sh_row)
+        stored++;
+    return {(uint32_t)std::max(0, std::min(stored, color.sh_degree)),
+            (uint32_t)color.sb_lobes, (uint32_t)sh_row};
 }
 
 // Per-splat [N+1] intersection ranges for the grad-quant and FPBO projection

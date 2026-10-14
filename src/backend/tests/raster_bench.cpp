@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     auto dist_tv = ttv(d_dist + dist_fixture::row_offset(0, C),
                        {C, kCameraDistortionParams});
     auto proj = projection_3dgs_packed_forward(
-        N, 0, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H, "PINHOLE",
+        N, ColorBasis{}, splats, ttv(d_vm, {C, 16}), ttv(d_intr, {C, 4}), W, H, "PINHOLE",
         dist_fixture::kTierNames[0], dist_tv, radii, std::nullopt,
         std::nullopt, 0, 32, 0);
     DeviceVector<int32_t> cam_ids = std::get<0>(proj);

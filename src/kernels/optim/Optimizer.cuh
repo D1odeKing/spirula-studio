@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/Tensor.h>
+#include "core/ColorBasis.h"
 #include "core/ColorTrustState.h"
 #include "core/NonShQuantState.h"
 #include "core/SplatVisitState.h"
@@ -159,6 +160,7 @@ void fused_adam_step(
     int32_t step, DeviceVector<int32_t> per_splat_steps,
     float l2_reg,
     float l2_reg_offset,
+    SbOptimCells sb,
     float grad_scale, bool zero_grad
 );
 
@@ -183,6 +185,7 @@ void fused_adam_step_quantized(
     float l2_reg_offset,
     int bits,                           // 4 or 8 -- selects QuantizedAdamState<BITS, 256>
     ColorTrustState color_trust,
+    SbOptimCells sb,
     float grad_scale, bool zero_grad
 );
 
@@ -206,6 +209,7 @@ void fused_adam_step_quantized_value(
     int optim_bits,                     // 4 or 8
     int value_bits,                     // 8 or 16
     ColorTrustState color_trust,
+    SbOptimCells sb,
     float grad_scale, bool zero_grad
 );
 
@@ -360,6 +364,7 @@ void fused_adamtr_linear_rgb_sh_optim(
     float eps_tr,
     float sh_reg_weight,
     int step,
+    SbOptimCells sb,
     float grad_scale, bool zero_grad
 );
 
@@ -378,6 +383,7 @@ void fused_adamtr_rgb_sh_optim(
     float eps_tr,
     float sh_reg_weight,
     int step,
+    SbOptimCells sb,
     float grad_scale, bool zero_grad
 );
 

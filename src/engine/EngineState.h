@@ -5,6 +5,7 @@
 // Sub-structs group related fields (world, camera, fwd, gt, grad, optim,
 // bilagrid_rgb/depth/normal, ppisp). The singleton lives in EngineState.cpp.
 
+#include "core/ColorBasis.h"
 #include "core/PixelFormat.h"
 #include "core/Tensor.h"
 
@@ -111,6 +112,9 @@ struct WorldSplats {
     QuantizedTensor<16, 256> features_sh_quant16_fpbo;
     int  sh_value_bits = 32;
     bool sh_value_quantize_enabled() const { return sh_value_bits != 32; }
+    // features_sh was uploaded with values the codec must take over (lobes,
+    // an --init-ply's bands) rather than the zeros its init assumes.
+    bool features_sh_seeded = false;
 };
 
 // Camera table (re-copied each frame into pool).
@@ -618,8 +622,11 @@ struct EngineState {
     std::string primitive;
     int64_t cur_num_splats = 0;
     int64_t max_num_splats = 0;
+    // features_sh row: num_sh float3, the last 2 * sb_lobes of them lobes
+    // (core/ColorBasis.h); sh_degree is the bands the current step evaluates.
     int     num_sh         = 0;
     int     sh_degree      = 0;
+    int     sb_lobes       = 0;
     bool    packed         = false;
     VisitStats visit;
     // Binning tile edge in pixels the caller asked for, or 0 to let the
@@ -713,3 +720,8 @@ struct EngineState {
 // Function-local-static singleton. Future evolution: a second instance for
 // eval / viewer / multi-model can be added by swapping the accessor's body.
 EngineState& engine();
+
+// What the projection launches evaluate this step.
+inline ColorBasis engine_color() {
+    return {engine().sh_degree, engine().sb_lobes};
+}

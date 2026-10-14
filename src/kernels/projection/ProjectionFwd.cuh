@@ -6,6 +6,7 @@
 #include <core/Tensor.h>
 
 #include <core/Common.cuh>
+#include <core/ColorBasis.h>
 
 #include "primitives/Primitive3DGS.cuh"
 #include "primitives/Primitive3DGUT.cuh"
@@ -18,7 +19,7 @@
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgs_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -39,7 +40,7 @@ std::tuple<
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_mip_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
@@ -60,7 +61,7 @@ std::tuple<
 std::tuple<
     DeviceTensor2D<uint2>, DeviceTensor2D<float>, std::vector<DeviceTensorFloatND>
 > projection_3dgut_forward(
-    const int64_t num_splats, const int max_sh_degree,
+    const int64_t num_splats, const ColorBasis color,
     const std::vector<DeviceTensorFloatND> &in_splats,
     TorchTensorView viewmats, TorchTensorView intrins,
     const uint32_t image_width, const uint32_t image_height,
