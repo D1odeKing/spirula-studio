@@ -74,6 +74,15 @@ they moved. A flag named on the command line is never moved.
 | `video` | `--pairs sequential` (below 100 images; pair selection takes over above), `--init-min-tri-angle` halved |
 | `internet` | `--camera-mode image`, `--no-prefilter-sequential` |
 
+With `--progressive`, `--quality` also sets the progressive-alignment steps:
+
+| `--quality` | `--progressive-error-start` | `--progressive-error-steps` | `--progressive-features` | `--progressive-feature-steps` | `--progressive-patience` |
+|---|---|---|---|---|---|
+| `low` | 12 | 5 | off | 1 | 1 |
+| `medium` | 16 | 8 | on | 2 | 2 |
+| `high` | 20 | 12 | on | 3 | 3 |
+| `extreme` | 24 | 15 | on | 4 | 4 |
+
 Learned features (ALIKED, LoMa) with a non-learned matcher also get
 `--ratio 0.92`. A learned matcher (`lightglue`, `loma-*`) gets `--ratio 1`,
 `--min-similarity 0` and `--pairs prefilter`.

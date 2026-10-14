@@ -1,7 +1,7 @@
 # `spirula geometry`
 
 Writes per-image normal maps (and optionally depth maps) for a dataset with a
-monocular geometry model, MoGe-2 by default or Metric3D v2. The trainer reads
+monocular geometry model: MoGe-2 by default, MoGe-3 or Metric3D v2. The trainer reads
 them through `--load-normals` and `--load-depths`. Vulkan builds with
 `SS_BUILD_SAM=ON` only.
 
@@ -18,9 +18,10 @@ continues where the last one stopped unless `--overwrite`.
 | flag | default | meaning |
 |---|---|---|
 | `--image-dir <dir>` | `images` | The images, relative to the dataset or absolute. |
-| `--model <id\|file>` | `moge2-vitb` | `moge2-vits`, `moge2-vitb`, `moge2-vitl`, `metric3d-vit-small`, `metric3d-vit-large`, `metric3d-vit-giant2`, or a path to an `.onnx` file. A known id is downloaded and cached. |
+| `--model <id\|file>` | `moge2-vitb` | `moge2-vits`, `moge2-vitb`, `moge2-vitl`, `moge3-vitl`, `metric3d-vit-small`, `metric3d-vit-large`, `metric3d-vit-giant2`, or a path to an `.onnx` file. A known id is downloaded and cached. |
 | `--max-size <n>` | 1064 | Longest side of the maps written, and of one image the network runs. |
 | `--num-tokens <n>` | 3600 | Patches MoGe's transformer runs (its range is 1200 to 3600); sets its cost. Metric3D ignores it. |
+| `--refine-steps <n>` | 3 | MoGe-3's depth refinement passes, each sharpening depth edges a little more; 0 skips refinement. Other models ignore it. |
 | `--depth` | off | Also write depth maps. |
 | `--no-normal` | | Do not write normal maps. |
 | `--normal-format png\|jpg` | `png` | File type for the normal maps; `jpg` is about a fifth the size. |

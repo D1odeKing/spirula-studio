@@ -15,9 +15,9 @@ Defaults are a fresh config, which is what `--help` prints; `auto` then applies 
 | `--quality` | auto | `high` | basic | Working resolution, feature budget and pair-selection breadth. One of: `low`, `medium`, `high`, `extreme`. |
 | `--data-type` | auto | `individual` | basic | What the capture is: individual photos, video frames, or an unordered internet collection. One of: `individual`, `video`, `internet`. |
 | `--pairs` | auto, match | `auto` | basic | Which image pairs are matched; auto is GPU pair selection at 100 images or more, sequential (plus loop closure) for video below that, and exhaustive otherwise. One of: `auto`, `exhaustive`, `sequential`, `prefilter`. |
-| `--overlap` | auto, match, map | `10` | advanced | Neighbours each image is paired with under --pairs sequential and along a --sequence, and how far apart two images of a sequence still count as neighbours in mapping. Range 1 to 1000000. |
+| `--overlap` | auto, match, map | `10` | advanced | Neighbours in file order each image is paired with under --pairs sequential and --prefilter-sequential. Range 1 to 1000000. |
 | `--loop-closure` / `--no-loop-closure` | auto, match | `on` | advanced | Under --pairs sequential, also match the content-similar pairs GPU pair selection finds, so a capture that revisits a place links back to it. |
-| `--quadratic-overlap` / `--no-quadratic-overlap` | auto, match | `off` | advanced | A sequential window also pairs each image with the ones 16, 32, 64 ... apart in file order, up to 2^(overlap-1), as COLMAP does. |
+| `--quadratic-overlap` / `--no-quadratic-overlap` | auto, match | `off` | advanced | A sequential window also pairs each image with the ones 2, 4, 8 ... apart in file order, up to 2^(overlap-1), as COLMAP does. |
 | `--prefilter-sequential` / `--no-prefilter-sequential` | auto, match | `off` | advanced | When GPU pair selection runs, also match each image with its neighbours in file order within its folder (the sequential window, --overlap and --quadratic-overlap), so a real link the content score ranked too low is not lost. |
 | `--rig-pairs` / `--no-rig-pairs` | auto, match | `on` | advanced | On a dual-fisheye rig, match each verified pair's rig-mates too: when cam0 of two frames matched, cam1 of the same two frames; when cam0 matched cam1, the camera had turned round, so cam1 against cam0. |
 | `--rig-pair-angle` | auto, match | `30` | advanced | How far apart, in degrees, two rig-mates' viewing directions may be for --rig-pairs to match them. Range 0 to 180. |
@@ -28,6 +28,22 @@ Defaults are a fresh config, which is what `--help` prints; `auto` then applies 
 | `--mask-dir` | auto, extract | `none` | alias | Another spelling of `--masks`. |
 | `--flip-mask` / `--no-flip-mask` | auto, extract | `off` | advanced | Swap keep and ignore in every mask, for the exporters that paint the region to REMOVE rather than the region to keep. |
 | `--feature-masks` | auto, extract | `none` | advanced | A second directory of masks, intersected with --masks: keypoints are kept only where both are nonzero. For what the reconstruction should not use but training should, such as the sky. Never flipped. |
+
+### Progressive
+
+| Flag | Commands | Default | Tier | Description |
+|---|---|---|---|---|
+| `--progressive` / `--no-progressive` | auto, match | `off` | advanced | Progressive alignment: map at a loose pixel error first, then again at tighter ones, each attempt continuing from the last. |
+| `--progressive-error-start` | auto, match | `20` | advanced | Pixel error of the first progressive attempt; matches are verified at it. Range 0.1 to 1000. |
+| `--progressive-error-end` | auto | `0` | advanced | Pixel error of the last progressive attempt, and so of the written model; 0 is --max-error. Range 0 to 1000. |
+| `--progressive-error-steps` | auto | `5` | advanced | Progressive attempts from the start error to the end error, both included, spaced evenly in ratio. Range 2 to 50. |
+| `--progressive-features` / `--no-progressive-features` | auto | `on` | advanced | After the error steps, detect features again on images still outside the largest model, with more features and resolution each pass. |
+| `--progressive-max-features-end` | auto | `0` | advanced | Feature limit of the last feature pass; the first uses the run's own. 0 is four times the run's. Range 0 to 1000000. |
+| `--progressive-image-size-end` | auto | `0` | advanced | Image size limit of the last feature pass, in pixels on the long edge; the first uses the run's own. 0 is the images' full size. Range 0 to 20000. |
+| `--progressive-feature-steps` | auto | `3` | advanced | Feature passes from the run's settings to the ends. Range 1 to 20. |
+| `--progressive-patience` | auto | `2` | advanced | Tries in a row that align no new image before a stage gives up: the pixel error steps skip to the final error, and the feature passes stop. Range 1 to 20. |
+| `--progressive-min-matches` | auto | `50` | advanced | Verified matches an unaligned image needs to be worked on; below it, the image is taken for an outlier and left alone. Range 0 to 1000000. |
+| `--progressive-time` | auto | `0` | advanced | Minutes into progressive alignment after which no further feature pass starts; 0 is no limit. Range 0 to 100000. |
 
 ### Colour
 
@@ -91,6 +107,8 @@ Defaults are a fresh config, which is what `--help` prints; `auto` then applies 
 | `--prefilter-neighbors` | auto, match | `32` | advanced | Best-scoring partners each image keeps for full matching. Range 1 to 100000. |
 | `--prefilter-min-score` | auto, match | `4` | advanced | Mini-matches below which a pair never qualifies. Range 0 to 1000000. |
 | `--prefilter-ratio` | auto, match | `0.8` | advanced | Lowe ratio of the scoring pass; looser than the matcher's, as it only ranks. Range 0 to 1. |
+| `--order-weight` | auto, match | `0` | advanced | How much pair selection favours images close in file order within a folder; an adjacent image's score counts 1 + this times. 0 is off. Range 0 to 100. |
+| `--order-decay` | auto, match | `5` | advanced | File-order distance, in images, over which the --order-weight bonus falls to about a third. Range 0.1 to 100000. |
 
 ### Mapper
 
