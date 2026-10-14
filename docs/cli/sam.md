@@ -129,6 +129,8 @@ Frame selection:
 | `-s`, `--skip <n>` | 1 | Write one frame every `n` source frames. |
 | `-k`, `--keep <n>` | -1 | Choose the sharpest of the last `n` frames; -1 is `round(skip/2)`, 0 turns selection off. |
 | `-n`, `--max-frames <n>` | 0 (all) | Stop after writing `n` frames. |
+| `--start <time>` | the start | Read from this time on: seconds, or `mm:ss` / `hh:mm:ss`, with a fraction. |
+| `--end <time>` | the end | Stop reading at this time, in the same form. Frames keep their source numbers. |
 | `-q`, `--quality <0..100>` | 95 | JPEG quality; a value outside 0..100 writes PNG. |
 | `-r`, `--rotate <deg>` | 0 | 0, 90, 180 or 270, clockwise. |
 | `--no-autorotate` | | Ignore the rotation the file asks for. `--autorotate` turns it back on. |

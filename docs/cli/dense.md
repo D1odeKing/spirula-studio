@@ -41,9 +41,12 @@ spirula dense --write-config PATH [--flag value ...]
 
 | preset | `--low-width/height` | `--high-width/height` | `--bidirectional` | `--neighbors` | `--stride` | `--reference-coverage` |
 |---|---|---|---|---|---|---|
-| `fast` | 512 | 0 | false | 4 | 2 | 2 |
-| `balanced` | 640 | 0 | false | 6 | 2 | 3 |
-| `high` | 800 | 1280 | true | 8 | 1 | 0 |
+| `fast` | 512 | 0 | false | 2 | 2 | 12 |
+| `balanced` | 640 | 0 | false | 3 | 2 | 12 |
+| `high` | 800 | 1280 | true | 4 | 1 | 16 |
+
+Settings saved with an older preset's pairing (`--neighbors` 4, 6 or 8 with
+`--reference-coverage` 2, 3 or 0) are read as that preset's current values.
 
 ## Inputs
 
@@ -79,8 +82,8 @@ spirula dense --write-config PATH [--flag value ...]
 | flag | default | meaning |
 |---|---|---|
 | `--pair-mode automatic\|sequential\|exhaustive\|explicit` | `automatic` | How image pairs are chosen. |
-| `--neighbors <n>` | 6 | Pairs per reference view in automatic mode. Needs `neighbors + 1 >= min-source-images`. |
-| `--reference-coverage <n>` | 3 | Automatic mode: a view becomes a reference only while a tenth of its sparse cells are seen by fewer than this many earlier references; 0 makes every view a reference. |
+| `--neighbors <n>` | 3 | Automatic mode: each reference takes partners until every surface cell of its view is seen by this many of them, at most twice this many in all. In source mode, neighbours per reference. Needs `neighbors + 1 >= min-source-images`. |
+| `--reference-coverage <n>` | 12 | Automatic mode: references are added until every surface cell is seen by this many of them; 0 makes every view a reference. |
 | `--sequence-window <n>` | 8 | Neighbours each image pairs with in sequential mode. |
 | `--max-pairs <n>` | 0 | Stop after this many pairs; 0 is no cap. |
 | `--pair-list <file>` | | Explicit mode: two registered image names per line. |
@@ -131,7 +134,7 @@ spirula dense --write-config PATH [--flag value ...]
 
 | flag | default | meaning |
 |---|---|---|
-| `--image-cache-bytes <n>` | 0 | Host memory for decoded images and views; 0 is the smaller of an eighth of RAM and half of what is free. |
+| `--image-cache-bytes <n>` | 0 | Host memory for decoded images and views; 0 is the smallest of an eighth of RAM, a third of free RAM and a fifth of the free commit. |
 | `--cpu-workers <n>` | 0 | CPU threads; 0 uses every hardware thread. |
 
 Exit status is 0 on success and 1 on any error. The first Ctrl-C (or
