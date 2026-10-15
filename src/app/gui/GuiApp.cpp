@@ -4244,6 +4244,7 @@ void GuiApp::fill_masking(PrepJob& prep) const {
     prep.mask_feature_prompt = mask_model.text ? _mask.feature_prompt : "";
     prep.mask_keep_subject = _mask.keep_subject;
     prep.mask_max_image_size = _mask.max_image_size;
+    prep.mask_streams = _mask.streams;
     prep.mask_dilate_ratio = _mask.boundary_ratio();
     prep.mask_threshold = _mask.threshold;
     prep.mask_nms = _mask.nms;
@@ -5952,6 +5953,10 @@ void GuiApp::draw_masking_options(const MaskingPanel& p) {
             if (ui::InputInt(dmsg::mask_max_size, &_mask.max_image_size))
                 _mask.max_image_size = std::max(0, _mask.max_image_size);
             ui::help_on_hover(dmsg::mask_max_size_help);
+            ImGui::SetNextItemWidth(px(220.0f));
+            if (ui::InputInt(dmsg::mask_streams, &_mask.streams))
+                _mask.streams = std::clamp(_mask.streams, 0, 16);
+            ui::help_on_hover(dmsg::mask_streams_help);
             draw_margin_slider(_mask.dilate_ratio, _mask.shrink_ratio, keep_subject,
                                px(220.0f), /*inline_label=*/true);
         }
@@ -6016,6 +6021,10 @@ void GuiApp::draw_masking_options(const MaskingPanel& p) {
         if (ui::InputInt(dmsg::mask_max_size, &_mask.max_image_size))
             _mask.max_image_size = std::max(0, _mask.max_image_size);
         ui::help_on_hover(dmsg::mask_max_size_help);
+        ImGui::SetNextItemWidth(px(220.0f));
+        if (ui::InputInt(dmsg::mask_streams, &_mask.streams))
+            _mask.streams = std::clamp(_mask.streams, 0, 16);
+        ui::help_on_hover(dmsg::mask_streams_help);
         draw_margin_slider(_mask.dilate_ratio, _mask.shrink_ratio, keep_subject, px(220.0f),
                            /*inline_label=*/true);
 
@@ -8381,6 +8390,14 @@ void GuiApp::draw_sfm_advanced() {
 
     ui::Checkbox(dmsg::sfm_subprocess, &_sfm_job.subprocess);
     ui::help_on_hover(dmsg::sfm_subprocess_help);
+
+    ui::Checkbox(dmsg::sfm_stage, &_sfm_job.stage);
+    ui::help_on_hover(dmsg::sfm_stage_help);
+    if (_sfm_job.stage) {
+        ImGui::SetNextItemWidth(px(220.0f));
+        ui::InputTextWithHint(dmsg::sfm_stage_dir, dmsg::sfm_stage_dir_hint, &_sfm_job.stage_dir);
+        ui::help_on_hover(dmsg::sfm_stage_dir_help);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -352,6 +352,9 @@ struct PrepJob {
     std::string mask_model_path;
     std::string mask_detector_path;
     float mask_detector_threshold = 0.3f;   // sam::MaskOptions::detector_threshold
+    // Camera folders masked at once, each in a child process (MaskWorker.h);
+    // 0 sizes it to free GPU memory, 1 masks them one after another here.
+    int mask_streams = 0;
 };
 
 // The rate a row is actually extracted at (0 = every frame). A row's 0 means
@@ -730,9 +733,25 @@ public:
     static std::vector<ImageSize> image_sizes(const std::string& dir,
                                               const std::string& skip = "");
 
+    // One folder's masks, as one stream of a parallel run (MaskWorker.h).
+    bool mask_one(const PrepJob& job, const PrepInput& in, const std::string& images,
+                  const std::string& masks, const std::string& feature_masks, bool train,
+                  bool& folded, std::string& error);
+
 private:
     void log(const std::string& s, bool detail = true);
     void enter(Stage s, const std::string& text);
+
+    struct WorkerFolder {
+        size_t input = 0;
+        std::string images, masks, feature_masks;
+        bool train = true;
+        int64_t planned = 0;
+        bool folded = false;
+    };
+    // Every folder in `folders` masked by a child process, `streams` at a time.
+    bool mask_in_workers(const PrepJob& job, std::vector<WorkerFolder>& folders, int streams,
+                         std::string& error);
 
     // One input's frames into `images` (images/<subdir>).
     bool extract_video(const PrepJob& job, const PrepInput& in,

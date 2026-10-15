@@ -7,6 +7,7 @@
 #include "app/AppPaths.h"
 #include "core/Env.h"
 #include "app/CrashLog.h"
+#include "app/gui/MaskWorker.h"
 #include "app/gui/Automation.h"
 #include "app/gui/DesktopEntry.h"
 #include "app/gui/Fonts.h"
@@ -147,6 +148,10 @@ bool ui_busy() {
 }  // namespace
 
 int spirula_gui_main(int argc, char** argv) {
+    // A child the GUI started to mask one camera folder (MaskWorker.h): no
+    // window, no display.
+    if (argc >= 3 && std::string(argv[1]) == "--mask-worker")
+        return gui::mask_worker_main(argv[2]);
     for (int i = 1; i < argc; i++)
         if (argv[i] && (std::string(argv[i]) == "--help" || std::string(argv[i]) == "-h")) {
             std::printf("%s\n", spirula::i18n::format(spirula::i18n::msg::log::gui_usage,

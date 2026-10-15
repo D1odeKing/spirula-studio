@@ -14,7 +14,10 @@
 
 #include "app/gui/FrameSelect.h"
 #include "app/gui/HeifPhoto.h"
+#include "app/gui/MaskWorker.h"
+#include "i18n/Locale.h"
 #include "app/gui/Subprocess.h"
+#include "app/AppPaths.h"
 
 #include "core/ImageFile.h"
 #include "core/ImageOrient.h"
@@ -1491,6 +1494,7 @@ bool DatasetPrep::run(const PrepJob& job_in, PrepResult& out, std::string& error
     }
 
     if (segment) {
+        std::vector<WorkerFolder> folders;
         for (size_t i = 0; i < job.inputs.size(); i++) {
             // A re-done masking pass writes one mask per frame that exists
             // now; anything else in there described a frame set that no longer
@@ -1503,6 +1507,19 @@ bool DatasetPrep::run(const PrepJob& job_in, PrepResult& out, std::string& error
             // already has and are not segmented over; the feature prompt asks
             // another question, so it still runs.
             if (per[i].have_masks && !want_features) continue;
+            folders.push_back({i, per[i].images, per[i].masks, per[i].feature_masks,
+                               !per[i].have_masks, mask_planned[i]});
+        }
+        const int streams = backends().builtin_masking
+                                ? mask_stream_count(job.mask_streams, folders.size(), job.device)
+                                : 1;
+        if (streams > 1) {
+            if (!mask_in_workers(job, folders, streams, error)) return false;
+            for (const WorkerFolder& f : folders) per[f.input].stencil_folded = f.folded;
+            folders.clear();
+        }
+        for (const WorkerFolder& f : folders) {
+            const size_t i = f.input;
             if (!generate_masks(job, job.inputs[i], per[i].images, per[i].masks,
                                 per[i].feature_masks, !per[i].have_masks,
                                 per[i].stencil_folded, error))
@@ -3076,6 +3093,107 @@ bool DatasetPrep::apply_stencil(const PrepJob& job, const PrepInput& in,
         return false;
     }
     if (in_place && job.flip_found_masks) std::ofstream(marker.string());
+    return true;
+}
+
+bool DatasetPrep::mask_one(const PrepJob& job, const PrepInput& in, const std::string& images,
+                           const std::string& masks, const std::string& feature_masks,
+                           bool train, bool& folded, std::string& error) {
+    const int64_t n = count_images(images, masks);
+    _masks_tally.plan(n);
+    if (!generate_masks(job, in, images, masks, feature_masks, train, folded, error))
+        return false;
+    _masks_tally.settle(n, n);
+    return true;
+}
+
+bool DatasetPrep::mask_in_workers(const PrepJob& job, std::vector<WorkerFolder>& folders,
+                                  int streams, std::string& error) {
+    enter(Stage::Masks, lmsg::stage_masks_builtin.get());
+    log(fmt(lmsg::masks_parallel, {(long long)folders.size(), (long long)streams}), false);
+    const fs::path dir = fs::path(job.workspace) / ".progress" / "mask-workers";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+
+    std::mutex mu;
+    std::vector<int64_t> done(folders.size(), 0);
+    const int64_t base = _masks_tally.done;
+    size_t next = 0;
+    std::string first_error;
+    // One failure stops the rest, as the user's cancel does.
+    std::atomic<bool> stop{false};
+    std::atomic<bool> finished{false};
+    std::thread watch([&] {
+        while (!finished) {
+            if (_cancel.load()) stop = true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    });
+    auto worker = [&] {
+        for (;;) {
+            size_t k;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                if (next >= folders.size() || stop) return;
+                k = next++;
+            }
+            WorkerFolder& f = folders[k];
+            MaskTask t;
+            t.job = job;
+            t.input = job.inputs[f.input];
+            t.images = f.images;
+            t.masks = f.masks;
+            t.feature_masks = f.feature_masks;
+            t.train = f.train;
+            const fs::path file = dir / ("folder-" + std::to_string(k) + ".json");
+            std::ofstream(file, std::ios::binary | std::ios::trunc) << encode_mask_task(t);
+            const std::string name = fs::path(f.images).filename().string();
+            std::string last_error;
+            const std::vector<std::string> argv = {
+                app::exe_path(), "--lang", spirula::i18n::code(spirula::i18n::current()),
+                "gui", "--mask-worker", file.string()};
+            const int rc = run_process(argv, "", [&](const std::string& line) {
+                long long d = 0, tot = 0;
+                if (parse_worker_progress(line, d, tot)) {
+                    std::lock_guard<std::mutex> lk(mu);
+                    done[k] = d;
+                    int64_t sum = base;
+                    for (int64_t x : done) sum += x;
+                    _prog->count(Stage::Masks, sum, std::max(sum, _masks_tally.total));
+                } else if (line.rfind("@@log ", 0) == 0 && line.size() > 8) {
+                    log(name + ": " + line.substr(8), line[6] == '1');
+                } else if (line.rfind("@@error ", 0) == 0) {
+                    last_error = line.substr(8);
+                } else if (line == "@@folded 1") {
+                    f.folded = true;
+                }
+            }, stop);
+            fs::remove(file, ec);
+            if (rc != 0) {
+                std::lock_guard<std::mutex> lk(mu);
+                if (first_error.empty() && !_cancel.load())
+                    first_error = fmt(lmsg::mask_worker_failed,
+                                      {name, last_error.empty() ? "exit " + std::to_string(rc)
+                                                                : last_error});
+                stop = true;
+                return;
+            }
+        }
+    };
+    std::vector<std::thread> pool;
+    for (int s = 0; s < streams; s++) pool.emplace_back(worker);
+    for (std::thread& t : pool) t.join();
+    finished = true;
+    watch.join();
+    if (_cancel.load()) {
+        error = lmsg::err_cancelled.get();
+        return false;
+    }
+    if (!first_error.empty()) {
+        error = first_error;
+        return false;
+    }
+    for (const WorkerFolder& f : folders) _masks_tally.settle(f.planned, f.planned);
     return true;
 }
 

@@ -199,6 +199,10 @@ struct SfmJob {
     // a driver that resets under a long solve. SS_SFM_SUBPROCESS=1 starts a
     // session with it on.
     bool subprocess = sfm_subprocess_default();
+    // A dataset on a network volume is copied to a local disk, worked on there
+    // and copied back (Staging.h). `stage_dir` is that disk; "" is /data.
+    bool stage = true;
+    std::string stage_dir;
 
     // Canonical UUID passed to in-process and child runs; empty uses shared
     // precedence.
@@ -315,6 +319,11 @@ public:
 
 private:
     void run(SfmJob job);
+    // Staging (Staging.h): copy a dataset on a network volume to the local
+    // disk and point the job at it; copy back what the run changed. Both no-ops
+    // when nothing was staged. False with `error` set when the copy in failed.
+    bool stage_in(SfmJob& job, std::string& error);
+    void stage_out();
     // The three parts of update(), applied where the run reaches them.
     void take_reconstruction(SfmJob& job);
     void take_masking(PrepJob& prep);
@@ -356,6 +365,10 @@ private:
     // Absolute; what the screen polls while the run is going.
     std::string _progress_dir, _features_dir, _matches_path;
     std::string _sfm_image_dir, _sfm_mask_dir;
+    // The workspace a staged run belongs to, its local copy, and the files the
+    // copy was made with: only those may be deleted from the volume again.
+    std::string _stage_real, _stage_fast;
+    std::vector<std::string> _stage_files;
     // The workspace whose intermediates are still on disk, "" when there are
     // none to sweep (see sweep_intermediates).
     std::string _sweep_dir;

@@ -547,6 +547,13 @@ if(SS_BUILD_GUI)
         target_link_libraries(files_test PRIVATE ws2_32)
     endif()
 
+    # Copying a dataset to a local disk and back (src/app/gui/Staging.h).
+    add_executable(staging_test
+        ${SS_SRC}/app/gui/tests/staging_test.cpp
+        ${SS_SRC}/app/gui/Staging.cpp
+        ${SS_SRC}/app/gui/Storage.cpp)
+    ss_configure_app(staging_test)
+
     add_executable(recent_list_test
         ${SS_SRC}/app/gui/tests/recent_list_test.cpp
         ${SS_SRC}/app/gui/RecentList.cpp)
@@ -622,6 +629,8 @@ if(SS_BUILD_GUI)
     add_executable(dataset_prep_test
         ${SS_SRC}/app/gui/tests/dataset_prep_test.cpp
         ${SS_SRC}/app/gui/DatasetPrep.cpp
+        ${SS_SRC}/app/gui/MaskWorker.cpp
+        ${SS_SRC}/app/AppPaths.cpp
         ${SS_SRC}/app/gui/HeifPhoto.cpp
         ${SS_SRC}/app/gui/FrameSelect.cpp
         ${SS_SRC}/app/FrameSharpness.cpp
@@ -646,6 +655,8 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/DatasetPlan.cpp
         ${SS_SRC}/app/gui/DatasetRecord.cpp
         ${SS_SRC}/app/gui/DatasetPrep.cpp
+        ${SS_SRC}/app/gui/MaskWorker.cpp
+        ${SS_SRC}/app/AppPaths.cpp
         ${SS_SRC}/app/gui/HeifPhoto.cpp
         ${SS_SRC}/app/gui/FrameSelect.cpp
         ${SS_SRC}/app/FrameSharpness.cpp

@@ -23,6 +23,7 @@ the detail.
 | [notes/gui-editing-plan.md](notes/gui-editing-plan.md) | editing in the GUI: the selection seam every tool shares, transforms, mask editing, trajectories, and the order to build them in |
 | [notes/remote-gui.md](notes/remote-gui.md) | the whole GUI on a cloud GPU, shown in a browser over an SSH tunnel: `spirula gui --remote` |
 | [notes/file-browser.md](notes/file-browser.md) | the Files window: every mounted storage, a look inside each file, splats in the Spirula Viewer, upload and download |
+| [notes/staging.md](notes/staging.md) | a dataset on a network volume worked on as a local copy; camera folders masked in parallel |
 | [notes/gui-automation.md](notes/gui-automation.md) | driving the GUI from a script: the imgui item hooks, the loopback control surface, `tools/guictl.py` and the MCP server |
 | [notes/sfm-in-process-plan.md](notes/sfm-in-process-plan.md) | running SfM inside the GUI: the library seam, the input manifest, and what manual ties need |
 | [notes/](notes/) | design notes for individual subsystems |

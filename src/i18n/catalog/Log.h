@@ -4450,6 +4450,15 @@ SS_MSG(perf_log_report,
 
 // ---- spirula gui --remote (src/app/gui/RemoteDisplay.h) ----
 
+SS_MSG_EN(stage_not, "Not working on a local copy: {0}. Running on the volume.");
+SS_MSG_EN(stage_in, "The dataset is on a network volume ({0}); working on a copy in {1}");
+SS_MSG_EN(stage_copying_in, "Copying the dataset to the local disk");
+SS_MSG_EN(stage_in_done, "Files copied: {0} ({1}); already there: {2}");
+SS_MSG_EN(stage_copying_out, "Copying the results back to {0}");
+SS_MSG_EN(stage_out_done, "Files copied back: {0} ({1}); removed, as the run did: {2}");
+SS_MSG_EN(stage_out_failed, "Could not copy the results back: {0}. They are still in {1}.");
+SS_MSG_EN(masks_parallel, "Masking {0} camera folders, {1} at a time, each in its own process");
+SS_MSG_EN(mask_worker_failed, "Masking {0} failed: {1}");
 SS_MSG_EN(remote_gui_at, "Remote GUI: http://{0}:{1}/?token={2}");
 SS_MSG_EN(remote_gui_tunnel,
     "From another machine: ssh -N -L {0}:127.0.0.1:{0} -p <ssh port> root@<host>, "

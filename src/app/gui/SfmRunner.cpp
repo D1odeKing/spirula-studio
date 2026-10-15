@@ -13,6 +13,8 @@
 #include "i18n/catalog/Log.h"
 
 #include "app/AppPaths.h"
+#include "app/gui/Staging.h"
+#include "app/gui/Storage.h"
 #include "app/gui/Subprocess.h"
 #ifdef SS_TOOL_SFM
 // The stage tags the child prints and the manifest it reads; a build without the
@@ -871,6 +873,7 @@ std::vector<std::string> sfm_option_args(const std::map<std::string, std::string
 
 void SfmRunner::run(SfmJob job) {
     auto fail = [&](const std::string& why) {
+        stage_out();
         _prog.finish(_cancel.load() ? StageStatus::Skipped : StageStatus::Failed);
         std::lock_guard<std::mutex> lk(_mu);
         _error = why;
@@ -878,6 +881,10 @@ void SfmRunner::run(SfmJob job) {
     };
 
     try {
+        if (job.stage) {
+            std::string err;
+            if (!stage_in(job, err)) return fail(err);
+        }
         const fs::path ws = job.prep.workspace;
         std::error_code ec;
         fs::create_directories(ws, ec);
@@ -1198,10 +1205,121 @@ void SfmRunner::run(SfmJob job) {
             _mask_dir = prep.mask_dir_cfg;
             _mask_flipped = prep.mask_dir_flipped;
         }
+        stage_out();
         _state = State::Done;
     } catch (const std::exception& e) {
         fail(e.what());
     }
+}
+
+namespace {
+
+// What staging leaves where it is: the inputs a run reads (they may be inside
+// the workspace, and the record names them by path), and trained outputs.
+staging::SkipFn stage_skip(const std::string& ws, const std::vector<PrepInput>& inputs) {
+    std::vector<std::string> keep = {"outputs"};
+    std::error_code ec;
+    const fs::path root = fs::weakly_canonical(fs::u8path(ws), ec);
+    for (const PrepInput& in : inputs) {
+        const fs::path p = fs::weakly_canonical(fs::u8path(in.path), ec);
+        const std::string rel = p.lexically_relative(root).generic_u8string();
+        if (!rel.empty() && rel != "." && rel.rfind("..", 0) != 0) keep.push_back(rel);
+        if (!in.mask_dir.empty()) {
+            const std::string m = fs::weakly_canonical(fs::u8path(in.mask_dir), ec)
+                                      .lexically_relative(root).generic_u8string();
+            if (!m.empty() && m != "." && m.rfind("..", 0) != 0) keep.push_back(m);
+        }
+    }
+    return [keep](const std::string& rel) {
+        if (rel.size() > 11 && rel.compare(rel.size() - 11, 11, ".stage-part") == 0) return true;
+        for (const std::string& k : keep)
+            if (rel == k || (rel.size() > k.size() && rel.compare(0, k.size(), k) == 0 &&
+                             rel[k.size()] == '/'))
+                return true;
+        return false;
+    };
+}
+
+std::string remap(const std::string& p, const std::string& from, const std::string& to) {
+    if (from.empty() || p.compare(0, from.size(), from) != 0) return p;
+    if (p.size() > from.size() && p[from.size()] != '/') return p;
+    return to + p.substr(from.size());
+}
+
+}  // namespace
+
+bool SfmRunner::stage_in(SfmJob& job, std::string& error) {
+    _stage_real.clear();
+    _stage_fast.clear();
+    _stage_files.clear();
+    const std::string real = job.prep.workspace;
+    const std::string type = staging::fs_type_of(real);
+    if (!staging::is_network_fs(type)) return true;
+    const staging::SkipFn skip = stage_skip(real, job.prep.inputs);
+    std::string why;
+    const std::string root =
+        staging::pick_fast_root(job.stage_dir, staging::tree_size(real, skip), why);
+    if (root.empty()) {
+        log(fmt(lmsg::stage_not, {why}), false);
+        return true;
+    }
+    char tag[17];
+    std::snprintf(tag, sizeof tag, "%08llx",
+                  (unsigned long long)(std::hash<std::string>{}(real) & 0xffffffffull));
+    const std::string name = fs::u8path(real).filename().u8string();
+    const std::string fast = (fs::u8path(root) / fs::u8path(name + "-" + tag)).u8string();
+    log(fmt(lmsg::stage_in, {type, fast}), false);
+    _prog.enter(Stage::Frames, lmsg::stage_copying_in.get());
+    staging::CopyResult res;
+    auto progress = [&](const staging::Progress& p) {
+        _prog.count(Stage::Frames, (int64_t)p.files_done, (int64_t)p.files_total);
+    };
+    if (!staging::copy_tree(real, fast, 16, skip, nullptr, /*prune=*/true, progress, &_cancel,
+                            res, error)) {
+        if (_cancel.load()) error = lmsg::err_cancelled.get();
+        return false;
+    }
+    log(fmt(lmsg::stage_in_done, {(long long)res.copied, storage::format_size(res.bytes),
+                                  (long long)res.skipped}),
+        false);
+    _stage_real = real;
+    _stage_fast = fast;
+    _stage_files = std::move(res.files);
+    job.prep.workspace = fast;
+    return true;
+}
+
+void SfmRunner::stage_out() {
+    if (_stage_fast.empty()) return;
+    const std::string real = _stage_real, fast = _stage_fast;
+    _stage_fast.clear();
+    log(fmt(lmsg::stage_copying_out, {real}), false);
+    _prog.detail(Stage::Finishing, fmt(lmsg::stage_copying_out, {real}));
+    staging::rewrite_paths(fast, fast, real);
+    std::vector<PrepInput> inputs;
+    {
+        std::lock_guard<std::mutex> lk(_mu);
+        inputs = _live.prep.inputs;
+    }
+    staging::CopyResult res;
+    std::string error;
+    auto progress = [&](const staging::Progress& p) {
+        _prog.count(Stage::Finishing, (int64_t)p.files_done, (int64_t)p.files_total);
+    };
+    // Not cancellable: what the run made is only safe once it is back.
+    if (!staging::copy_tree(fast, real, 16, stage_skip(real, inputs), &_stage_files,
+                            /*prune=*/false, progress, nullptr, res, error)) {
+        log(fmt(lmsg::stage_out_failed, {error, fast}), false);
+        return;
+    }
+    log(fmt(lmsg::stage_out_done, {(long long)res.copied, storage::format_size(res.bytes),
+                                   (long long)res.removed}),
+        false);
+    std::lock_guard<std::mutex> lk(_mu);
+    for (std::string* p : {&_dataset_dir, &_image_dir, &_mask_dir, &_progress_dir,
+                           &_features_dir, &_matches_path, &_sfm_image_dir, &_sfm_mask_dir,
+                           &_sweep_dir})
+        *p = remap(*p, fast, real);
 }
 
 }  // namespace gui

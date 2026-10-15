@@ -59,6 +59,7 @@ namespace {
     X("mask_dilate_ratio",          mask.dilate_ratio)                        \
     X("mask_shrink_ratio",          mask.shrink_ratio)                        \
     X("mask_max_image_size",        mask.max_image_size)                      \
+    X("mask_streams",               mask.streams)                             \
     X("mask_threshold",             mask.threshold)                           \
     X("mask_nms",                   mask.nms)                                 \
     X("mask_box_threshold",         mask.box_threshold)                       \
@@ -114,6 +115,8 @@ namespace {
     X("sfm_keep_intermediate",      sfm.keep_intermediate)                    \
     X("sfm_ba_cpu",                 sfm.ba_cpu)                               \
     X("sfm_subprocess",             sfm.subprocess)                           \
+    X("sfm_stage",                  sfm.stage)                                \
+    X("sfm_stage_dir",              sfm.stage_dir)                            \
     X("sfm_options",                sfm.options)                              \
     X("sfm_extra_args",             sfm.extra_args)                           \
     /* ---- COLMAP ---- */                                                    \

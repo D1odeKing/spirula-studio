@@ -4955,6 +4955,12 @@ SS_MSG(mask_dilate_help,
        "olduğu için uzaktaki bir şey yakındakine göre orantılı olarak daha "
        "küçük pay alır. %0 sınırı modelin çizdiği gibi yazar."));
 
+SS_MSG_EN(mask_streams, "Folders at once");
+SS_MSG_EN(mask_streams_help,
+    "How many camera folders are masked at the same time, each in its own process on the "
+    "GPU (about 3 GB each). 0 picks it from the free GPU memory, up to 8; 1 masks them one "
+    "after another. Only NVIDIA GPUs report free memory, so elsewhere 0 means one at a time.");
+
 SS_MSG(mask_max_size,
     EN("Maximum image size"),
     JA("画像の最大サイズ"),
@@ -11768,6 +11774,20 @@ SS_MSG(sfm_subprocess,
     NL("Reconstructie in een apart proces"),
     RU("Реконструкция в отдельном процессе"),
     TR("Yeniden yapılandırmayı ayrı bir süreçte yap"));
+
+SS_MSG_EN(sfm_stage, "Work on a local copy when on a network volume");
+SS_MSG_EN(sfm_stage_help,
+    "A dataset on a network volume (a cloud pod's object storage, NFS, a Windows share) is "
+    "slow to read and write one file at a time. With this on, a run copies the dataset to "
+    "a local disk in 16 parallel streams, works there, and copies what changed back when it "
+    "ends -- also when it fails or is cancelled. The videos and photos it reads stay where "
+    "they are. Nothing happens for a dataset on a local disk.");
+SS_MSG_EN(sfm_stage_dir, "Local disk");
+SS_MSG_EN(sfm_stage_dir_hint, "/data");
+SS_MSG_EN(sfm_stage_dir_help,
+    "A folder on a local disk with room for the dataset and what the run adds to it. Empty "
+    "uses /data, a cloud pod's container disk. The copy stays there between runs, so the "
+    "next run copies only what changed.");
 
 SS_MSG(sfm_subprocess_help,
     EN("Run the reconstruction as a child of this program instead of inside "
