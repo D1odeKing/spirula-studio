@@ -5,6 +5,7 @@
 #include "app/gui/GlLoader.h"
 #include "app/gui/RemoteFiles.h"
 #include "app/gui/RemoteInput.h"
+#include "app/gui/Subprocess.h"
 #include "app/webviewer/HttpServer.h"
 #include "app_generated/remote_gui_html.h"   // kRemoteGuiHtml[] (CMake-embedded)
 #include "core/Env.h"
@@ -493,6 +494,8 @@ void start(const Options& opt, GLFWwindow* window) {
     s.stopping = false;
     s.encoder = std::thread(encode_loop);
     s.active = true;
+    // This machine has no screen: links go to the page, which shows them.
+    set_open_url_hook([](const std::string& url) { return remote::open_url(url); });
 
     const std::string shown = s.opt.host == "0.0.0.0" ? "127.0.0.1" : s.opt.host;
     std::printf("%s\n", spirula::i18n::format(spirula::i18n::msg::log::remote_gui_at,
@@ -594,6 +597,7 @@ uint64_t upload_count() {
 void shutdown() {
     State& s = st();
     if (!s.active) return;
+    set_open_url_hook(nullptr);
     {
         std::lock_guard<std::mutex> lk(s.mu);
         s.stopping = true;

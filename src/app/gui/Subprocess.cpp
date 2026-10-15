@@ -2,7 +2,6 @@
 
 #include "app/gui/Subprocess.h"
 
-#include "app/gui/RemoteDisplay.h"
 
 #include <cctype>
 
@@ -33,6 +32,27 @@
 namespace fs = std::filesystem;
 
 namespace gui {
+
+namespace {
+
+std::mutex g_url_hook_mu;
+std::function<bool(const std::string&)> g_url_hook;
+
+bool url_hook_takes(const std::string& url) {
+    std::function<bool(const std::string&)> hook;
+    {
+        std::lock_guard<std::mutex> lk(g_url_hook_mu);
+        hook = g_url_hook;
+    }
+    return hook && hook(url);
+}
+
+}  // namespace
+
+void set_open_url_hook(std::function<bool(const std::string&)> hook) {
+    std::lock_guard<std::mutex> lk(g_url_hook_mu);
+    g_url_hook = std::move(hook);
+}
 
 namespace {
 
@@ -375,8 +395,7 @@ bool command_exists(const std::string& exe) {
 }
 
 bool open_url(const std::string& url) {
-    // The page of a remote session shows the link; this machine has no screen.
-    if (remote::active()) return remote::open_url(url);
+    if (url_hook_takes(url)) return true;
     // Not ShellExecute: it lives in shell32, and this is the only call in the
     // program that would need it. `cmd /c start` reaches the same handler.
     // The empty "" is start's window-title argument -- without it, a quoted
@@ -682,8 +701,7 @@ bool command_exists(const std::string& exe) {
 }
 
 bool open_url(const std::string& url) {
-    // The page of a remote session shows the link; this machine has no screen.
-    if (remote::active()) return remote::open_url(url);
+    if (url_hook_takes(url)) return true;
 #ifdef __APPLE__
     const char* openers[] = {"open"};
 #else

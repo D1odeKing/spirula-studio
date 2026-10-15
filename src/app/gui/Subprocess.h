@@ -93,6 +93,10 @@ std::vector<std::string> command_argv(const std::string& command,
 // waits for the browser to exit.
 bool open_url(const std::string& url);
 
+// Where open_url sends links instead, while set: the remote GUI's page
+// (RemoteDisplay.h). True when it took the link. Empty restores the desktop's.
+void set_open_url_hook(std::function<bool(const std::string&)> hook);
+
 // Starts `argv` on its own and returns at once: not waited for, not a child
 // this process has to reap, and it outlives this one.
 bool spawn_detached(const std::vector<std::string>& argv);
