@@ -422,6 +422,15 @@ bool ensure_display(std::string& error) {
     }
     const std::string display = ":" + std::to_string(n);
     const std::string screen = std::to_string(kScreenW) + "x" + std::to_string(kScreenH) + "x24";
+    // Mesa's swrast asks GLVND for EGL, which offers NVIDIA's whenever the container injects the
+    // driver; with no DRM device it aborts in drmFreeDevices and takes Xvfb down. Inherited by both.
+    for (const char* mesa : {"/usr/share/glvnd/egl_vendor.d/50_mesa.json", "/etc/glvnd/egl_vendor.d/50_mesa.json"}) {
+        std::error_code ec;
+        if (fs::exists(mesa, ec)) {
+            setenv("__EGL_VENDOR_LIBRARY_FILENAMES", mesa, 0);
+            break;
+        }
+    }
     const pid_t pid = fork();
     if (pid < 0) {
         error = "cannot start Xvfb: fork failed";

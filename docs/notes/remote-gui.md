@@ -54,6 +54,12 @@ NVIDIA's GLX, but that only serves an NVIDIA X server. Against Xvfb, GLVND
 picks Mesa, which is what is wanted: the interface is cheap to draw on the
 CPU, and the GPU stays with training.
 
+EGL needs the same steer. Mesa's software renderer asks GLVND for EGL, which
+offers NVIDIA's first, and in a container without a DRM device that aborts
+Xvfb on startup (`munmap_chunk(): invalid pointer` in `drmFreeDevices`). So
+before starting its Xvfb, `--remote` sets `__EGL_VENDOR_LIBRARY_FILENAMES` to
+Mesa's vendor file unless it is already set.
+
 ## How it works
 
 `src/app/gui/RemoteDisplay.{h,cpp}`, `src/app/gui/RemoteInput.{h,cpp}`,
