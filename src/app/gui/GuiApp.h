@@ -14,6 +14,7 @@
 #include "app/gui/Fonts.h"
 #include "app/gui/ConfigUI.h"
 #include "app/gui/FileBrowser.h"
+#include "app/gui/LocalCopies.h"
 #include "app/gui/FileDialog.h"
 #include "app/gui/FeatureWatcher.h"
 #include "app/gui/FilmReel.h"
@@ -94,7 +95,7 @@ public:
     // playing back or being written -- so frames must keep coming.
     bool animating() const {
         return _compare.animating() || _mask_editor.animating() || _source_view.animating() ||
-               _files.animating();
+               _files.animating() || _local.copying() || _local.syncing();
     }
 
     // What a script needs to know that is not on screen as a widget: the
@@ -1063,6 +1064,21 @@ private:
     // row that picks which saved region a run uses.
     RoiEditor _roi_editor;
     FileBrowser _files;
+    // What is opened from a network volume opens from a local copy
+    // (LocalCopies.h). `_local_then` is the open that waits for the copy.
+    LocalCopies _local;
+    bool _local_on = true;
+    std::string _local_dir;
+    std::function<void(const std::vector<std::string>&)> _local_then;
+    std::vector<std::string> _local_asked;
+    double _local_synced_at = 0.0;
+    bool _local_sync_reported = true;
+    bool _local_in_place = false;   // the copy was given up: open the original
+    // True when `paths` must be copied first: `then` gets the copies' paths.
+    bool through_local(const std::vector<std::string>& paths,
+                       std::function<void(const std::vector<std::string>&)> then,
+                       bool skip_outputs = true);
+    void draw_local_copy();
     void draw_files();
     void open_roi_editor(const std::string& dataset, const std::string& file = "");
     void draw_roi_row(bool busy);

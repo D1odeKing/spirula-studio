@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,21 @@ bool copy_tree(const std::string& from, const std::string& to, int streams, cons
                const std::vector<std::string>* mirror_of, bool prune,
                const ProgressFn& progress, const std::atomic<bool>* cancel, CopyResult& out,
                std::string& error);
+
+// What a folder held, file by file, to tell later what changed in it without
+// asking the other side about every file.
+struct FileStamp {
+    uint64_t size = 0;
+    int64_t mtime = 0;   // milliseconds
+};
+using Snapshot = std::map<std::string, FileStamp>;
+Snapshot snapshot_of(const std::string& dir, const SkipFn& skip);
+
+// What changed in `from` since `snap` -- new, changed, deleted -- done to `to`,
+// and `snap` brought up to date. Only `from` is listed.
+bool sync_changes(const std::string& from, const std::string& to, Snapshot& snap, int streams,
+                  const SkipFn& skip, const ProgressFn& progress, CopyResult& out,
+                  std::string& error);
 
 // In each small text file under `dir` (.json .txt .yaml .yml .cfg .ini .csv),
 // `from` becomes `to`: records written in the staged copy name the real place.

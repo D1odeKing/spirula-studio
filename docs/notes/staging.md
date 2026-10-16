@@ -1,5 +1,38 @@
 # Working on a local copy, and masking folders in parallel
 
+## Opening anything from a network volume (`src/app/gui/LocalCopies.h`)
+
+Opening a large dataset straight off a pod's volume stalls the whole GUI --
+and with it the remote page -- while thousands of files are read one round
+trip at a time. So whatever is opened from a network volume is copied first,
+and opened from the copy:
+
+- **Every way in**: a drop, a command-line argument, the Files window's "Open
+  in Spirula Studio", a recent entry, and every file picker that opens or reads
+  something (datasets, photos, videos, models, scans, runs to resume). Pickers
+  that name somewhere to *write* are left alone.
+- **The mirror**: `/mnt/vol/a/b` is copied to `<disk>/spirula-local/mnt/vol/a/b`
+  (`<disk>` is `/data` unless `local_copies_dir` is set). A folder's top-level
+  `outputs/` stays on the volume until it is opened itself. 16 files at a time;
+  a file of 256 MB or more in 64 MB pieces, 8 at once.
+- **While it copies** a window shows the file and byte counts and the rate,
+  with **Cancel** and **Open on the volume instead**; the GUI keeps drawing. If
+  the disk has no room, or the copy fails, it opens on the volume and says so.
+- **Back to the volume**: every 30 seconds, from **File > Send local changes
+  back now**, and when the program quits, what is new, changed or deleted in
+  the mirror is done on the volume. Changes are found by listing the local
+  disk against the record of what the volume has (`.spirula-local-index`), so
+  the volume is not asked about every file. Only places under a folder that
+  was opened (and beside it) are written back.
+- **Remembered as the real thing**: recent entries and picker folders name the
+  volume path, not the copy.
+- **File > Work on local copies of network files** turns it off.
+
+Checked on an sshfs mount: opening a 400-photo folder copied 400 files
+(104 MB) and opened the dataset screen on the copy; a file written into the
+dataset folder beside it was on the volume 30 seconds later.
+
+
 Two things a dataset run on a cloud GPU needs that a desktop does not, taken
 from what `cloud_commands.py` scripts by hand on RunPod.
 

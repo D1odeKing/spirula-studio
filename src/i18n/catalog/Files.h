@@ -84,6 +84,26 @@ SS_MSG_EN(copying, "Copying {0}...");
 SS_MSG_EN(copy_done, "Copied {0} ({1}).");
 SS_MSG_EN(copy_failed, "Copy failed: {0}");
 
+SS_MSG_EN(local_copy_title, "Copying to the local disk");
+SS_MSG_EN(local_copy_item, "{0} -- {1} of {2}");
+SS_MSG_EN(local_copy_progress, "Files: {0} of {1}  |  {2} of {3}  |  {4}/s");
+SS_MSG_EN(local_copy_listing, "Listing the files on the volume...");
+SS_MSG_EN(local_copy_why,
+    "It is on a network volume, where every file is a round trip. It opens from a copy on "
+    "the local disk; what changes there is sent back on its own.");
+SS_MSG_EN(local_copy_in_place, "Open on the volume instead");
+SS_MSG_EN(local_copy_failed, "Could not copy it to the local disk: {0}. Opening it on the volume.");
+SS_MSG_EN(local_copy_done, "Copied to the local disk: files {0} ({1}); already there: {2}");
+SS_MSG_EN(menu_local_copies, "Work on local copies of network files");
+SS_MSG_EN(menu_local_copies_help,
+    "Anything opened from a network volume (a cloud pod's storage, NFS, a Windows share) is "
+    "first copied to the local disk, 16 files at a time and big files in parallel pieces, "
+    "and opened from there. What is written there -- datasets, runs, edits -- goes back to "
+    "the volume every 30 seconds, and when the program quits.");
+SS_MSG_EN(menu_local_sync_now, "Send local changes back now");
+SS_MSG_EN(local_sync_done, "Sent back to the volume: files {0} ({1}); deleted: {2}");
+SS_MSG_EN(local_sync_failed, "Could not send local changes back to the volume: {0}");
+
 SS_MSG_EN(new_folder, "New folder");
 SS_MSG_EN(new_folder_name, "Name");
 SS_MSG_EN(create, "Create");

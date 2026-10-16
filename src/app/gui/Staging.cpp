@@ -14,6 +14,11 @@
 #include <sstream>
 #include <thread>
 
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace gui {
@@ -47,7 +52,13 @@ std::string resolved(const std::string& path) {
 struct Item {
     std::string rel;
     uint64_t size = 0;
+    int64_t mtime = 0;
 };
+
+int64_t stamp_of(const fs::file_time_type& t) {
+    return (int64_t)std::chrono::duration_cast<std::chrono::milliseconds>(t.time_since_epoch())
+        .count();
+}
 
 void list(const fs::path& root, const SkipFn& skip, std::vector<Item>& out) {
     std::error_code ec;
@@ -62,7 +73,7 @@ void list(const fs::path& root, const SkipFn& skip, std::vector<Item>& out) {
             continue;
         }
         if (!it->is_regular_file(ec)) continue;
-        out.push_back({rel, (uint64_t)it->file_size(ec)});
+        out.push_back({rel, (uint64_t)it->file_size(ec), stamp_of(it->last_write_time(ec))});
     }
 }
 
@@ -146,6 +157,126 @@ std::string pick_fast_root(const std::string& preferred, uint64_t need, std::str
     return root;
 }
 
+namespace {
+
+// One big file read by one stream crawls on object storage; several byte
+// ranges of it at once do not.
+constexpr uint64_t kBigFile = 256ull << 20, kChunk = 64ull << 20;
+
+bool copy_ranges(const fs::path& a, const fs::path& b, uint64_t size, std::string& err) {
+#ifdef _WIN32
+    std::error_code e;
+    fs::copy_file(a, b, fs::copy_options::overwrite_existing, e);
+    if (e) err = e.message();
+    return !e;
+#else
+    const int in = ::open(a.c_str(), O_RDONLY);
+    const int out = ::open(b.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    bool ok = in >= 0 && out >= 0 && ::ftruncate(out, (off_t)size) == 0;
+    std::atomic<uint64_t> next{0};
+    std::atomic<bool> failed{!ok};
+    auto work = [&] {
+        std::vector<char> buf(8u << 20);
+        for (uint64_t c; !failed && (c = next++ * kChunk) < size;) {
+            for (uint64_t at = c, end = std::min(size, c + kChunk); at < end && !failed;) {
+                const ssize_t n = ::pread(in, buf.data(), (size_t)std::min<uint64_t>(buf.size(), end - at), (off_t)at);
+                if (n <= 0 || ::pwrite(out, buf.data(), (size_t)n, (off_t)at) != n) failed = true;
+                at += n > 0 ? (uint64_t)n : 0;
+            }
+        }
+    };
+    if (ok) {
+        std::vector<std::thread> pool;
+        for (int t = 0; t < 8; t++) pool.emplace_back(work);
+        for (std::thread& t : pool) t.join();
+    }
+    if (in >= 0) ::close(in);
+    if (out >= 0 && ::close(out) != 0) failed = true;
+    if (failed) err = "read or write failed";
+    return !failed;
+#endif
+}
+
+// Beside the target, then renamed: an interrupted copy never leaves a file
+// that passes the size check. The source's time goes with it.
+bool copy_one(const fs::path& a, const fs::path& b, uint64_t size, std::string& err) {
+    std::error_code e;
+    fs::create_directories(b.parent_path(), e);
+    const fs::path part = b.u8string() + ".stage-part";
+    bool ok;
+    if (size >= kBigFile) {
+        ok = copy_ranges(a, part, size, err);
+    } else {
+        fs::copy_file(a, part, fs::copy_options::overwrite_existing, e);
+        ok = !e;
+        if (e) err = e.message();
+    }
+    if (ok) fs::rename(part, b, e);
+    if (!ok || e) {
+        if (ok) err = e.message();
+        fs::remove(part, e);
+        return false;
+    }
+    fs::last_write_time(b, fs::last_write_time(a, e), e);
+    return true;
+}
+
+// `items` from `src` to `dst`, `streams` at a time; with `check`, an item
+// already there unchanged is skipped. Indices of the ones copied in `done`.
+bool copy_items(const fs::path& src, const fs::path& dst, const std::vector<Item>& items,
+                bool check, int streams, const ProgressFn& progress,
+                const std::atomic<bool>* cancel, CopyResult& out, std::vector<char>& done,
+                std::string& error) {
+    Progress pr;
+    pr.files_total = items.size();
+    for (const Item& i : items) pr.bytes_total += i.size;
+    done.assign(items.size(), 0);
+    std::mutex mu;
+    size_t next = 0;
+    std::string first_error;
+    auto worker = [&] {
+        for (;;) {
+            size_t k;
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                if (next >= items.size() || !first_error.empty()) return;
+                if (cancel && cancel->load()) return;
+                k = next++;
+            }
+            const Item& it = items[k];
+            const fs::path a = src / fs::u8path(it.rel), b = dst / fs::u8path(it.rel);
+            bool copied = false;
+            std::string err;
+            if (!check || !same(a, b)) {
+                copied = copy_one(a, b, it.size, err);
+                if (!copied) err = it.rel + ": " + err;
+            }
+            std::lock_guard<std::mutex> lk(mu);
+            if (!err.empty() && first_error.empty()) first_error = err;
+            if (copied) done[k] = 1;
+            (copied ? out.copied : out.skipped)++;
+            if (copied) out.bytes += it.size;
+            pr.files_done++;
+            pr.bytes_done += it.size;
+            if (progress) progress(pr);
+        }
+    };
+    std::vector<std::thread> pool;
+    for (int t = 0; t < std::max(1, streams); t++) pool.emplace_back(worker);
+    for (std::thread& t : pool) t.join();
+    if (!first_error.empty()) {
+        error = first_error;
+        return false;
+    }
+    if (cancel && cancel->load()) {
+        error = "cancelled";
+        return false;
+    }
+    return true;
+}
+
+}  // namespace
+
 bool copy_tree(const std::string& from, const std::string& to, int streams, const SkipFn& skip,
                const std::vector<std::string>* mirror_of, bool prune,
                const ProgressFn& progress, const std::atomic<bool>* cancel, CopyResult& out,
@@ -160,63 +291,9 @@ bool copy_tree(const std::string& from, const std::string& to, int streams, cons
     }
     std::vector<Item> items;
     list(src, skip, items);
-    Progress pr;
-    pr.files_total = items.size();
-    for (const Item& i : items) pr.bytes_total += i.size;
-
-    std::mutex mu;
-    size_t next = 0;
-    std::string first_error;
-    auto report = [&] { if (progress) progress(pr); };
-    auto worker = [&] {
-        for (;;) {
-            size_t k;
-            {
-                std::lock_guard<std::mutex> lk(mu);
-                if (next >= items.size() || !first_error.empty()) return;
-                if (cancel && cancel->load()) return;
-                k = next++;
-            }
-            const Item& it = items[k];
-            const fs::path a = src / fs::u8path(it.rel), b = dst / fs::u8path(it.rel);
-            bool copied = false;
-            std::string err;
-            if (!same(a, b)) {
-                std::error_code e;
-                fs::create_directories(b.parent_path(), e);
-                // Beside the target, then renamed: an interrupted copy never
-                // leaves a file that passes the size check.
-                const fs::path part = b.u8string() + ".stage-part";
-                fs::copy_file(a, part, fs::copy_options::overwrite_existing, e);
-                if (!e) fs::rename(part, b, e);
-                if (e) {
-                    fs::remove(part, e);
-                    err = it.rel + ": " + e.message();
-                } else {
-                    fs::last_write_time(b, fs::last_write_time(a, e), e);
-                    copied = true;
-                }
-            }
-            std::lock_guard<std::mutex> lk(mu);
-            if (!err.empty() && first_error.empty()) first_error = err;
-            (copied ? out.copied : out.skipped)++;
-            if (copied) out.bytes += it.size;
-            pr.files_done++;
-            pr.bytes_done += it.size;
-            report();
-        }
-    };
-    std::vector<std::thread> pool;
-    for (int t = 0; t < std::max(1, streams); t++) pool.emplace_back(worker);
-    for (std::thread& t : pool) t.join();
-    if (!first_error.empty()) {
-        error = first_error;
+    std::vector<char> done;
+    if (!copy_items(src, dst, items, true, streams, progress, cancel, out, done, error))
         return false;
-    }
-    if (cancel && cancel->load()) {
-        error = "cancelled";
-        return false;
-    }
     for (const Item& i : items) out.files.push_back(i.rel);
     const std::set<std::string> now(out.files.begin(), out.files.end());
     if (mirror_of)
@@ -229,6 +306,48 @@ bool copy_tree(const std::string& from, const std::string& to, int streams, cons
         list(dst, skip, extra);
         for (const Item& i : extra)
             if (!now.count(i.rel) && fs::remove(dst / fs::u8path(i.rel), ec)) out.removed++;
+    }
+    return true;
+}
+
+Snapshot snapshot_of(const std::string& dir, const SkipFn& skip) {
+    std::vector<Item> items;
+    list(fs::u8path(dir), skip, items);
+    Snapshot s;
+    for (const Item& i : items) s[i.rel] = {i.size, i.mtime};
+    return s;
+}
+
+bool sync_changes(const std::string& from, const std::string& to, Snapshot& snap, int streams,
+                  const SkipFn& skip, const ProgressFn& progress, CopyResult& out,
+                  std::string& error) {
+    out = CopyResult{};
+    const fs::path src = fs::u8path(from), dst = fs::u8path(to);
+    std::vector<Item> now;
+    list(src, skip, now);
+    std::vector<Item> changed;
+    std::set<std::string> present;
+    for (const Item& i : now) {
+        present.insert(i.rel);
+        const auto it = snap.find(i.rel);
+        if (it == snap.end() || it->second.size != i.size || it->second.mtime != i.mtime)
+            changed.push_back(i);
+    }
+    std::vector<char> done;
+    const bool ok =
+        copy_items(src, dst, changed, false, streams, progress, nullptr, out, done, error);
+    for (size_t k = 0; k < changed.size(); k++)
+        if (done[k]) snap[changed[k].rel] = {changed[k].size, changed[k].mtime};
+    if (!ok) return false;
+    std::error_code ec;
+    for (auto it = snap.begin(); it != snap.end();) {
+        if (present.count(it->first)) {
+            ++it;
+            continue;
+        }
+        fs::remove(dst / fs::u8path(it->first), ec);
+        out.removed++;
+        it = snap.erase(it);
     }
     return true;
 }

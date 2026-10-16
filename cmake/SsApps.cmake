@@ -554,6 +554,15 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/Storage.cpp)
     ss_configure_app(staging_test)
 
+    # What is opened from a network volume, worked on as a local mirror
+    # (src/app/gui/LocalCopies.h).
+    add_executable(local_copies_test
+        ${SS_SRC}/app/gui/tests/local_copies_test.cpp
+        ${SS_SRC}/app/gui/LocalCopies.cpp
+        ${SS_SRC}/app/gui/Staging.cpp
+        ${SS_SRC}/app/gui/Storage.cpp)
+    ss_configure_app(local_copies_test)
+
     add_executable(recent_list_test
         ${SS_SRC}/app/gui/tests/recent_list_test.cpp
         ${SS_SRC}/app/gui/RecentList.cpp)

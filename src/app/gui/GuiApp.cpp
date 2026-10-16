@@ -26,6 +26,7 @@
 #include "app/DeviceIssue.h"
 #include "app/LogLuts.h"
 #include "app/gui/DatasetPrep.h"
+#include "app/gui/Storage.h"
 #include "app/gui/MaskPrompt.h"
 #include "app/gui/Subprocess.h"
 #include "app/gui/ViewBookmarks.h"
@@ -228,6 +229,7 @@ static ModelContent classify_recent_model(const std::string& path);
 GuiApp::GuiApp() {
     init_dense();
     load_settings();
+    _local.configure(_local_on, _local_dir);
     // Before the first frame, so an entry that is gone is never drawn.
     _recent.start_probe(classify_recent_model);
     _recent_probed_at = 0.0;
@@ -336,6 +338,11 @@ GuiApp::~GuiApp() = default;
 
 void GuiApp::shutdown() {
     save_settings();
+    // What was made on the local copies goes back before the program does.
+    _local.cancel();
+    while (_local.copying()) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    _local.take_result();
+    _local.sync(/*wait=*/true);
     save_batch_list(_batch);
     _batch_active = false;
     detach_session_views();
@@ -436,6 +443,8 @@ void GuiApp::load_settings() {
         else if (k == "edit_panel_w") _edit_panel_w = (float)atof(v.c_str());
         else if (k == "log_h") _log_h = (float)atof(v.c_str());
         else if (k == "show_log") _show_log = v != "0";
+        else if (k == "local_copies") _local_on = v != "0";
+        else if (k == "local_copies_dir") _local_dir = v;
         else if (k == "log_details") _log_details = v != "0";
         else if (k == "show_preview") _show_preview = v != "0";
         else if (k == "preview_h") _preview_h = (float)atof(v.c_str());
@@ -487,6 +496,8 @@ void GuiApp::save_settings() {
     std::fprintf(f, "edit_panel_w=%.1f\n", _edit_panel_w);
     std::fprintf(f, "log_h=%.1f\n", _log_h);
     std::fprintf(f, "show_log=%d\n", _show_log ? 1 : 0);
+    std::fprintf(f, "local_copies=%d\n", _local_on ? 1 : 0);
+    if (!_local_dir.empty()) std::fprintf(f, "local_copies_dir=%s\n", _local_dir.c_str());
     std::fprintf(f, "log_details=%d\n", _log_details ? 1 : 0);
     std::fprintf(f, "show_preview=%d\n", _show_preview ? 1 : 0);
     std::fprintf(f, "preview_h=%.1f\n", _preview_h);
@@ -508,6 +519,8 @@ void GuiApp::save_settings() {
 
 void GuiApp::remember(RecentKind kind, std::string path) {
     if (path.empty()) return;
+    // A local copy is remembered as what it is a copy of.
+    path = _local.real_for(path);
     // A run folder opened in the viewer is still that run, not a second entry.
     if (kind == RecentKind::Model && _recent.contains(RecentKind::Run, path))
         kind = RecentKind::Run;
@@ -1262,6 +1275,10 @@ void GuiApp::open_edited_dataset() {
 }
 
 void GuiApp::request_open_dataset(std::string dir) {
+    if (through_local({dir}, [this](const std::vector<std::string>& p) {
+            request_open_dataset(p[0]);
+        }))
+        return;
     const bool loading = _runner.phase() == TrainRunner::Phase::Loading;
     if (training_busy() || loading) {
         _pending = Pending::OpenDataset;
@@ -1349,6 +1366,10 @@ void GuiApp::add_splat(std::string path) {
 }
 
 void GuiApp::request_open_splat(std::string path) {
+    if (through_local({path}, [this](const std::vector<std::string>& p) {
+            request_open_splat(p[0]);
+        }))
+        return;
     if (training_busy()) {
         _pending = Pending::OpenSplat;
         _pending_path = std::move(path);
@@ -2222,6 +2243,91 @@ std::vector<std::string> GuiApp::raw_inputs(const std::vector<std::string>& path
 
 // The Files window (FileBrowser.h), over whatever screen is up. A video it
 // shows decodes on the device only when nothing else is using it.
+bool GuiApp::through_local(const std::vector<std::string>& paths,
+                           std::function<void(const std::vector<std::string>&)> then,
+                           bool skip_outputs) {
+    // One copy at a time; an open asked for meanwhile waits behind nothing
+    // and is dropped, as a second click on a busy screen is.
+    if (_local.copying()) return true;
+    if (!_local.wants_any(paths)) return false;
+    _local_then = std::move(then);
+    _local_asked = paths;
+    _local_in_place = false;
+    _local.start(paths, skip_outputs);
+    return true;
+}
+
+// The copy that an open waits for, and the changes sent back while working.
+void GuiApp::draw_local_copy() {
+    namespace fmsg = spirula::i18n::msg::files;
+    if (std::optional<LocalCopies::Result> r = _local.take_result()) {
+        auto then = std::move(_local_then);
+        _local_then = nullptr;
+        std::vector<std::string> paths = _local_asked;
+        const bool cancelled = !r->ok && r->error == "cancelled";
+        if (r->ok) {
+            paths = r->paths;
+            log(i18n::format(fmsg::local_copy_done,
+                             {(long long)r->copied, storage::format_size(r->bytes),
+                              (long long)r->skipped}));
+        } else if (!cancelled) {
+            log(i18n::format(fmsg::local_copy_failed, {r->error}));
+        }
+        if (then && (!cancelled || _local_in_place)) then(paths);
+        _local_in_place = false;
+    }
+    const double now = ImGui::GetTime();
+    if (!_local.copying() && !_local.syncing() && now - _local_synced_at > 30.0 &&
+        _local.has_copies()) {
+        _local.sync();
+        _local_synced_at = now;
+        _local_sync_reported = false;
+    }
+    if (!_local_sync_reported && !_local.syncing()) {
+        _local_sync_reported = true;
+        const LocalCopies::SyncReport s = _local.last_sync();
+        if (!s.error.empty())
+            log(i18n::format(fmsg::local_sync_failed, {s.error}));
+        else if (s.copied || s.removed)
+            log(i18n::format(fmsg::local_sync_done, {(long long)s.copied,
+                                                     storage::format_size(s.bytes),
+                                                     (long long)s.removed}));
+    }
+    if (!_local.copying()) return;
+
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x * 0.5f,
+                                   vp->WorkPos.y + vp->WorkSize.y * 0.4f),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(px(520.0f), 0.0f));
+    ImGui::Begin(ui::detail::label(fmsg::local_copy_title), nullptr,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoSavedSettings);
+    const LocalCopies::Status st = _local.status();
+    ui::Text(fmsg::local_copy_item, {st.name, (long long)st.item, (long long)st.items});
+    ui::TextDisabled(fmsg::local_copy_why);
+    const staging::Progress& p = st.progress;
+    if (p.files_total == 0) {
+        ui::Text(fmsg::local_copy_listing);
+    } else {
+        const float frac = p.bytes_total ? (float)((double)p.bytes_done / (double)p.bytes_total)
+                                         : (float)p.files_done / (float)p.files_total;
+        ui::ProgressBarRaw(frac, ImVec2(-1.0f, 0.0f), nullptr);
+        const double rate = st.seconds > 0.5 ? (double)p.bytes_done / st.seconds : 0.0;
+        ui::Text(fmsg::local_copy_progress,
+                 {(long long)p.files_done, (long long)p.files_total,
+                  storage::format_size(p.bytes_done), storage::format_size(p.bytes_total),
+                  storage::format_size((uint64_t)rate)});
+    }
+    if (ui::Button(fmsg::cancel)) _local.cancel();
+    ImGui::SameLine();
+    if (ui::Button(fmsg::local_copy_in_place)) {
+        _local_in_place = true;
+        _local.cancel();
+    }
+    ImGui::End();
+}
+
 void GuiApp::draw_files() {
     if (!_files.is_open()) {
         FileBrowser::Host none;
@@ -2240,6 +2346,8 @@ void GuiApp::draw_files() {
 }
 
 void GuiApp::handle_drop(const std::vector<std::string>& paths) {
+    if (through_local(paths, [this](const std::vector<std::string>& p) { handle_drop(p); }))
+        return;
     std::error_code ec;
     // A laser scan is an input of the dataset screen wherever it lands, and so
     // is a point-cloud PLY there or dropped with photos, videos or scans; a
@@ -2877,7 +2985,7 @@ const char* GuiApp::dir_key(PickAction a, FileDialog::Mode m) {
 
 void GuiApp::remember_dir(const std::string& key, const std::string& path) {
     if (key.empty() || path.empty()) return;
-    std::string dir = fs::path(path).parent_path().string();
+    std::string dir = fs::path(_local.real_for(path)).parent_path().string();
     if (!dir.empty()) _dialog_dirs[key] = dir;
 }
 
@@ -2900,6 +3008,31 @@ void GuiApp::open_pick(PickAction a, const std::string& title,
 }
 
 void GuiApp::handle_dialog_result(const std::vector<std::string>& paths) {
+    // What a pick opens or reads is read from a local copy; what it names to
+    // write to, or a small preset, is used where it is.
+    switch (_pick) {
+        case PickAction::OpenDataset: case PickAction::SourceImages:
+        case PickAction::SourceVideo: case PickAction::SourceDataset:
+        case PickAction::SourceReplace: case PickAction::SplatFile:
+        case PickAction::AddSplatFile: case PickAction::SplatFolder:
+        case PickAction::RenderAddModel: case PickAction::MeshSource:
+        case PickAction::MeshPhotos: case PickAction::LidarSource:
+        case PickAction::SeedPointcloud: case PickAction::BatchDataset:
+        case PickAction::BatchSourceImages: case PickAction::BatchSourceVideo:
+        case PickAction::BatchModel: case PickAction::ResumeRun:
+        case PickAction::RenderProjectOpen: {
+            const PickAction a = _pick;
+            const std::string key = _pick_key;
+            if (through_local(paths, [this, a, key](const std::vector<std::string>& p) {
+                    _pick = a;
+                    _pick_key = key;
+                    handle_dialog_result(p);
+                }))
+                return;
+            break;
+        }
+        default: break;
+    }
     const std::string path = paths.empty() ? std::string() : paths[0];
     remember_dir(_pick_key, path);
     switch (_pick) {
@@ -3379,6 +3512,7 @@ void GuiApp::frame() {
     }
     if (_roi_editor.is_open()) _roi_editor.draw();
     draw_files();
+    draw_local_copy();
 
     // A job cancelled by the editor's close finishes its stage off this thread.
     _mask_editor.sam_poll_retiring();
@@ -3539,6 +3673,17 @@ void GuiApp::draw_menu_bar() {
         }
         if (ui::MenuItem(spirula::i18n::msg::files::menu_browse)) _files.open();
         ui::help_on_hover(spirula::i18n::msg::files::menu_browse_help);
+        if (ui::MenuItem(spirula::i18n::msg::files::menu_local_copies, nullptr, &_local_on)) {
+            _local.configure(_local_on, _local_dir);
+            save_settings();
+        }
+        ui::help_on_hover(spirula::i18n::msg::files::menu_local_copies_help);
+        if (_local.has_copies() &&
+            ui::MenuItem(spirula::i18n::msg::files::menu_local_sync_now) && !_local.syncing()) {
+            _local.sync();
+            _local_synced_at = ImGui::GetTime();
+            _local_sync_reported = false;
+        }
         ImGui::Separator();
         if (ui::MenuItem(msg::menu_batch) && !native_work_busy())
             _screen = Screen::Batch;
@@ -4009,6 +4154,10 @@ void GuiApp::open_recent(RecentItem it) {
 }
 
 void GuiApp::open_reconstruction(const std::string& workspace) {
+    if (through_local({workspace}, [this](const std::vector<std::string>& p) {
+            open_reconstruction(p[0]);
+        }))
+        return;
     if (recent_blocked({RecentKind::Reconstruction, workspace})) return;
     if (dataset_busy()) {
         _screen = Screen::NewDataset;
