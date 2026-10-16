@@ -28,7 +28,7 @@ nohup python3 -m jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 
     --IdentityProvider.token="$JUPYTER_TOKEN" --ServerApp.allow_origin='*' \
     --ServerApp.root_dir=/ --FileContentsManager.preferred_dir=workspace \
     --FileCheckpoints.checkpoint_dir=/root/.jupyter_checkpoints \
-    --FileContentsManager.delete_to_trash=False > /root/jupyter.log 2>&1 &
+    --ContentsManager.allow_hidden=True --FileContentsManager.delete_to_trash=False > /root/jupyter.log 2>&1 &
 
 {
     echo "== $(date)"
