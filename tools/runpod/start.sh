@@ -17,13 +17,18 @@ fi
 # Accepted by the owner; the record lives in ~/.config, which a restart wipes.
 spirula --accept-license sam3=yes --accept-license sam2=yes --accept-license gdino=yes --help >/dev/null 2>&1 || true
 
-# JupyterLab when RunPod sets JUPYTER_PASSWORD (template startJupyter): on 8888 for its HTTP
-# proxy (Connect -> Jupyter), behind that password as the token.
-if [ -n "${JUPYTER_PASSWORD:-}" ]; then
-    nohup python3 -m jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 \
-        --ServerApp.token="$JUPYTER_PASSWORD" --ServerApp.allow_origin='*' \
-        --ServerApp.root_dir=/workspace --FileContentsManager.delete_to_trash=False > /root/jupyter.log 2>&1 &
-fi
+# JupyterLab on 8888 for RunPod's HTTP proxy (Connect -> Jupyter), rooted at / so the pod's
+# own disk (/root) is reachable as well as /workspace. The token is JUPYTER_PASSWORD when the
+# template sets one, else a random one; the address is in /root/jupyter-url.txt. Checkpoints go
+# to one folder: beside a dataset's images a .ipynb_checkpoints copy becomes one more image.
+JUPYTER_TOKEN=${JUPYTER_PASSWORD:-$(openssl rand -hex 16)}
+echo "http://127.0.0.1:8888/lab?token=${JUPYTER_TOKEN}" > /root/jupyter-url.txt
+chmod 600 /root/jupyter-url.txt
+nohup python3 -m jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 \
+    --IdentityProvider.token="$JUPYTER_TOKEN" --ServerApp.allow_origin='*' \
+    --ServerApp.root_dir=/ --FileContentsManager.preferred_dir=workspace \
+    --FileCheckpoints.checkpoint_dir=/root/.jupyter_checkpoints \
+    --FileContentsManager.delete_to_trash=False > /root/jupyter.log 2>&1 &
 
 {
     echo "== $(date)"
