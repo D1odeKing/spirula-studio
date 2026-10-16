@@ -89,7 +89,7 @@ message in `i18n/catalog/Dense.h`, a round trip in
 | `src/app/gui/DenseRunner.cpp` | Launches the child and parses its translated progress lines. |
 | `src/app/gui/DenseMemoryView.h/.cpp` | Memory risk tag, RAM/VRAM bars and the projection card in the strip above the log. |
 | `src/data/CameraMath.h/.cpp` | Shared host camera models: every projection, inverse and Jacobian used here. |
-| `src/core/HostMemory.h` | Physical, available and per-process RAM. |
+| `src/core/HostMemory.h` | Physical, available and per-process RAM, capped by a memory cgroup (a container's limit). |
 | `src/i18n/catalog/Dense.h` | Every dense message and tooltip, in 13 languages. |
 | `src/roma/` | The native RoMa v2 matcher (`Session`, model, shaders). |
 | `tools/roma/*.py` | Hand-run reference comparisons. Never a build or runtime dependency. |
