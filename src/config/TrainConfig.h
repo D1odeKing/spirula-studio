@@ -221,6 +221,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(float, min_init_fraction, 0.0f, "detail", "basic", "")                 \
     X(float, growth_factor, 1.05f, "detail", "advanced", "")                 \
     X(float, min_opacity, 0.005f, "detail", "advanced", "")                  \
+    X(std::string, dead_criterion, "either", "detail", "advanced", "opacity|max_weight|either") \
     X(int, refine_every, 100, "detail", "advanced", "")                      \
     X(int, refine_start_iter, 500, "detail", "expert", "")                   \
     X(int, refine_stop_num_iter, 2500, "detail", "advanced", "")             \
@@ -230,7 +231,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, use_revised_densification, true, "detail", "expert", "")         \
     X(std::string, densify_score_mode, "mean", "detail", "basic", "mean|max|median|geom") \
     X(float, densify_score_blend_world_grad, 0.0f, "detail", "advanced", "") \
-    X(std::string, densify_loss_map_mode, "ssim_cs", "detail", "basic", "none|loss_full|ssim_full|ssim_cs|ssim_structure|edge_aware|robust_edge_aware|loss_full_nms|ssim_full_nms|ssim_cs_nms|ssim_structure_nms") \
+    X(std::string, densify_loss_map_mode, "auto", "detail", "basic", "auto|none|loss_full|ssim_full|ssim_cs|ssim_structure|s_cielab|flip|flip_feature|edge_aware|robust_edge_aware|loss_full_nms|ssim_full_nms|ssim_cs_nms|ssim_structure_nms|s_cielab_nms|flip_nms|flip_feature_nms") \
     X(float, densify_robust_edge_aware_quantile, 0.9f, "detail", "basic", "")\
     X(float, densify_nms_falloff, 0.5f, "detail", "advanced", "")            \
     X(bool, densify_loss_map_normalize, false, "detail", "advanced", "")     \
@@ -240,6 +241,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(float, densify_score_power, 0.4f, "detail", "advanced", "")            \
     X(float, densify_score_clip_quantile, 1.0f, "detail", "advanced", "")    \
     X(float, densify_final_score_power, 1.0f, "detail", "advanced", "")      \
+    X(bool, densify_learned_score, false, "detail", "advanced", "")          \
     X(float, densify_oversize_split_fraction, 0.15f, "detail", "advanced", "") \
     X(float, densify_oversize_score_blend, 1.0f, "detail", "advanced", "")   \
     X(bool, use_long_axis_split, true, "detail", "expert", "")               \
@@ -254,6 +256,7 @@ inline bool train_choices_free_form(const char* choices) {
                                                                              \
     /* ==== loss -- how the render is compared against the photo ==== */     \
     X(float, ssim_lambda, 0.2f, "loss", "basic", "")                         \
+    X(std::string, perceptual_loss, "ssim", "loss", "advanced", "ssim|s_cielab|flip") \
     X(float, l1_weight, 1.0f, "loss", "basic", "")                           \
     X(float, l2_weight, 0.0f, "loss", "basic", "")                           \
     X(float, l1_weight_y, 0.0f, "loss", "advanced", "")                      \
@@ -620,11 +623,18 @@ inline bool train_apply_preset(TrainConfig& c, const std::string& name) {
 // Call this once, in the front end, after the preset and the user's flags.
 inline void train_resolve_macros(TrainConfig& c,
                                  const std::set<std::string>& explicit_flags,
-                                 std::set<std::string>* written = nullptr) {
+                                 std::set<std::string>* written = nullptr,
+                                 // Pre-macro config, for a front end that
+                                 // resolves again after each edit (the GUI):
+                                 // a named macro first undoes an old level.
+                                 const TrainConfig* base = nullptr) {
     auto put = [&](const char* key, auto& field, auto value) {
         if (explicit_flags.count(key)) return;
         field = value;
         if (written) written->insert(key);
+    };
+    auto restore = [&](const char* macro, const char* key, auto m) {
+        if (base && explicit_flags.count(macro)) put(key, c.*m, base->*m);
     };
 
     // Splat budget and run length together: raising one without the other
@@ -647,6 +657,18 @@ inline void train_resolve_macros(TrainConfig& c,
 
     // Score the splat-placement error in a way that a person walking through
     // half the photos cannot dominate.
+    restore("distraction_robustness", "densify_loss_map_power",
+            &TrainConfig::densify_loss_map_power);
+    restore("distraction_robustness", "densify_score_power",
+            &TrainConfig::densify_score_power);
+    restore("distraction_robustness", "ssim_lambda",
+            &TrainConfig::ssim_lambda);
+    restore("distraction_robustness", "densify_loss_map_mode",
+            &TrainConfig::densify_loss_map_mode);
+    restore("distraction_robustness", "densify_robust_edge_aware_quantile",
+            &TrainConfig::densify_robust_edge_aware_quantile);
+    restore("distraction_robustness", "densify_score_mode",
+            &TrainConfig::densify_score_mode);
     if (c.distraction_robustness != "off") {
         put("densify_loss_map_power", c.densify_loss_map_power, 1.0f);
         put("densify_score_power", c.densify_score_power, 1.0f);
@@ -666,6 +688,16 @@ inline void train_resolve_macros(TrainConfig& c,
 
     // Make each pixel commit to one surface, and stop view-dependent colour
     // from papering over what is left.
+    restore("floater_suppression", "depth_distortion_reg",
+            &TrainConfig::depth_distortion_reg);
+    restore("floater_suppression", "rgb_distortion_reg",
+            &TrainConfig::rgb_distortion_reg);
+    restore("floater_suppression", "sh_reg",
+            &TrainConfig::sh_reg);
+    restore("floater_suppression", "max_screen_size",
+            &TrainConfig::max_screen_size);
+    restore("floater_suppression", "max_screen_size_clip_hardness",
+            &TrainConfig::max_screen_size_clip_hardness);
     if (c.floater_suppression != "off") {
         const bool strong = c.floater_suppression == "strong";
         put("depth_distortion_reg", c.depth_distortion_reg,

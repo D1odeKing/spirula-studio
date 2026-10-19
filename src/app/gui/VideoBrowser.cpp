@@ -255,7 +255,7 @@ long long VideoBrowser::index_at(double seconds) const {
 }
 
 int VideoBrowser::streams(bool stitched) const {
-    return stitched && _pano.valid() ? 1 : std::max(1, (int)_ui_facts.sizes.size());
+    return stitched && _pano.valid() ? 1 : std::max(1, (int)_ui_facts.pictures.size());
 }
 
 void VideoBrowser::set_playhead(double seconds) {
@@ -320,7 +320,9 @@ VideoBrowser::Decoded VideoBrowser::decode(const PreviewSource& base, const Want
         return Decoded::Failed;
     }
     const bool stitched = w.stitched && _pano.valid();
-    const int n = stitched ? 1 : std::max(1, s.tracks);
+    const int n = stitched                    ? 1
+                  : s.look.packed_lenses >= 2 ? s.look.packed_lenses
+                                              : std::max(1, s.tracks);
     out = Frame{};
     out.stitched = stitched;
     out.side = w.side;
@@ -368,8 +370,15 @@ VideoBrowser::Decoded VideoBrowser::decode(const PreviewSource& base, const Want
                                : std::max(0.0, ((double)w.index - 0.5) / fps);
     std::vector<int> folders((size_t)n);
     std::iota(folders.begin(), folders.end(), 0);
+    // ffmpeg scales the frame before the lenses are cut from it.
+    int side = stitched ? 0 : w.side;
+    if (side > 0 && !_facts.sizes.empty() && !_facts.pictures.empty()) {
+        const int frame_long = std::max(_facts.sizes[0].first, _facts.sizes[0].second);
+        const int pic_long = std::max(_facts.pictures[0].first, _facts.pictures[0].second);
+        if (pic_long > 0) side = (int)((long long)side * frame_long / pic_long);
+    }
     std::vector<PreviewPixels> px;
-    if (!load_ffmpeg_stills(s, at, folders, keyframe, stitched ? 0 : w.side, px, _cancel)) {
+    if (!load_ffmpeg_stills(s, at, folders, keyframe, side, px, _cancel)) {
         if (_cancel.load()) return Decoded::Aborted;
         error = dmsg::preview_frame_unreadable.get();
         return Decoded::Failed;
@@ -393,6 +402,12 @@ void VideoBrowser::work() {
     }
     VideoSummary f;
     probe_video_summary(src, f, _cancel);
+    f.pictures = f.sizes;
+    if (src.look.packed_lenses >= 2 && !f.sizes.empty()) {
+        int lw = 0, lh = 0;
+        app::packed_lens_size(f.sizes[0].first, f.sizes[0].second, src.look.packed_lenses, lw, lh);
+        f.pictures.assign((size_t)src.look.packed_lenses, std::make_pair(lw, lh));
+    }
     {
         std::lock_guard<std::mutex> lk(_mu);
         if (gen != _generation || _quit) return;
@@ -402,8 +417,8 @@ void VideoBrowser::work() {
     src.video_seconds = f.seconds;
     src.video_frames = f.frames;
     src.tracks = std::max(1, (int)f.sizes.size());
-    src.look.packed_lenses = 0;
-    const int src_long = f.sizes.empty() ? 0 : std::max(f.sizes[0].first, f.sizes[0].second);
+    const int src_long =
+        f.pictures.empty() ? 0 : std::max(f.pictures[0].first, f.pictures[0].second);
 
     // What one request decodes: the panorama for a 360 file, otherwise every
     // track scaled on the GPU to about what is shown.
@@ -589,6 +604,8 @@ VideoBrowser::Result VideoBrowser::draw(float height, double& clip_start, double
         ui::help_on_hover(pmsg::view_recorded_help);
     } else if (f.sizes.size() > 1) {
         ui::TextDisabled(pmsg::streams_side_by_side, {(long long)f.sizes.size()});
+    } else if (f.pictures.size() > 1) {
+        ui::TextDisabled(pmsg::lenses_side_by_side, {(long long)f.pictures.size()});
     }
     if (!_gate->allowed.load() && !_have_ffmpeg.load() && _src.builtin_decode) {
         ui::TextColoredWrapped(ImVec4(0.95f, 0.75f, 0.30f, 1.0f), pmsg::video_needs_gpu);
@@ -746,6 +763,8 @@ VideoBrowser::Result VideoBrowser::draw(float height, double& clip_start, double
                                              : (long long)std::llround(kept * f.fps);
     if (f.sizes.size() > 1 && !_pano.valid())
         ui::TextDisabled(pmsg::clip_frames_per_camera, {count_text(frames)});
+    else if (f.pictures.size() > 1 && !_pano.valid())
+        ui::TextDisabled(pmsg::clip_frames_per_lens, {count_text(frames)});
     else
         ui::TextDisabled(pmsg::clip_frames, {count_text(frames)});
     ui::help_on_hover(pmsg::clip_frames_help);
@@ -795,8 +814,9 @@ void VideoBrowser::draw_frame(const ImVec2& box) {
     for (int k = 0; k < n; k++) {
         if (tex[(size_t)k]) aspect[(size_t)k] = (float)tex[(size_t)k]->w / (float)tex[(size_t)k]->h;
         else if (stitched) aspect[(size_t)k] = 2.0f;
-        else if ((size_t)k < _ui_facts.sizes.size() && _ui_facts.sizes[(size_t)k].second > 0)
-            aspect[(size_t)k] = (float)_ui_facts.sizes[(size_t)k].first / (float)_ui_facts.sizes[(size_t)k].second;
+        else if ((size_t)k < _ui_facts.pictures.size() && _ui_facts.pictures[(size_t)k].second > 0)
+            aspect[(size_t)k] = (float)_ui_facts.pictures[(size_t)k].first /
+                                (float)_ui_facts.pictures[(size_t)k].second;
     }
     const float total = std::accumulate(aspect.begin(), aspect.end(), 0.0f);
     const float gap = px(4.0f);

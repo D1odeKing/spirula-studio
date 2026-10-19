@@ -2,10 +2,14 @@
 
 #include "app/Pano360.h"
 
+#include "core/KandaoBox.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <thread>
 
 namespace app {
@@ -439,23 +443,97 @@ int packed_lens_count(int width, int height, bool& exact) {
     exact = false;
     if (width <= 0 || height <= 0) return 1;
     const double r = (double)width / height;
+    // Stacked only at exactly 1:2: a portrait phone clip is nearer that than 1:1.
+    if (std::fabs(r * 2.0 - 1.0) <= 0.01) {
+        exact = true;
+        return 2;
+    }
     // Nearer in log ratio, so the two meet at sqrt(2).
     const int lenses = r >= std::sqrt(2.0) ? 2 : 1;
     exact = std::fabs(r / lenses - 1.0) <= 0.01;
     return lenses;
 }
 
+void packed_lens_size(int width, int height, int lenses, int& out_width,
+                      int& out_height) {
+    lenses = std::max(lenses, 1);
+    const bool stacked = height > width;
+    out_width = stacked ? width : width / lenses;
+    out_height = stacked ? height / lenses : height;
+}
+
 void packed_lens_crop(const uint8_t* px, int width, int height, int channels,
                       int lenses, int lens, std::vector<uint8_t>& out,
-                      int& out_width) {
+                      int& out_width, int& out_height) {
     lenses = std::max(lenses, 1);
-    out_width = width / lenses;
-    const size_t row = (size_t)out_width * channels;
-    out.resize(row * height);
-    const size_t x0 = (size_t)std::min(std::max(lens, 0), lenses - 1) * out_width;
-    for (int y = 0; y < height; y++)
+    lens = std::min(std::max(lens, 0), lenses - 1);
+    const bool stacked = height > width;
+    int w = 0, h = 0;
+    packed_lens_size(width, height, lenses, w, h);
+    const size_t x0 = stacked ? 0 : (size_t)lens * w;
+    const size_t y0 = stacked ? (size_t)lens * h : 0;
+    const size_t row = (size_t)w * channels;
+    out.resize(row * h);
+    for (int y = 0; y < h; y++)
         std::memcpy(out.data() + (size_t)y * row,
-                    px + ((size_t)y * width + x0) * channels, row);
+                    px + ((y0 + y) * width + x0) * channels, row);
+    out_width = w;
+    out_height = h;
+}
+
+namespace {
+
+// Kandao's `kfix` body (a few KB; `limit` keeps a damaged size field from
+// asking for the whole file), and whether the file has a `kvar` box.
+std::vector<uint8_t> kandao_kfix(const std::string& path, size_t limit, bool& kvar) {
+    std::ifstream f(path, std::ios::binary);
+    std::vector<uint8_t> kfix;
+    kvar = false;
+    uint8_t head[16];
+    for (uint64_t pos = 0; f.seekg((std::streamoff)pos) &&
+                           f.read((char*)head, 8);) {
+        uint64_t size = (uint64_t)head[0] << 24 | (uint64_t)head[1] << 16 |
+                        (uint64_t)head[2] << 8 | head[3];
+        uint64_t header = 8;
+        if (size == 1) {
+            if (!f.read((char*)head + 8, 8)) break;
+            size = 0;
+            for (int i = 8; i < 16; i++) size = size << 8 | head[i];
+            header = 16;
+        }
+        // 0 = the last box, running to the end of the file.
+        if (size != 0 && size < header) break;
+        if (std::memcmp(head + 4, "kvar", 4) == 0) kvar = true;
+        if (std::memcmp(head + 4, "kfix", 4) == 0 && kfix.empty()) {
+            kfix.resize(size ? (size_t)std::min<uint64_t>(size - header, limit) : limit);
+            f.read((char*)kfix.data(), (std::streamsize)kfix.size());
+            kfix.resize((size_t)f.gcount());
+            f.clear();
+        }
+        if (size == 0) break;
+        pos += size;
+    }
+    return kfix;
+}
+
+}  // namespace
+
+bool kandao_recording(const std::string& path) {
+    bool kvar = false;
+    return !kandao_kfix(path, 1 << 16, kvar).empty() || kvar;
+}
+
+bool kandao_unstitched(const std::string& path, int width, int height) {
+    bool kvar = false;
+    const std::vector<uint8_t> box = kandao_kfix(path, 1 << 16, kvar);
+    if (box.empty() && !kvar) return false;
+    const std::vector<kandao::Field> fix = kandao::fields(box.data(), box.size());
+    if (kandao::byte_value(fix, "STITCHED") == 1 || kandao::byte_value(fix, "STEREO") == 1)
+        return false;
+    bool exact = false;
+    if (packed_lens_count(width, height, exact) == 2 && height > width) return true;
+    const kandao::Field* lenses = kandao::find(fix, "LENS_INDEX");
+    return kandao::byte_value(fix, "STITCHED") == 0 || (lenses && lenses->size >= 2);
 }
 
 std::string pano360_graph(const Pano360Layout& l, const std::string& pre) {

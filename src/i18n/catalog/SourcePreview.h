@@ -472,6 +472,21 @@ SS_MSG(streams_side_by_side,
     RU("Видеопотоков: {0}, показаны рядом"),
     TR("Video akışı: {0}, yan yana gösteriliyor"));
 
+SS_MSG(lenses_side_by_side,
+    EN("Lenses in one picture: {0}, cut apart and shown side by side"),
+    JA("1 枚に収まったレンズ: {0}（切り分けて並べて表示）"),
+    ZH_HANS("同一画面中的镜头：{0}，切开后并排显示"),
+    ZH_HANT("同一畫面中的鏡頭：{0}，切開後並排顯示"),
+    KO("한 화면에 담긴 렌즈: {0}, 잘라서 나란히 표시"),
+    DE("Objektive in einem Bild: {0}, getrennt und nebeneinander gezeigt"),
+    FR("Objectifs dans une même image : {0}, découpés et affichés côte à côte"),
+    ES("Objetivos en una misma imagen: {0}, separados y mostrados uno junto a otro"),
+    PT("Lentes numa mesma imagem: {0}, separadas e mostradas lado a lado"),
+    IT("Obiettivi in un'unica immagine: {0}, separati e mostrati affiancati"),
+    NL("Lenzen in één beeld: {0}, losgesneden en naast elkaar getoond"),
+    RU("Объективов в одном кадре: {0}, разрезаны и показаны рядом"),
+    TR("Tek görüntüdeki mercek: {0}, ayrılıp yan yana gösteriliyor"));
+
 SS_MSG(frame_at,
     EN("Frame {0} · {1}"),
     JA("フレーム {0} · {1}"),
@@ -850,6 +865,21 @@ SS_MSG(clip_frames_per_camera,
     NL("Behouden beelden: ongeveer {0} per videospoor"),
     RU("Сохраняется кадров: около {0} на видеопоток"),
     TR("Tutulacak kare: akış başına yaklaşık {0}"));
+
+SS_MSG(clip_frames_per_lens,
+    EN("Frames kept: about {0} per lens"),
+    JA("残すフレーム: レンズごとに約 {0}"),
+    ZH_HANS("保留的帧：每个镜头约 {0}"),
+    ZH_HANT("保留的影格：每個鏡頭約 {0}"),
+    KO("남길 프레임: 렌즈마다 약 {0}"),
+    DE("Behaltene Bilder: etwa {0} je Objektiv"),
+    FR("Images conservées : environ {0} par objectif"),
+    ES("Fotogramas conservados: unos {0} por objetivo"),
+    PT("Quadros mantidos: cerca de {0} por lente"),
+    IT("Fotogrammi tenuti: circa {0} per obiettivo"),
+    NL("Behouden beelden: ongeveer {0} per lens"),
+    RU("Сохраняется кадров: около {0} на объектив"),
+    TR("Tutulacak kare: mercek başına yaklaşık {0}"));
 
 SS_MSG(clip_frames_help,
     EN("At the rate set for this video. With adaptive spacing this is the "
@@ -1554,6 +1584,58 @@ SS_MSG(gps_zero_help,
        "не учитываются ни здесь, ни в реконструкции."),
     TR("Konum bulamayan alıcı enlem 0, boylam 0 yazar. Bu konumlar burada da "
        "yeniden oluşturmada da dışarıda bırakılır."));
+
+SS_MSG(gps_no_fix,
+    EN("Not a fix (shown, not used): {0}"),
+    JA("測位ではない位置（表示のみ、未使用）: {0}"),
+    ZH_HANS("非定位（仅显示，不使用）：{0}"),
+    ZH_HANT("非定位（僅顯示，不使用）：{0}"),
+    KO("측위 아님(표시만, 사용 안 함): {0}"),
+    DE("Kein Fix (gezeigt, nicht verwendet): {0}"),
+    FR("Sans position fixée (affichées, non utilisées) : {0}"),
+    ES("Sin posición fija (mostradas, no usadas): {0}"),
+    PT("Sem posição fixa (mostradas, não usadas): {0}"),
+    IT("Senza fix (mostrate, non usate): {0}"),
+    NL("Geen fix (getoond, niet gebruikt): {0}"),
+    RU("Без фиксации (показано, не используется): {0}"),
+    TR("Konum kilidi yok (gösterilir, kullanılmaz): {0}"));
+
+SS_MSG(gps_no_fix_help,
+    EN("Positions the receiver itself did not mark as a fix, often the last "
+       "place it saw the sky. They are marked × in amber on the map, and the "
+       "reconstruction leaves them out."),
+    JA("受信機自身が測位として示さなかった位置です。多くは最後に空が見えた場所で"
+       "す。地図上に黄色の × で示し、再構成では使いません。"),
+    ZH_HANS("接收器自身未标记为定位的位置，通常是它最后一次看到天空的地方。在地图上用"
+            "黄色 × 标出，重建不会使用。"),
+    ZH_HANT("接收器本身未標記為定位的位置，通常是它最後一次看到天空的地方。在地圖上以"
+            "黃色 × 標出，重建不會使用。"),
+    KO("수신기가 스스로 측위로 표시하지 않은 위치로, 대개 마지막으로 하늘이 보인 "
+       "곳입니다. 지도에 노란색 ×로 표시하며 재구성에는 쓰지 않습니다."),
+    DE("Positionen, die der Empfänger selbst nicht als Fix markiert hat, oft "
+       "der Ort, an dem er zuletzt den Himmel sah. Auf der Karte gelb mit × "
+       "markiert; die Rekonstruktion lässt sie weg."),
+    FR("Positions que le récepteur lui-même n'a pas marquées comme fixées, "
+       "souvent le dernier endroit où il voyait le ciel. Marquées × en jaune "
+       "sur la carte ; la reconstruction les écarte."),
+    ES("Posiciones que el propio receptor no marcó como fijas, a menudo el "
+       "último lugar donde vio el cielo. Se marcan con × en amarillo en el "
+       "mapa y la reconstrucción las descarta."),
+    PT("Posições que o próprio receptor não marcou como fixas, muitas vezes o "
+       "último lugar onde viu o céu. Marcadas com × em amarelo no mapa; a "
+       "reconstrução deixa-as de fora."),
+    IT("Posizioni che il ricevitore stesso non ha segnato come fix, spesso "
+       "l'ultimo punto in cui vedeva il cielo. Segnate con × in giallo sulla "
+       "mappa; la ricostruzione le esclude."),
+    NL("Posities die de ontvanger zelf niet als fix markeerde, vaak de laatste "
+       "plek waar hij de hemel zag. Op de kaart geel gemarkeerd met ×; de "
+       "reconstructie laat ze weg."),
+    RU("Положения, которые сам приёмник не отметил как фиксацию, часто последнее "
+       "место, где он видел небо. На карте отмечены жёлтым ×, реконструкция их "
+       "не использует."),
+    TR("Alıcının kendisinin konum kilidi olarak işaretlemediği konumlar; çoğu "
+       "zaman gökyüzünü son gördüğü yer. Haritada sarı × ile işaretlidir ve "
+       "yeniden oluşturma bunları kullanmaz."));
 
 SS_MSG(map_fit,
     EN("Fit"),
@@ -2413,6 +2495,21 @@ SS_MSG(tip_outlier,
     NL("Als uitschieter weggelaten"),
     RU("Отброшено как выброс"),
     TR("Aykırı diye atıldı"));
+
+SS_MSG(tip_no_fix,
+    EN("Not a fix, by the receiver's own flag"),
+    JA("受信機自身のフラグでは測位ではない"),
+    ZH_HANS("按接收器自身的标志，并非定位"),
+    ZH_HANT("依接收器本身的旗標，並非定位"),
+    KO("수신기 자체 플래그로는 측위 아님"),
+    DE("Laut Empfänger selbst kein Fix"),
+    FR("Pas une position fixée, selon le récepteur lui-même"),
+    ES("Sin posición fija, según el propio receptor"),
+    PT("Sem posição fixa, segundo o próprio receptor"),
+    IT("Nessun fix, secondo il ricevitore stesso"),
+    NL("Geen fix, volgens de ontvanger zelf"),
+    RU("Не фиксация, по флагу самого приёмника"),
+    TR("Alıcının kendi işaretine göre konum kilidi yok"));
 
 SS_MSG(tip_far,
     EN("Far from the other photos"),

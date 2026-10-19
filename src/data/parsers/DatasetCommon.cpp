@@ -11,6 +11,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -681,6 +682,13 @@ void fit_camera_resolution(const DatasetParserConfig& cfg,
 void read_gauge(const std::string& dir, ParsedDataset& ds) {
     std::ifstream f(dir + "/gauge.txt");
     if (!f) return;
+    auto number = [](const std::string& v, double& out) {
+        char* end = nullptr;
+        out = std::strtod(v.c_str(), &end);
+        return end != v.c_str() && !*end;
+    };
+    spirula::GeoReference& geo = ds.gauge_geo;
+    bool lat = false, lon = false, alt = false;
     // Line at a time, so a comment with an odd number of words cannot shift
     // every key onto the wrong value.
     std::string line;
@@ -690,7 +698,13 @@ void read_gauge(const std::string& dir, ParsedDataset& ds) {
         if (!(in >> key >> value) || key[0] == '#') continue;
         if (key == "oriented") ds.gauge_oriented = value == "1";
         else if (key == "metric") ds.gauge_metric = value == "1";
+        else if (key == "origin_lat") lat = number(value, geo.lat_deg);
+        else if (key == "origin_lon") lon = number(value, geo.lon_deg);
+        else if (key == "origin_alt") alt = number(value, geo.alt_m);
+        else if (key == "alt_source") geo.alt_source = value;
     }
+    geo.ok = lat && lon;
+    if (!alt) geo.alt_source.clear();
 }
 
 }  // namespace dsparse

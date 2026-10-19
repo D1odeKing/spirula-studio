@@ -94,6 +94,9 @@ public:
     // Converts to host RGB. Blocks until the frame is ready.
     bool toImage(const FrameHandle& h, const ConvertOpts& opts, nn::Image& out,
                  std::string& error);
+    // The last toImage()'s pixels as they are still on the device, tightly
+    // packed RGB8 (a VkDeviceAddress); valid until the next call, 0 before one.
+    uint64_t rgbDevice() const;
     // Output geometry for `opts`, so a caller can size buffers up front.
     void outputSize(const ConvertOpts& opts, int& w, int& h) const;
 

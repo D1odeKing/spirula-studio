@@ -1519,6 +1519,8 @@ bool VideoPipeline::toImage(const FrameHandle& h, const ConvertOpts& opts, nn::I
     return true;
 }
 
+uint64_t VideoPipeline::rgbDevice() const { return impl_->rgb_buf; }
+
 const std::vector<TrackInfo>& VideoPipeline::tracks() const { return impl_->demux->tracks(); }
 const TrackInfo& VideoPipeline::track() const { return impl_->track_info; }
 const StreamFormat& VideoPipeline::format() const { return impl_->fmt; }

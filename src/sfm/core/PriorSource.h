@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "sfm/ba/Priors.h"
+#include "sfm/core/Geodetic.h"
 #include "sfm/core/Pose.h"
 
 namespace sfm {
@@ -45,6 +46,8 @@ public:
         (void)p;
         return false;
     }
+    // Where position()'s east-north-up frame is centred; !ok without one.
+    virtual GeoOrigin origin() const { return {}; }
     // Metres between a pose's centre and the image's position through a frame
     // a factors() call returned for THIS model: a source serves several
     // models, so it cannot hold the frame itself. False without either.
@@ -122,6 +125,7 @@ public:
     bool position(uint32_t img, Vec3& p) const override {
         return img < to_global_.size() && inner_.position(to_global_[img], p);
     }
+    GeoOrigin origin() const override { return inner_.origin(); }
     bool positionError(uint32_t img, const Pose& pose, const GpsFrame& f,
                        double& metres) const override {
         return img < to_global_.size() && inner_.positionError(to_global_[img], pose, f, metres);

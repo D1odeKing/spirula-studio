@@ -6,11 +6,14 @@
 
 #include "sfm/core/Telemetry.h"
 
+#include "core/KandaoBox.h"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -27,6 +30,18 @@ const char* telemetry_carrier_name(TelemetryCarrier c) {
         case TelemetryCarrier::Insta360: return "Insta360 trailer";
         case TelemetryCarrier::DjiDvtm:  return "DJI djmd track";
         case TelemetryCarrier::Camm:     return "CAMM track";
+        case TelemetryCarrier::Kandao:   return "Kandao kvar box";
+        default:                         return "none";
+    }
+}
+
+const char* telemetry_carrier_token(TelemetryCarrier c) {
+    switch (c) {
+        case TelemetryCarrier::Gpmf:     return "gpmf";
+        case TelemetryCarrier::Insta360: return "insta360";
+        case TelemetryCarrier::DjiDvtm:  return "dji";
+        case TelemetryCarrier::Camm:     return "camm";
+        case TelemetryCarrier::Kandao:   return "kandao";
         default:                         return "none";
     }
 }
@@ -197,6 +212,8 @@ struct Movie {
     // Where makers put their settings as text or KLV: udta, moov/meta, and a
     // top-level meta (Sony's XML). Copies, for video_log_profile.
     std::vector<uint8_t> udta, moov_meta, file_meta;
+    // Kandao's two top-level boxes, payload offset and size; 0 when absent.
+    uint64_t kfix_off = 0, kfix_size = 0, kvar_off = 0, kvar_size = 0;
     double durationSec() const { return timescale ? (double)duration / timescale : 0.0; }
     // 1904-01-01 to 1970-01-01.
     double unixStart() const { return creation_1904 ? (double)creation_1904 - 2082844800.0 : 0.0; }
@@ -348,6 +365,8 @@ bool read_movie(const Source& src, Movie& mv, bool& is_mp4, std::string& error) 
         if (type == fourcc("ftyp")) is_mp4 = true;
         if (type == fourcc("meta") && size - h < (4u << 20))
             src.readVec(off + h, (size_t)(size - h), mv.file_meta);
+        if (type == fourcc("kfix")) { mv.kfix_off = off + h; mv.kfix_size = size - h; }
+        if (type == fourcc("kvar")) { mv.kvar_off = off + h; mv.kvar_size = size - h; }
         if (type == fourcc("moov")) {
             if (size - h > (1ull << 30)) { error = "moov box over 1 GiB"; return false; }
             if (!src.readVec(off + h, (size_t)(size - h), moov)) { error = "truncated moov"; return false; }
@@ -1287,6 +1306,138 @@ bool read_insta360(const Source& own, const Movie* mv, Telemetry& out, std::stri
 }
 
 // ================
+// Kandao kfix / kvar (QooCam)
+// ================
+
+// Measured on QooCam 3 Ultras (docs/notes/imu-gps-for-sfm.md §2.4): 20-byte
+// IMU records at 0.8 to 1 kHz, stamped on the clock PTS stamps the frames with.
+bool read_kandao(const Source& src, const Movie& mv, Telemetry& out, std::string& error) {
+    if (mv.kvar_size > (1ull << 30)) { error = "kvar box over 1 GiB"; return false; }
+    std::vector<uint8_t> kvar, kfix;
+    if (!src.readVec(mv.kvar_off, (size_t)mv.kvar_size, kvar)) { error = "truncated kvar"; return false; }
+    if (mv.kfix_size > (1u << 20) || !src.readVec(mv.kfix_off, (size_t)mv.kfix_size, kfix)) kfix.clear();
+    const std::vector<kandao::Field> var = kandao::fields(kvar.data(), kvar.size());
+    const std::vector<kandao::Field> fix = kandao::fields(kfix.data(), kfix.size());
+
+    const kandao::Field* imu = kandao::find(var, "IMU");
+    const kandao::Field* info_f = kandao::find(var, "INFO");
+    const std::string info = info_f ? info_f->str() : std::string();
+    const double gyro_range = kandao::info_value(info, "V_G_RANGE");    // deg/s at int16 full scale
+    const double accel_range = kandao::info_value(info, "V_A_RANGE");   // g at int16 full scale
+    const double axes = kandao::info_value(info, "V_IMU_F");
+    const size_t item = 8 + 6 * 2;
+    const bool imu_ok = imu && imu->size >= item && gyro_range > 0 && accel_range > 0 && (axes < 0 || axes == 6);
+
+    // PTS_UNIT 1 is microseconds; 0 and 2 are ExifTool's reading of the field.
+    double tick = 1e-6;
+    if (const kandao::Field* u = kandao::find(var, "PTS_UNIT"); u && u->size >= 4)
+        tick = le32(u->data) == 0 ? 1e-3 : le32(u->data) == 2 ? 1e-9 : 1e-6;
+    const kandao::Field* pts = kandao::find(var, "PTS");
+    const bool have_pts = pts && pts->size >= 8;
+    const uint64_t first_frame = have_pts ? le64(pts->data) : imu_ok ? le64(imu->data) : 0;
+    // The first and last frame in seconds on that clock, which the logs' ms share.
+    const double first_s = (double)first_frame * tick;
+    const double last_s = have_pts ? (double)le64(pts->data + (pts->size / 8 - 1) * 8) * tick
+                                   : first_s + mv.durationSec();
+
+    size_t reordered = 0;
+    if (imu_ok) {
+        const size_t n = imu->size / item;
+        // Firmware 1.0.1 writes a record a few places late now and then (1554 of
+        // 377240 in one clip); in time order every step is 1.2 ms again.
+        std::vector<size_t> order(n);
+        for (size_t i = 0; i < n; i++) order[i] = i;
+        for (size_t i = 1; i < n; i++) reordered += le64(imu->data + i * item) < le64(imu->data + (i - 1) * item);
+        if (reordered)
+            std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return le64(imu->data + a * item) < le64(imu->data + b * item);
+            });
+        const double gyro_scale = gyro_range / 32768.0 * kPi / 180.0;
+        const double accel_scale = accel_range / 32768.0 * kG;
+        out.gyro.reserve(n);
+        out.accel.reserve(n);
+        for (size_t i : order) {
+            const uint8_t* p = imu->data + i * item;
+            const double t = (double)((int64_t)le64(p) - (int64_t)first_frame) * tick;
+            double v[6];
+            for (int k = 0; k < 6; k++) v[k] = (double)(int16_t)le16(p + 8 + 2 * k);
+            out.gyro.push_back({t, v[0] * gyro_scale, v[1] * gyro_scale, v[2] * gyro_scale});
+            out.accel.push_back({t, v[3] * accel_scale, v[4] * accel_scale, v[5] * accel_scale});
+        }
+    }
+
+    // ExifTool's three layouts (Kandao.pm): GPSX, 36 bytes with a UTC time in
+    // ms; GPS after a 0xffffffff mark, 28 with an altitude; GPS without, 20.
+    // Each opens with a u32 time in ms and repeats the last fix until the next.
+    const kandao::Field* gpsx = kandao::find(var, "GPSX");
+    const kandao::Field* glog = gpsx && gpsx->size >= 36 ? gpsx : kandao::find(var, "GPS");
+    size_t head = 0, rec = glog == gpsx ? 36 : 20;
+    if (glog && glog != gpsx && glog->size >= 4 && le32(glog->data) == 0xffffffffu) { head = 4; rec = 28; }
+    const size_t records = glog && glog->size > head ? (glog->size - head) / rec : 0;
+    const size_t at = rec == 36 ? 12 : 4;
+    // Firmware 1.0.0.x stamps another clock and writes a record per frame, so
+    // there the records are spread over the frames in order.
+    bool on_clock = true;
+    for (size_t i = 0; i < records; i++) {
+        const uint8_t* p = glog->data + head + i * rec;
+        const double t = le32(p) * 1e-3;
+        const bool zero = lef64(p + at) == 0 && lef64(p + at + 8) == 0;
+        if (!zero && (t < first_s - 10 || t > last_s + 10)) on_clock = false;
+    }
+    const uint8_t* prev = nullptr;
+    for (size_t i = 0; i < records; i++) {
+        const uint8_t* p = glog->data + head + i * rec;
+        const bool zero = lef64(p + at) == 0 && lef64(p + at + 8) == 0;
+        // 0, 0 repeats stay, for read_any to count as no fix.
+        if (prev && !zero && std::memcmp(p, prev, rec) == 0) continue;
+        prev = p;
+        TelemetryGps g;
+        g.t = on_clock ? le32(p) * 1e-3 - first_s
+                       : (last_s - first_s) * (double)i / (double)std::max<size_t>(records - 1, 1);
+        if (rec == 36) g.unix_time = (double)le64(p + 4) * 1e-3;
+        g.lat = lef64(p + at);
+        g.lon = lef64(p + at + 8);
+        g.has_alt = rec != 20;
+        if (g.has_alt) g.alt = lef64(p + at + 16);
+        // No fix flag: a receiver without one writes 0, 0, which read_any drops.
+        g.fix = true;
+        out.gps.push_back(g);
+    }
+
+    // Per frame, a u32 time in ms and the shutter in microseconds.
+    if (const kandao::Field* e = kandao::find(var, "EXP"))
+        for (size_t o = 0; o + 8 <= e->size; o += 8) {
+            TelemetryExposure x;
+            x.t = le32(e->data + o) * 1e-3 - first_s;
+            x.shutter = le32(e->data + o + 4) * 1e-6;
+            out.exposure.push_back(x);
+        }
+
+    if (out.gyro.empty() && out.gps.empty() && out.exposure.empty()) return true;
+    out.carrier = TelemetryCarrier::Kandao;
+    if (const kandao::Field* f = kandao::find(fix, "PRODUCT")) out.camera = f->str();
+    if (const kandao::Field* f = kandao::find(fix, "SN")) out.serial = f->str();
+    if (const kandao::Field* f = kandao::find(fix, "SW_VER")) out.firmware = f->str();
+    if (imu_ok) {
+        char scale[64];
+        std::snprintf(scale, sizeof scale, "%.0f deg/s and %.0f g", gyro_range, accel_range);
+        out.notes.push_back(std::string("gyro and accel raw int16 at ") + scale +
+                            " full scale; axes are the IMU's own, not the lens frame");
+        if (reordered) out.notes.push_back("IMU records out of time order " + std::to_string(reordered) + " times: sorted");
+    } else if (imu) {
+        out.notes.push_back("IMU log not read: INFO names no range or a record other than six axes");
+    }
+    if (!have_pts) out.notes.push_back("no PTS table: times counted from the IMU's first sample");
+    if (records > 0)
+        out.notes.push_back(std::string(glog->name) + " log: " + std::to_string(records) + " records of " +
+                            std::to_string(rec) + " bytes, " + std::to_string(out.gps.size()) +
+                            " once repeats are dropped");
+    if (records > 0 && !on_clock)
+        out.notes.push_back("GPS record times are not on the frames' clock: spread over the frames in order");
+    return true;
+}
+
+// ================
 // Driver
 // ================
 
@@ -1316,6 +1467,7 @@ bool read_carrier(const Source& src, Telemetry& out, std::string& error,
         else if (tk.sample_type == fourcc("djmd")) { if (!read_dji(src, tk, out, error)) return false; }
         if (out.carrier != TelemetryCarrier::None) break;
     }
+    if (out.carrier == TelemetryCarrier::None && mv.kvar_size > 0) return read_kandao(src, mv, out, error);
     return true;
 }
 

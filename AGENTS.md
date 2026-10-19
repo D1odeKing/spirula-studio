@@ -128,6 +128,8 @@ src/
 │                             frontend -- READ src/loma/README.md
 ├── roma/                   native RoMa v2 dense correspondence inference on nn/
 │                             -- READ src/roma/README.md
+├── blur/                   the frame blur measure (app/FrameSharpness.h) on nn/'s
+│                             device; EdgeWidth.h is the part both copies share
 ├── dense/                  fixed-camera reconstruction, disk-backed observations,
 │                             fusion and source-frame PLY -- READ src/dense/README.md
 │                             (its own library, ss_dense, outside the engine: the
@@ -327,7 +329,7 @@ Rules:
 ## The Vulkan-only subsystems
 
 `src/sfm/`, `src/nn/`, `src/sam/`, `src/swin/`, `src/gdino/`, `src/birefnet/`,
-`src/aliked/`, `src/loma/`, `src/metric3d/`, `src/moge/` and `src/video/` are
+`src/aliked/`, `src/loma/`, `src/metric3d/`, `src/moge/`, `src/blur/` and `src/video/` are
 **not** part of the two-backend rule below. They are Vulkan + Slang only, carry their own Vulkan
 context, share nothing with the training engine, and are absent from a CUDA
 build by default (`SS_BUILD_SFM` / `SS_BUILD_SAM` default OFF there).

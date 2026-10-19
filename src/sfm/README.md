@@ -204,7 +204,7 @@ core/        types shared by every stage, no Vulkan:
                Attitude               the gimbal yaw / pitch / roll a drone writes
                                         into each photo's XMP
                Telemetry              the IMU / GPS a video carries (GPMF, Insta360,
-                                        DJI, CAMM), read by content --
+                                        DJI, CAMM, Kandao), read by content --
                                         docs/notes/imu-gps-for-sfm.md
                PriorSource            what a sensor tells the mapper, the verifier
                                         and the pair list -- docs/notes/sensor-priors.md
@@ -602,7 +602,8 @@ algebra (D74).
 
 `--telemetry VIDEO` fixes the same gauge from the **video's own sensors**,
 which is the default whenever the GUI extracted the frames from a file that
-carries them (Insta360 `.insv`, GoPro `.360`/`.mp4`, DJI `.OSV`, CAMM): its
+carries them (Insta360 `.insv`, GoPro `.360`/`.mp4`, DJI `.OSV`, CAMM, a
+QooCam 3 Ultra `.mp4`): its
 manifest lists one `captures:` entry per video, and the frame stems carry the
 source frame index, which is how a frame gets its time on the sensor clock.
 `map/SensorGauge.h` treats every reading as a factor on one small state (a
@@ -747,8 +748,31 @@ model — `oriented` (is +Z up because something measured it, rather than the
 mean camera up axis guessing), `metric` (is a unit a metre), and which source
 each came from. Plain text, and read by the viewer: a model that says
 `oriented 1` is shown in its own frame with the up guess switched off, and its
-grid legend is in metres. Nothing else depends on the file, so a reconstruction
+grid legend is in metres. Nothing requires the file, so a reconstruction
 COLMAP wrote is simply one that says nothing.
+
+A model placed by GPS — the video's log, EXIF fixes, or the frame the mapper
+held — is in east-north-up metres about the point the fixes were converted
+around, and the file says where that is:
+
+```
+origin_lat 62.669093790
+origin_lon 13.967551870
+origin_alt 710.520
+alt_source dji
+```
+
+Latitude and longitude are WGS-84 degrees. The point is a mean of the fixes,
+not a camera. `origin_alt` is the height of z = 0 as the fixes state it, so
+its datum is the source's: `exif` (EXIF `GPSAltitude`, above sea level by the
+standard), `dji` (barometric), `gpmf`, `insta360`, `camm`, or several joined
+with `+`. Both lines are left out when any fix had no altitude, since sea
+level stood in for it. Where `--level ground` then puts the model's ground at
+z = 0 (after a `horizontal` fit, which does not trust the GPS height),
+`origin_alt` moves with it. The trainer copies all of this into
+`scene_transform.json`'s `georeference` (docs/datasets.md), so trained splats
+can be placed too. A positions file names no place on Earth and writes no
+origin.
 
 ## Rigs
 
@@ -1182,7 +1206,7 @@ PASS/FAIL and returns 0/1 — the same convention as `src/backend/tests/`.
 | `sfm_merge_test` | Sim(3) algebra, model alignment, track splicing, fold detection | no |
 | `sfm_attitude_test` | the XMP attitude, its angle convention, the gauge's vote and refusals | no |
 | `sfm_mask_test` | mask uv sampling, decode, file discovery | no |
-| `sfm_telemetry_test` | the four telemetry carriers on synthetic files, and the sanity checks; `sfm_telemetry_test FILE` prints what a video carries | no |
+| `sfm_telemetry_test` | the five telemetry carriers on synthetic files, and the sanity checks; `sfm_telemetry_test FILE` prints what a video carries | no |
 | `sfm_sequence_test` | the sequence table and its window pairs (`--no-gpu` stops there); a synthetic walk past a duplicated room through the mapper | yes |
 | `sfm_seam_weld_test` | the open-seam detector and weld on a two-front track, with and without capped GPS solves; what it leaves alone (duplicates too far apart, rig mates) and a weld it undoes (a perturbed copy) | yes |
 | `sfm_block_scale_test` | the block scale statistic on synthetic tracks: a hover, a loop, a stalled receiver, a rig, two fronts, the seam-jump mask over a model-space discontinuity, the noise gate | no |

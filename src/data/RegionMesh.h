@@ -22,6 +22,9 @@ struct RegionMesh {
 };
 
 RegionMesh region_boundary_mesh(const Region& r, const Aabb& box, int cells_long_axis = 96);
+// The box to mesh `r` in: all of a bounded region however far past the
+// scene, padded 5%; an unbounded one up to `scene`'s edge.
+Aabb region_mesh_box(const Region& r, const Aabb& scene);
 // One mesh per label of the field, from one pass of queries over the grid;
 // {} once `cancel` is set.
 std::vector<RegionMesh> label_boundary_meshes(const LabelField& f, const Aabb& box,

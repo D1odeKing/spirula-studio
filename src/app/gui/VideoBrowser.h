@@ -32,6 +32,8 @@ struct VideoSummary {
     double seconds = 0.0, fps = 0.0;
     long long frames = 0;
     std::vector<std::pair<int, int>> sizes;   // one per video track
+    // One per picture shown side by side: a track, or a lens cut from one.
+    std::vector<std::pair<int, int>> pictures;
     std::string codec;
     std::string error;
 };

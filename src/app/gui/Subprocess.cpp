@@ -355,7 +355,7 @@ ProcessReader::~ProcessReader() {
 bool command_exists(const std::string& exe) {
     if (exe.find('\\') != std::string::npos || exe.find('/') != std::string::npos) {
         std::error_code ec;
-        return fs::exists(exe, ec);
+        return fs::is_regular_file(exe, ec);
     }
     // Asked from draw code every frame, and a PATH walk is a stat per directory:
     // 42% of the GUI thread on a long run. Remembered for five seconds.
@@ -643,9 +643,15 @@ ProcessReader::~ProcessReader() {
 }
 
 
+// A folder passes access(X_OK) too, and then fails to spawn without a word.
+static bool runnable(const std::string& path) {
+    std::error_code ec;
+    return access(path.c_str(), X_OK) == 0 && !fs::is_directory(path, ec);
+}
+
 bool command_exists(const std::string& exe) {
     if (exe.find('/') != std::string::npos)
-        return access(exe.c_str(), X_OK) == 0;
+        return runnable(exe);
     const char* path = std::getenv("PATH");
     if (!path) return false;
     std::string p = path;
@@ -654,7 +660,7 @@ bool command_exists(const std::string& exe) {
         size_t colon = p.find(':', pos);
         std::string dir = p.substr(pos, colon == std::string::npos
                                             ? std::string::npos : colon - pos);
-        if (!dir.empty() && access((dir + "/" + exe).c_str(), X_OK) == 0)
+        if (!dir.empty() && runnable(dir + "/" + exe))
             return true;
         if (colon == std::string::npos) break;
         pos = colon + 1;

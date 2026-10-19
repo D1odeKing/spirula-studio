@@ -801,6 +801,21 @@ SS_MSG(sam_unexpected_argument,
     RU("лишний аргумент: {0}"),
     TR("beklenmeyen argüman: {0}"));
 
+SS_MSG(sam_report_unwritable,
+    EN("cannot write the report {0}"),
+    JA("レポート {0} を書き込めません"),
+    ZH_HANS("无法写入报告 {0}"),
+    ZH_HANT("無法寫入報告 {0}"),
+    KO("보고서 {0}을(를) 쓸 수 없습니다"),
+    DE("der Bericht {0} kann nicht geschrieben werden"),
+    FR("impossible d’écrire le rapport {0}"),
+    ES("no se puede escribir el informe {0}"),
+    PT("não é possível gravar o relatório {0}"),
+    IT("impossibile scrivere il resoconto {0}"),
+    NL("het rapport {0} kan niet worden geschreven"),
+    RU("не удаётся записать отчёт {0}"),
+    TR("{0} raporu yazılamıyor"));
+
 SS_MSG(sam_no_devices,
     EN("no Vulkan devices were found -- is a driver installed?"),
     JA("Vulkan デバイスが見つかりません。ドライバーは入っていますか。"),

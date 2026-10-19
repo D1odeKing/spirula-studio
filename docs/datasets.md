@@ -82,8 +82,7 @@ have no one colour to composite onto and keep the stored one.
 What a masked-out pixel means is `apply_loss_for_mask` (the GUI's Mask mode):
 ignored ("Ignore distractors") or trained as empty space ("Cut out
 background"). Left unset it resolves per dataset: cut out when the only masks
-are the images' alpha or the seed is this dataset's `dense/roma.ply`; ignore
-otherwise. An explicit policy retains precedence. `config.json` records the
+are the images' alpha; ignore otherwise. An explicit policy retains precedence. `config.json` records the
 resolved value. The dense panel and trainer use the same Mask mode control;
 Don't use masks disables both alpha and sidecar masks.
 
@@ -485,6 +484,10 @@ The shift, and the identity rotation and scale that go with it, are written to
 `scene_transform.json` in the run folder in every common spelling (4x4
 matrices, quaternions, Euler angles), so a downstream tool can put the
 splats back into the dataset's frame without converting anything by hand.
+When the dataset's `gauge.txt` gives a GPS origin (src/sfm/README.md), the file
+also has a `georeference` block: the dataset frame is east-north-up metres
+about `origin_lat` / `origin_lon` / `origin_alt`, so `world_from_train` and
+that point together put a splat on the map.
 The centre is taken over every frame before the train/eval split and over
 the whole seed cloud. The eval split re-parses with the mode `auto` resolved
 to, and `spirula mesh` takes the recorded centre from `scene_transform.json`
@@ -956,6 +959,53 @@ capture as it is measured and, under it, the rate the plan settled on. Every row
 is on ONE scale, because a clip that moves twice as much as its neighbour is
 exactly why it took the frames off it. A folder of photographs is a row that
 says it has no motion rather than a gap in the list.
+
+### Leaving out blurry frames
+
+Choosing the sharpest frame of a window never leaves a frame out, so through a
+shaky stretch the least bad frames still reach the dataset. `--blur-reject <px>`
+(the GUI: "Skip blurry frames") rules on each chosen frame afterwards, and
+`--similar <n>` leaves out one that is nearly the last frame kept. Both are off
+unless asked for, and read nothing but pixels: no shutter time, gyroscope or
+EXIF.
+
+- **The measure** (`app/FrameSharpness.h`, `edge_width_px`): how many pixels the
+  sharpest of a frame's strong edges take to cross, at half size, along the
+  wider of the two axes. Blur widens every edge, so the sharpest ones move with
+  it; a sharp frame of softly shaded things still has narrow edges among its
+  wide ones. Every edge counts, into a histogram, so the GPU copy
+  (`blur/EdgeWidthGpu.h`, on the inference layer's device) gives the same
+  number: it measures where the build has that device, and `SS_BLUR_CPU=1`
+  measures on the host. `edge_width_test` holds the two together.
+- **The rule** (`app/FramePick.h`, `PickRule`): blur is that width less the
+  capture's own sharpest frames (the 10th percentile, plus 8%) in quadrature,
+  so the threshold is a length in pixels of the frame as extracted. The
+  percentile is over the whole capture wherever every frame is measured before
+  the first is ruled on (`whole_capture`): photographs, ffmpeg's candidates, a
+  sort, and the GUI's closing pass over what the built-in decoder ruled on as
+  it went. Against only the frames so far, a clip that opens in motion calls
+  its smear the lens; `spirula sam extract` still works that way. A frame past
+  the threshold is left out, but never more than two in a row, so a bad
+  stretch is thinned rather than cut. A frame nothing could be measured on is
+  kept.
+- **Similarity**: a 64-bit difference hash against the last frame kept; fewer
+  than `n` differing bits is a duplicate. A camera standing still is not a bad
+  stretch, so there is no cap on these. A frame with no hash is like no other.
+
+`--skipped-dir <dir>` writes the frames left out there instead of dropping them,
+and `--report <csv>` lists every chosen frame with its width, blur and verdict.
+
+In the GUI, "Skip blurry frames" sits under "Adapt the rate to the motion" and,
+while it is on, shows its settings whatever Advanced says: the threshold in
+pixels, the neighbour rule, the similarity threshold (part of the same switch),
+whether to keep the skipped frames, and "Set by hand", which pauses the run
+once the frames are out so the threshold is set in the **Sharpness** view while
+looking at them, before anything is built on those frames. It pauses only where
+every frame can still change sides -- not for a rig or a 360 video through the
+built-in decoder. The same rule sorts a folder of photographs (camera folders
+holding the same file names are a rig, judged and moved whole), and a finished
+dataset can be sorted again by a tighter rule without reconstructing it:
+docs/notes/dataset-rerun.md.
 
 ## E57 laser scans
 

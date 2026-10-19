@@ -6,9 +6,10 @@
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::OpenCV,
-    DistortionType::D,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::None,
+    DistortionType::RGB_D,
+    true,
     false
 >(
     cudaStream_t stream,
@@ -33,14 +34,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::OpenCV,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::None,
     DistortionType::RGB_D,
+    false,
     true
 >(
     cudaStream_t stream,
@@ -65,14 +68,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::OpenCV,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::None,
     DistortionType::RGB_D,
+    false,
     false
 >(
     cudaStream_t stream,
@@ -97,14 +102,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
     DistortionType::None,
+    true,
     true
 >(
     cudaStream_t stream,
@@ -129,14 +136,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
     DistortionType::None,
+    true,
     false
 >(
     cudaStream_t stream,
@@ -161,14 +170,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
-    DistortionType::D,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
+    DistortionType::None,
+    false,
     true
 >(
     cudaStream_t stream,
@@ -193,14 +204,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
-    DistortionType::D,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
+    DistortionType::None,
+    false,
     false
 >(
     cudaStream_t stream,
@@ -225,14 +238,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
-    DistortionType::RGB_D,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
+    DistortionType::D,
+    true,
     true
 >(
     cudaStream_t stream,
@@ -257,14 +272,16 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );
 
 template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     Vanilla3DGUT<0>,
-    CameraModelType::EQUISOLID,
-    CameraDistortionType::ThinPrism,
-    DistortionType::RGB_D,
+    CameraModelType::FISHEYE,
+    CameraDistortionType::OpenCV,
+    DistortionType::D,
+    true,
     false
 >(
     cudaStream_t stream,
@@ -289,5 +306,6 @@ template void rasterize_to_pixels_eval3d_fwd_kernel_wrapper<
     float *__restrict__ render_Ts, // [I, image_height, image_width, 1]
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
-    float *__restrict__ render_median // [I, image_height, image_width, 1], optional
+    float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
+    const SplatScoreRender score
 );

@@ -82,7 +82,11 @@ anything trains):
 - a path: relative to the dataset when it is there, else the working directory.
 
 A partitioned run trains in the intersection of its part and the region, and
-the pixel masks follow the same intersection. `roi_region` is a dataset-parse
+the pixel masks follow the same intersection. A pixel no seed point covers is
+kept only if its ray passes through the region: sky and far field seen beside
+or above the region are masked, but seen through it they are kept, since
+nothing says where along the ray they lie -- so a region much taller than its
+subject keeps the horizon behind it. `roi_region` is a dataset-parse
 field in the GUI (`SS_DATASET_PARSE_FIELDS`), so changing it re-reads the
 preview, and a preset context field (`SS_PRESET_CONTEXT_FIELDS`), so no saved
 preset carries one dataset's region to another. Opening a different dataset

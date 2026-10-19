@@ -255,6 +255,25 @@ target_compile_options(ss_roma PRIVATE
 set_property(TARGET ss_roma PROPERTY CXX_STANDARD 17)
 
 # ---------------------------------------------------------------------------
+# ss_blur -- the edge-width blur measure on the device. app/FrameSharpness.cpp
+# is the host copy every build has; edge_width_test holds the two together.
+# ---------------------------------------------------------------------------
+ss_nn_shaders(blur ${SS_SRC}/blur/shaders SS_BLUR_EMBED)
+add_library(ss_blur STATIC ${SS_SRC}/blur/EdgeWidthGpu.cpp ${SS_BLUR_EMBED})
+target_link_libraries(ss_blur PUBLIC ss_nn)
+target_compile_options(ss_blur PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
+set_property(TARGET ss_blur PROPERTY CXX_STANDARD 17)
+
+add_executable(edge_width_test ${SS_SRC}/blur/tests/edge_width_test.cpp
+                               ${SS_SRC}/app/FrameSharpness.cpp)
+target_link_libraries(edge_width_test PRIVATE ss_blur)
+target_compile_definitions(edge_width_test PRIVATE SS_HAVE_BLUR_GPU=1)
+set_property(TARGET edge_width_test PROPERTY CXX_STANDARD 17)
+target_compile_options(edge_width_test PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${SPLAT_CXX_FLAGS}>)
+
+# ---------------------------------------------------------------------------
 # ss_video -- container demux + VK_KHR_video_decode_*
 #
 # Gated on SS_ENABLE_PATENTED: H.264 / H.265 / AV1 bitstream parsing is the

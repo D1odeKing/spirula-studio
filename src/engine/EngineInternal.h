@@ -17,6 +17,13 @@
 #include <cstddef>
 
 
+struct DensifyConfig;
+
+// Readies DeadCriterion::MaxWeight's buffer for `step`'s raster backward:
+// set to opacity on first use, freed once nothing can relocate. Idempotent
+// within a step (EngineDensify.cpp).
+void engine_max_weight_begin_step(int step, int max_steps, const DensifyConfig& cfg);
+
 // --- Raw-pointer image conversion helpers (ImageConvert.cu). ---
 void uint8_image_to_float_raw (const uint8_t*  d_in, float* d_out,
                                int B, int H, int W, int C);

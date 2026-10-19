@@ -1130,11 +1130,99 @@ ScenePartition partition_scene(const ParsedDataset& ds, const Covisibility& cov,
 // Region masks
 // ===========================================================================
 
+namespace {
+
+// The cells of a grid over a bounded region next to a sample inside it, and
+// one more around those for what slips between samples: a ray that crosses
+// none of them sees nothing of the region.
+struct RegionHull {
+    double lo[3] = {0, 0, 0}, h[3] = {0, 0, 0};
+    int n = 0;
+    std::vector<uint8_t> occ;   // [n,n,n]
+
+    bool ok() const { return !occ.empty(); }
+
+    RegionHull() = default;
+    RegionHull(const Region& r, int cells) {
+        const Aabb b = r.bounds();
+        if (b.empty()) return;
+        for (int a = 0; a < 3; a++)
+            if (!(b.lo[a] > -1e299 && b.hi[a] < 1e299)) return;
+        n = cells;
+        const int m = n + 1;
+        for (int a = 0; a < 3; a++) {
+            lo[a] = b.lo[a];
+            h[a] = std::max(b.hi[a] - b.lo[a], 1e-9 * (1.0 + std::fabs(b.lo[a]))) / n;
+        }
+        std::vector<double> at((size_t)m * m * m * 3);
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < m; j++)
+                for (int k = 0; k < m; k++) {
+                    double* p = &at[(((size_t)i * m + j) * m + k) * 3];
+                    p[0] = lo[0] + h[0] * i;
+                    p[1] = lo[1] + h[1] * j;
+                    p[2] = lo[2] + h[2] * k;
+                }
+        std::vector<uint8_t> in((size_t)m * m * m);
+        r.contains_many(at.data(), (int64_t)in.size(), in.data());
+        occ.assign((size_t)n * n * n, 0);
+        for (int i = 0; i < m; i++)
+            for (int j = 0; j < m; j++)
+                for (int k = 0; k < m; k++) {
+                    if (!in[((size_t)i * m + j) * m + k]) continue;
+                    for (int ci = std::max(0, i - 2); ci <= std::min(n - 1, i + 1); ci++)
+                        for (int cj = std::max(0, j - 2); cj <= std::min(n - 1, j + 1); cj++)
+                            for (int ck = std::max(0, k - 2); ck <= std::min(n - 1, k + 1); ck++)
+                                occ[((size_t)ci * n + cj) * n + ck] = 1;
+                }
+    }
+
+    // The ray o + t d, t >= 0, through the grid cell by cell (Amanatides-Woo).
+    bool hit(const double o[3], const double d[3]) const {
+        double t0 = 0, t1 = 1e300;
+        for (int a = 0; a < 3; a++) {
+            const double hi = lo[a] + h[a] * n;
+            if (d[a] == 0) {
+                if (o[a] < lo[a] || o[a] > hi) return false;
+                continue;
+            }
+            double ta = (lo[a] - o[a]) / d[a], tb = (hi - o[a]) / d[a];
+            if (ta > tb) std::swap(ta, tb);
+            t0 = std::max(t0, ta);
+            t1 = std::min(t1, tb);
+        }
+        if (t0 > t1) return false;
+        int c[3], step[3];
+        double next[3], delta[3];
+        for (int a = 0; a < 3; a++) {
+            c[a] = std::clamp((int)std::floor((o[a] + t0 * d[a] - lo[a]) / h[a]), 0, n - 1);
+            step[a] = d[a] > 0 ? 1 : d[a] < 0 ? -1 : 0;
+            next[a] = step[a] == 0 ? 1e300 : (lo[a] + h[a] * (c[a] + (step[a] > 0)) - o[a]) / d[a];
+            delta[a] = step[a] == 0 ? 1e300 : h[a] / std::fabs(d[a]);
+        }
+        for (;;) {
+            if (occ[((size_t)c[0] * n + c[1]) * n + c[2]]) return true;
+            const int a = next[0] < next[1] ? (next[0] < next[2] ? 0 : 2) : (next[1] < next[2] ? 1 : 2);
+            if (next[a] > t1) return false;
+            c[a] += step[a];
+            if (c[a] < 0 || c[a] >= n) return false;
+            next[a] += delta[a];
+        }
+    }
+};
+
+}  // namespace
+
 std::vector<std::string> write_region_masks(const ParsedDataset& ds, const double* xyz, int64_t n_pts,
                                             const uint8_t* point_inside,
                                             const std::string& dir, bool flip_existing,
-                                            double* masked_share) {
+                                            double* masked_share, const Region* region,
+                                            const Sim3& to_region) {
     constexpr int kScale = 4;
+    // pixel_ray is a Newton solve under a lens, so rays are exact every
+    // kRayStride cells and interpolated between.
+    constexpr int kRayStride = 8;
+    const RegionHull hull = region ? RegionHull(*region, 64) : RegionHull();
     const int64_t n_cam = ds.num_cameras;
     std::vector<std::string> out((size_t)n_cam);
     std::error_code ec;
@@ -1207,17 +1295,72 @@ std::vector<std::string> write_region_masks(const ParsedDataset& ds, const doubl
                 }
             cell.swap(next);
         }
-        // Keep a margin past the region's edge in the image, so the seam is
-        // still supervised from this side.
-        const int margin = std::max(2, gw / 40);
-        std::vector<uint8_t> keep((size_t)gw * gh, 0);
-        for (int y = 0; y < gh; y++)
-            for (int x = 0; x < gw; x++)
-                if (cell[(size_t)y * gw + x] != 0) {
-                    for (int yy = std::max(0, y - margin); yy <= std::min(gh - 1, y + margin); yy++)
-                        for (int xx = std::max(0, x - margin); xx <= std::min(gw - 1, x + margin); xx++)
-                            keep[(size_t)yy * gw + xx] = 255;
+        // No point says what a ray past the region sees -- the sky, the far
+        // field -- but it cannot be anything inside.
+        if (hull.ok()) {
+            // Cell (x, y)'s ray in the region's frame.
+            auto ray_of = [&](int x, int y, double* out) {
+                const double px[2] = {std::min((x + 0.5) * kScale, f.cam.width - 0.5),
+                                      std::min((y + 0.5) * kScale, f.cam.height - 0.5)};
+                double rc[3], w[3];
+                if (!camhost::pixel_ray(f.cam, px, rc)) return false;
+                for (int k = 0; k < 3; k++) w[k] = f.R[k] * rc[0] + f.R[3 + k] * rc[1] + f.R[6 + k] * rc[2];
+                to_region.rotate(w, out);
+                return true;
+            };
+            const int nx = (gw + kRayStride - 2) / kRayStride + 1, ny = (gh + kRayStride - 2) / kRayStride + 1;
+            auto node = [&](int k, int g) { return std::min(k * kRayStride, g - 1); };
+            std::vector<double> rays((size_t)nx * ny * 3);
+            std::vector<uint8_t> valid((size_t)nx * ny, 0);
+            for (int ly = 0; ly < ny; ly++)
+                for (int lx = 0; lx < nx; lx++)
+                    valid[(size_t)ly * nx + lx] = ray_of(node(lx, gw), node(ly, gh), &rays[((size_t)ly * nx + lx) * 3]);
+            double o[3];
+            to_region.apply(f.t, o);
+            for (int y = 0; y < gh; y++) {
+                const int ly = std::min(y / kRayStride, ny - 1), ly1 = std::min(ly + 1, ny - 1);
+                const double wy = ly1 == ly ? 0.0 : (double)(y - node(ly, gh)) / (node(ly1, gh) - node(ly, gh));
+                for (int x = 0; x < gw; x++) {
+                    if (cell[(size_t)y * gw + x] == 0) continue;
+                    const int lx = std::min(x / kRayStride, nx - 1), lx1 = std::min(lx + 1, nx - 1);
+                    const double wx = lx1 == lx ? 0.0 : (double)(x - node(lx, gw)) / (node(lx1, gw) - node(lx, gw));
+                    const size_t q[4] = {(size_t)ly * nx + lx, (size_t)ly * nx + lx1, (size_t)ly1 * nx + lx,
+                                         (size_t)ly1 * nx + lx1};
+                    const double wq[4] = {(1 - wx) * (1 - wy), wx * (1 - wy), (1 - wx) * wy, wx * wy};
+                    double d[3] = {0, 0, 0};
+                    if (valid[q[0]] && valid[q[1]] && valid[q[2]] && valid[q[3]]) {
+                        for (int k = 0; k < 4; k++)
+                            for (int r = 0; r < 3; r++) d[r] += wq[k] * rays[q[k] * 3 + r];
+                    } else if (!ray_of(x, y, d)) {
+                        continue;
+                    }
+                    if (!hull.hit(o, d)) cell[(size_t)y * gw + x] = 0;
                 }
+            }
+        }
+        // Keep a margin past the region's edge in the image, so the seam is
+        // still supervised from this side: a square dilation, as two running
+        // windows (a 4K frame's margin is 24 cells, 2401 writes a cell in 2-D).
+        const int margin = std::max(2, gw / 40);
+        std::vector<uint8_t> rows((size_t)gw * gh, 0), keep((size_t)gw * gh, 0);
+        for (int y = 0; y < gh; y++) {
+            const int8_t* c = &cell[(size_t)y * gw];
+            int run = 0;
+            for (int x = -margin; x < gw; x++) {
+                if (x + margin < gw) run += c[x + margin] != 0;
+                if (x - margin - 1 >= 0) run -= c[x - margin - 1] != 0;
+                if (x >= 0) rows[(size_t)y * gw + x] = run > 0;
+            }
+        }
+        std::vector<int> col_run((size_t)gw, 0);
+        for (int y = -margin; y < gh; y++) {
+            if (y + margin < gh)
+                for (int x = 0; x < gw; x++) col_run[(size_t)x] += rows[(size_t)(y + margin) * gw + x];
+            if (y - margin - 1 >= 0)
+                for (int x = 0; x < gw; x++) col_run[(size_t)x] -= rows[(size_t)(y - margin - 1) * gw + x];
+            if (y >= 0)
+                for (int x = 0; x < gw; x++) keep[(size_t)y * gw + x] = col_run[(size_t)x] > 0 ? 255 : 0;
+        }
         if (i < (int64_t)ds.mask_filenames.size() && !ds.mask_filenames[(size_t)i].empty()) {
             int w = 0, h = 0, ch = 0;
             if (stbi_uc* img = stbi_load(ds.mask_filenames[(size_t)i].c_str(), &w, &h, &ch, 1)) {

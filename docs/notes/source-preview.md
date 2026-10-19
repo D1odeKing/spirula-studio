@@ -30,7 +30,9 @@ them (`PreviewFrames.h`): through the same LUT, auto-rotation and, for a
 panorama turned by the dataset's own 360 orientation, so a camera held upside
 down shows upside down here and is fixed in the same place it would be fixed
 for the run. "As recorded" shows the tracks as the camera wrote them. A
-multi-track file shows its tracks side by side.
+multi-track file shows its tracks side by side, and so does a frame that packs
+both fisheyes into one picture (an Insta360 `.lrv`, a QooCam 3 Ultra's stacked
+`.mp4`): its lenses are cut apart as the run cuts them into `cam0/`, `cam1/`.
 
 **Decoding.** On the GPU the preview keeps the video open between frames
 (`app::FrameCursor`): every track decoded in step, so the next frame is one

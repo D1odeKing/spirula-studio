@@ -90,6 +90,10 @@ void usage() {
     help_row("    --sync", H::xh_sync);
     help_row("    --adaptive", H::xh_adaptive);
     help_row("    --adaptive-range <f>", H::xh_adaptive_range);
+    help_row("    --blur-reject <f>", H::xh_blur_reject);
+    help_row("    --similar <n>", H::xh_similar);
+    help_row("    --skipped-dir <dir>", H::xh_skipped_dir);
+    help_row("    --report <file>", H::xh_report);
     help_row("    --threads <n>", H::xh_threads);
     help_row("    --decoder <d>", H::xh_decoder);
     help_row("    --ffmpeg <exe>", H::xh_ffmpeg);
@@ -154,6 +158,10 @@ struct Options {
     bool   sync = false;
     bool   adaptive = false;
     float  adaptive_range = 4.0f;
+    float  blur_reject = 0.0f;
+    int    similar = 0;
+    std::string skipped_dir;
+    std::string report;
     int    threads = 0;
     app::FrameDecoder decoder = app::FrameDecoder::Auto;
     std::string ffmpeg = "ffmpeg";
@@ -212,6 +220,14 @@ bool parse_args(int argc, char** argv, Options& o) {
         else if (a == "--adaptive") o.adaptive = true;
         else if (a == "--adaptive-range")
             o.adaptive_range = std::strtof(next("--adaptive-range"), nullptr);
+        else if (a == "--blur-reject")
+            o.blur_reject = std::strtof(next("--blur-reject"), nullptr);
+        else if (a == "--similar")
+            o.similar = std::atoi(next("--similar"));
+        else if (a == "--skipped-dir")
+            o.skipped_dir = next("--skipped-dir");
+        else if (a == "--report")
+            o.report = next("--report");
         else if (a == "--threads") o.threads = std::atoi(next("--threads"));
         else if (a == "--decoder") {
             const std::string d = next("--decoder");
@@ -335,6 +351,9 @@ int sam_cli_extract(int argc, char** argv) {
     job.sync_tracks = o.sync;
     job.adaptive = o.adaptive;
     job.adaptive_range = o.adaptive_range;
+    job.blur_reject = o.blur_reject;
+    job.similar_bits = o.similar;
+    job.skipped_dir = o.skipped_dir;
     job.threads = o.threads;
     job.decoder = o.decoder;
     job.ffmpeg_exe = o.ffmpeg;
@@ -392,6 +411,28 @@ int sam_cli_extract(int argc, char** argv) {
 
     app::FrameExtractSinks sinks;
     sinks.log = [](const std::string& l) { std::fprintf(stderr, "%s\n", l.c_str()); };
+    // One line a chosen frame, for a script: English and stable on purpose.
+    FILE* report = nullptr;
+    if (!o.report.empty()) {
+        std::error_code ec;
+        const fs::path dir = fs::path(o.report).parent_path();
+        if (!dir.empty()) fs::create_directories(dir, ec);
+        report = std::fopen(o.report.c_str(), "w");
+        if (!report) {
+            std::fprintf(stderr, "%s\n",
+                         spirula::i18n::format(spirula::i18n::msg::cli::sam_report_unwritable,
+                                               {o.report}).c_str());
+            return 1;
+        }
+    }
+    if (report) {
+        std::fprintf(report, "frame,edge_width_px,blur_px,verdict\n");
+        sinks.judged = [report](const app::FramePick& p, const nn::Image&) {
+            static const char* const kVerdict[] = {"kept", "blurry", "similar"};
+            std::fprintf(report, "%lld,%.2f,%.2f,%s\n", (long long)p.index, p.width, p.blur,
+                         kVerdict[(int)p.verdict]);
+        };
+    }
 
     app::FrameExtractStats stats;
     std::string error;
@@ -402,6 +443,7 @@ int sam_cli_extract(int argc, char** argv) {
                                            {error}).c_str());
         rc = 1;
     }
+    if (report) std::fclose(report);
     std::printf("%s", app::format_extract_stats(stats, base.string(),
                                                 !o.model.empty()).c_str());
     if (stats.write_failures) {
