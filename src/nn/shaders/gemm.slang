@@ -45,6 +45,8 @@ struct GemmParams {
     float  alpha;     // scales the matmul result before bias/residual
     uint   x_row_stride;  // in elements; == K unless x is a slice of a wider buffer
     uint   groups_per_row; // gemm_nt_thin only: N folds across (gid.x, gid.y)
+    float  x_scale;   // gemm_coop.slang only
+    uint   _pad0;
     uint*  nbr;           // [M, taps] i32 under kGatherCi (never null)
     uint   taps;
     uint   n_in;          // rows of x under kGatherCi

@@ -2381,6 +2381,100 @@ SS_MSG(eval_metrics_written,
     RU("Показатели оценки записаны в {0}"),
     TR("Değerlendirme ölçütleri {0} dosyasına yazıldı"));
 
+SS_MSG(eval_lpips_unavailable,
+    EN("Eval: this build has no inference layer (SS_BUILD_SAM), so LPIPS is left "
+       "out; reference/python/eval_lpips.py scores the images --save-eval-images "
+       "writes."),
+    JA("評価: このビルドには推論レイヤー（SS_BUILD_SAM）がないため、LPIPS は省きます。"
+       "--save-eval-images が書き出す画像は reference/python/eval_lpips.py で採点できます。"),
+    ZH_HANS("评估：此构建不含推理层（SS_BUILD_SAM），因此不计算 LPIPS；"
+            "reference/python/eval_lpips.py 可为 --save-eval-images 写出的图像评分。"),
+    ZH_HANT("評估：此建置不含推論層（SS_BUILD_SAM），因此不計算 LPIPS；"
+            "reference/python/eval_lpips.py 可為 --save-eval-images 寫出的影像評分。"),
+    KO("평가: 이 빌드에는 추론 계층(SS_BUILD_SAM)이 없어 LPIPS를 뺍니다. "
+       "--save-eval-images가 쓰는 이미지는 reference/python/eval_lpips.py로 채점할 수 "
+       "있습니다."),
+    DE("Auswertung: Dieser Build hat keine Inferenzschicht (SS_BUILD_SAM), daher "
+       "fehlt LPIPS; reference/python/eval_lpips.py bewertet die Bilder, die "
+       "--save-eval-images schreibt."),
+    FR("Évaluation : ce build n'a pas de couche d'inférence (SS_BUILD_SAM), LPIPS est "
+       "donc omis ; reference/python/eval_lpips.py note les images qu'écrit "
+       "--save-eval-images."),
+    ES("Evaluación: esta compilación no tiene capa de inferencia (SS_BUILD_SAM), así "
+       "que se omite LPIPS; reference/python/eval_lpips.py puntúa las imágenes que "
+       "escribe --save-eval-images."),
+    PT("Avaliação: esta compilação não tem camada de inferência (SS_BUILD_SAM), então "
+       "o LPIPS fica de fora; reference/python/eval_lpips.py pontua as imagens que "
+       "--save-eval-images grava."),
+    IT("Valutazione: questa build non ha il livello di inferenza (SS_BUILD_SAM), "
+       "quindi LPIPS è escluso; reference/python/eval_lpips.py valuta le immagini "
+       "scritte da --save-eval-images."),
+    NL("Evaluatie: deze build heeft geen inferentielaag (SS_BUILD_SAM), dus LPIPS "
+       "ontbreekt; reference/python/eval_lpips.py scoort de beelden die "
+       "--save-eval-images wegschrijft."),
+    RU("Оценка: в этой сборке нет слоя вывода (SS_BUILD_SAM), поэтому LPIPS "
+       "пропускается; reference/python/eval_lpips.py оценивает изображения, которые "
+       "пишет --save-eval-images."),
+    TR("Değerlendirme: bu derlemede çıkarım katmanı (SS_BUILD_SAM) yok, bu yüzden "
+       "LPIPS atlanıyor; reference/python/eval_lpips.py, --save-eval-images'ın yazdığı "
+       "görüntüleri puanlar."));
+
+SS_MSG(eval_lpips_missing,
+    EN("{0}\nThe eval pass scores held-out views with LPIPS, which needs these "
+       "checkpoints: --lpips-checkpoints <folder> reads them from a folder, and "
+       "--eval-lpips 0 trains without LPIPS."),
+    JA("{0}\n評価では取り分けた視点を LPIPS で採点し、そのためにこれらのチェック"
+       "ポイントが必要です。--lpips-checkpoints <folder> でフォルダーから読み込むか、"
+       "--eval-lpips 0 で LPIPS なしに学習してください。"),
+    ZH_HANS("{0}\n评估用 LPIPS 为留出的视角评分，需要这些检查点："
+            "--lpips-checkpoints <folder> 从文件夹读取它们，--eval-lpips 0 则不用 "
+            "LPIPS 训练。"),
+    ZH_HANT("{0}\n評估用 LPIPS 為留出的視角評分，需要這些檢查點："
+            "--lpips-checkpoints <folder> 從資料夾讀取它們，--eval-lpips 0 則不用 "
+            "LPIPS 訓練。"),
+    KO("{0}\n평가는 떼어 둔 시점을 LPIPS로 채점하며 이 체크포인트가 필요합니다. "
+       "--lpips-checkpoints <folder>는 폴더에서 읽고, --eval-lpips 0은 LPIPS 없이 "
+       "학습합니다."),
+    DE("{0}\nDie Auswertung bewertet zurückgehaltene Ansichten mit LPIPS und braucht "
+       "dafür diese Checkpoints: --lpips-checkpoints <folder> liest sie aus einem "
+       "Ordner, --eval-lpips 0 trainiert ohne LPIPS."),
+    FR("{0}\nL'évaluation note les vues mises de côté avec LPIPS, qui a besoin de ces "
+       "points de contrôle : --lpips-checkpoints <folder> les lit dans un dossier, "
+       "et --eval-lpips 0 entraîne sans LPIPS."),
+    ES("{0}\nLa evaluación puntúa las vistas apartadas con LPIPS, que necesita estos "
+       "puntos de control: --lpips-checkpoints <folder> los lee de una carpeta y "
+       "--eval-lpips 0 entrena sin LPIPS."),
+    PT("{0}\nA avaliação pontua as vistas reservadas com LPIPS, que precisa destes "
+       "checkpoints: --lpips-checkpoints <folder> os lê de uma pasta e "
+       "--eval-lpips 0 treina sem LPIPS."),
+    IT("{0}\nLa valutazione assegna un punteggio LPIPS alle viste messe da parte, e "
+       "le servono questi checkpoint: --lpips-checkpoints <folder> li legge da una "
+       "cartella, --eval-lpips 0 addestra senza LPIPS."),
+    NL("{0}\nDe evaluatie scoort opzijgezette aanzichten met LPIPS, dat deze "
+       "checkpoints nodig heeft: --lpips-checkpoints <folder> leest ze uit een map, "
+       "--eval-lpips 0 traint zonder LPIPS."),
+    RU("{0}\nОценка проверяет отложенные виды по LPIPS, и ей нужны эти контрольные "
+       "точки: --lpips-checkpoints <folder> читает их из папки, а --eval-lpips 0 "
+       "обучает без LPIPS."),
+    TR("{0}\nDeğerlendirme ayrılmış görünümleri LPIPS ile puanlar ve bu denetim "
+       "noktalarına ihtiyaç duyar: --lpips-checkpoints <folder> onları bir klasörden "
+       "okur, --eval-lpips 0 ise LPIPS olmadan eğitir."));
+
+SS_MSG(eval_lpips_failed,
+    EN("Eval: LPIPS failed and is left out of metrics.json: {0}"),
+    JA("評価: LPIPS に失敗したため metrics.json から省きます: {0}"),
+    ZH_HANS("评估：LPIPS 失败，metrics.json 中不含它：{0}"),
+    ZH_HANT("評估：LPIPS 失敗，metrics.json 中不含它：{0}"),
+    KO("평가: LPIPS가 실패해 metrics.json에서 뺍니다: {0}"),
+    DE("Auswertung: LPIPS ist fehlgeschlagen und fehlt in metrics.json: {0}"),
+    FR("Évaluation : LPIPS a échoué et est omis de metrics.json : {0}"),
+    ES("Evaluación: LPIPS falló y se omite de metrics.json: {0}"),
+    PT("Avaliação: o LPIPS falhou e fica fora de metrics.json: {0}"),
+    IT("Valutazione: LPIPS non è riuscito ed è escluso da metrics.json: {0}"),
+    NL("Evaluatie: LPIPS is mislukt en ontbreekt in metrics.json: {0}"),
+    RU("Оценка: LPIPS не удалось, в metrics.json его нет: {0}"),
+    TR("Değerlendirme: LPIPS başarısız oldu ve metrics.json'a yazılmadı: {0}"));
+
 // ===========================================================================
 // Failures -- what the screen says when a run stops
 // ===========================================================================

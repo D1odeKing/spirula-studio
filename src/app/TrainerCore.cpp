@@ -90,6 +90,17 @@ static void remove_tree(const std::filesystem::path& p) {
 #endif
 }
 
+static LpipsHooks& lpips_hooks() {
+    static LpipsHooks hooks;
+    return hooks;
+}
+
+void set_lpips_hooks(LpipsHooks hooks) { lpips_hooks() = std::move(hooks); }
+
+bool lpips_wanted(const TrainConfig& cfg) {
+    return cfg.eval_lpips && cfg.eval_mode != "all";
+}
+
 // ===========================================================================
 // Color-space handling
 // ===========================================================================
@@ -446,6 +457,7 @@ namespace {
 
 int perceptual_loss_int(const std::string& loss) {
     if (loss == "ssim")     return (int)PerceptualLoss::Ssim;
+    if (loss == "ssim_blur_tolerant") return (int)PerceptualLoss::SsimBlurTolerant;
     if (loss == "s_cielab") return (int)PerceptualLoss::SCielab;
     if (loss == "flip")     return (int)PerceptualLoss::Flip;
     throw std::runtime_error("unknown perceptual_loss: " + loss);
@@ -1216,6 +1228,15 @@ void TrainerSession::setup_engine() {
 #ifndef SS_BACKEND_VULKAN
     check_cuda_runtime();
 #endif
+    if (lpips_wanted(cfg) && !lpips_hooks().prepare) {
+        log(lmsg::eval_lpips_unavailable.get());
+    } else if (lpips_wanted(cfg)) {
+        try {
+            lpips_hooks().prepare(cfg);
+        } catch (const std::exception& e) {
+            throw std::runtime_error(lfmt(lmsg::eval_lpips_missing, {std::string(e.what())}));
+        }
+    }
 
     // ---- Output dir ----------------------------------------------------
     if (!out_dir_override.empty()) {
@@ -1962,6 +1983,12 @@ std::vector<uint8_t> to_png_bytes(const std::vector<float>& rgb) {
     return out;
 }
 
+// In place: what to_png_bytes stores, read back as eval_lpips.py reads a PNG.
+void quantize_8bit(std::vector<float>& rgb) {
+    for (float& x : rgb)
+        x = (float)std::lround(std::min(std::max(x, 0.0f), 1.0f) * 255.0f) / 255.0f;
+}
+
 }  // namespace
 
 void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_progress) {
@@ -2065,7 +2092,24 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
     struct ViewScore {
         bool  filled = false;
         float l1 = 0, psnr = 0, ssim = 0, cc_l1 = 0, cc_psnr = 0, cc_ssim = 0;
+        std::vector<float> lpips, cc_lpips;   // one per lpips_names entry
     };
+
+    // On the inference layer's device, which takes one view at a time. A
+    // failure drops LPIPS from metrics.json and keeps everything else.
+    std::unique_ptr<LpipsScorer> lpips;
+    std::vector<std::string> lpips_names;
+    if (lpips_wanted(cfg) && lpips_hooks().open) {
+        try {
+            lpips = lpips_hooks().open(cfg);
+            lpips_names = lpips->names();
+        } catch (const std::exception& e) {
+            lpips.reset();
+            log(lfmt(lmsg::eval_lpips_failed, {std::string(e.what())}));
+        }
+    }
+    std::mutex lpips_mu;
+    std::atomic<bool> lpips_ok{lpips != nullptr};
 
     // Per worker: a GT + a render + the colour-corrected copy (3 x H*W*C
     // floats) plus SSIM's eleven H*W double buffers. ~725 MB at 4K, so the
@@ -2110,6 +2154,26 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
         s.cc_l1   = image_l1(g, cc.data(), view_px);
         s.cc_psnr = image_psnr(g, cc.data(), view_px);
         s.cc_ssim = image_ssim(g, cc.data(), j.H, j.W, j.C);
+        if (lpips_ok.load()) {
+            // On the 8-bit images, as eval_lpips.py and 3DGS's metrics.py score
+            // them: bonsai's float renders averaged 1.8% (alex) / 0.9% (vgg)
+            // higher, the size of what LPIPS gets compared on. PNGs are unchanged.
+            quantize_8bit(j.gt);
+            quantize_8bit(j.pred);
+            color_correct_into(j.pred.data(), g, (int64_t)j.H * j.W, j.C, cc);
+            try {
+                if (j.C != 3) throw std::runtime_error("LPIPS needs RGB views");
+                std::lock_guard<std::mutex> lk(lpips_mu);
+                for (const std::vector<float>& m :
+                     lpips->score(g, {j.pred.data(), cc.data()}, j.W, j.H)) {
+                    s.lpips.push_back(m[0]);
+                    s.cc_lpips.push_back(m[1]);
+                }
+            } catch (const std::exception& e) {
+                if (lpips_ok.exchange(false))
+                    log(lfmt(lmsg::eval_lpips_failed, {std::string(e.what())}));
+            }
+        }
         {
             std::lock_guard<std::mutex> lk(smu);
             if ((size_t)j.index >= scores.size()) scores.resize((size_t)j.index + 1);
@@ -2126,9 +2190,8 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
                                     bytes.data(), j.W * j.C))
                     throw std::runtime_error("cannot write " + path.string());
             };
-            // Both sides, because the LPIPS tool needs the pair -- and the
-            // 8-bit clip here is what it will score, so its numbers are
-            // reproducible from the files alone.
+            // Both sides, and 8-bit: what LPIPS scores, so the pair rescores
+            // from the files alone (reference/python/eval_lpips.py).
             png("gt", j.gt);
             png("render", j.pred);
         }
@@ -2228,8 +2291,12 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
     }
     qcv.notify_all();
     for (auto& t : workers) t.join();
+    lpips.reset();
     if (worker_error) std::rethrow_exception(worker_error);
 
+    bool with_lpips = lpips_ok.load();
+    for (const ViewScore& s : scores)
+        with_lpips = with_lpips && (!s.filled || s.lpips.size() == lpips_names.size());
     std::map<std::string, std::vector<float>> per_image;
     for (const ViewScore& s : scores) {
         if (!s.filled) continue;
@@ -2239,6 +2306,10 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
         per_image["cc_l1"].push_back(s.cc_l1);
         per_image["cc_psnr"].push_back(s.cc_psnr);
         per_image["cc_ssim"].push_back(s.cc_ssim);
+        for (size_t m = 0; with_lpips && m < lpips_names.size(); ++m) {
+            per_image[lpips_names[m]].push_back(s.lpips[m]);
+            per_image["cc_" + lpips_names[m]].push_back(s.cc_lpips[m]);
+        }
     }
 
     if (per_image.empty()) {

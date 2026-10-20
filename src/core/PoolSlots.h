@@ -321,6 +321,9 @@ enum class SaveClass : uint8_t {
   X(SemiOffloadedAdamBuf           , "semi_offloaded_adam_buf",           Other    , Never) \
   X(SsimScalar                     , "ssim_scalar",                       Other    , Never) \
   X(SsimMaskWeight                 , "ssim.mask_weight",                  Image    , Never) \
+  X(SsimBlurred                    , "ssim.blurred",                      Image    , Never) \
+  X(SsimBlurNorm                   , "ssim.blur_norm",                    Image    , Never) \
+  X(SsimBlurGrad                   , "ssim.blur_grad",                    Image    , Never) \
   X(ScielabMaskWeight              , "scielab.mask_weight",               Image    , Never) \
   X(FlipMaskWeight                 , "flip.mask_weight",                  Image    , Never) \
   /* ---- densify scratch ---- */ \

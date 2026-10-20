@@ -449,6 +449,83 @@ int main() {
         check(sworst <= 1e-4 * ef, "flip_feature map: a step scores its edge difference");
     }
 
+    // Blur-tolerant SSIM trains on w * (1 - S). Its gradient runs through the
+    // blur's own pass for the blurred branch, so check it where that pass
+    // renormalizes (the corner) and where the mask cuts the windows.
+    {
+        constexpr int kBt = (int)PerceptualLoss::SsimBlurTolerant;
+        const float w = 0.2f;
+        auto fd_check = [&](const std::vector<uint8_t>& mask, int64_t y0,
+                            int64_t x0, const char* what) {
+            std::vector<float> base = ramp_image(61), ref = ramp_image(63);
+            Outcome a = run(mask, false, 0.0f, H, W, w, &base, 0.0f, -1.0f, &ref, kBt);
+            double gsum = 0.0;
+            const float eps = 1.0f / 256.0f;
+            std::vector<float> up = base, dn = base;
+            for (int64_t y = y0; y < y0 + 8; y++)
+                for (int64_t x = x0; x < x0 + 4; x++)
+                    for (int c = 0; c < 3; c++) {
+                        size_t i = (size_t)(y * W + x) * 3 + c;
+                        gsum += a.v_render_rgb[i];
+                        up[i] += eps; dn[i] -= eps;
+                    }
+            Outcome bu = run(mask, false, 0.0f, H, W, w, &up, 0.0f, -1.0f, &ref, kBt);
+            Outcome bd = run(mask, false, 0.0f, H, W, w, &dn, 0.0f, -1.0f, &ref, kBt);
+            double fd = -(double)(bu.ssim - bd.ssim) * w / (2.0 * eps);
+            std::printf("    (central difference %.6g vs gradient sum %.6g)\n", fd, gsum);
+            check(gsum != 0.0 && std::fabs(fd - gsum) <= 0.02 * std::fabs(gsum), what);
+        };
+        fd_check({}, 12, 14, "ssim_blur_tolerant gradient matches the ssim it reports");
+        fd_check({}, 0, 0, "ssim_blur_tolerant gradient at the image corner");
+        fd_check(half_mask(), 8, W / 2, "ssim_blur_tolerant gradient at a mask edge");
+
+        std::vector<float> rgb = ramp_image(61), ref = ramp_image(63);
+        Outcome ign = run(half_mask(), false, 0.0f, H, W, w, &rgb, 0.0f, -1.0f, &ref, kBt,
+                          (int)DensifyLossMapMode::SsimContrastStruct);
+        bool masked_zero = true, kept_nonzero = false;
+        for (int64_t y = 0; y < H; y++)
+            for (int64_t x = 0; x < W; x++) {
+                const float g = ign.v_render_rgb[(size_t)(y * W + x) * 3];
+                // The map divides by 3 as a multiply: 1 - 3 * (1/3) is not 0.
+                if (x < W / 2)
+                    masked_zero &= g == 0.0f && std::fabs(ign.map[(size_t)(y * W + x)]) <= 1e-6f;
+                else kept_nonzero |= (g != 0.0f);
+            }
+        check(masked_zero && kept_nonzero,
+              "ssim_blur_tolerant: masked pixels take no gradient and score 0");
+
+        // Box-blur the noise image three times (about sigma 1.4 px), wrapping.
+        auto blurred = [&](std::vector<float> v) {
+            for (int it = 0; it < 3; it++) {
+                std::vector<float> o(v.size());
+                for (int64_t y = 0; y < H; y++)
+                    for (int64_t x = 0; x < W; x++)
+                        for (int c = 0; c < 3; c++) {
+                            float s = 0.0f;
+                            for (int dy = -1; dy <= 1; dy++)
+                                for (int dx = -1; dx <= 1; dx++)
+                                    s += v[(size_t)((((y + dy + H) % H) * W + (x + dx + W) % W) * 3 + c)];
+                            o[(size_t)((y * W + x) * 3 + c)] = s / 9.0f;
+                        }
+                v = o;
+            }
+            return v;
+        };
+        std::vector<float> soft = blurred(rgb);
+        Outcome sharp_bt = run({}, false, 0.0f, H, W, w, &rgb, 0.0f, -1.0f, &soft, kBt);
+        Outcome sharp_ss = run({}, false, 0.0f, H, W, w, &rgb, 0.0f, -1.0f, &soft, 0);
+        std::printf("    (sharp render, blurred photo: ssim %.4f, tolerant %.4f)\n",
+                    sharp_ss.ssim, sharp_bt.ssim);
+        check(sharp_bt.ssim > sharp_ss.ssim + 0.3f,
+              "ssim_blur_tolerant: a photo blurrier than the render costs little");
+        Outcome soft_bt = run({}, false, 0.0f, H, W, w, &soft, 0.0f, -1.0f, &rgb, kBt);
+        Outcome soft_ss = run({}, false, 0.0f, H, W, w, &soft, 0.0f, -1.0f, &rgb, 0);
+        std::printf("    (blurred render, sharp photo: ssim %.4f, tolerant %.4f)\n",
+                    soft_ss.ssim, soft_bt.ssim);
+        check(soft_bt.ssim <= soft_ss.ssim + 1e-5f,
+              "ssim_blur_tolerant: a render blurrier than the photo gains nothing");
+    }
+
     // A zero ssim_lambda still trains nothing through the perceptual term,
     // but a map that is only that term must not come back blank.
     {
@@ -482,6 +559,13 @@ int main() {
             worst = std::max(worst, (double)std::fabs(l1.v_render_rgb[i] -
                                                       l1_fl.v_render_rgb[i]));
         check(worst == 0.0, "ssim_lambda 0: flip adds no gradient");
+        Outcome l1_bt = run({}, false, 0.0f, H, W, 0.0f, &rgb, 1.0f, -1.0f, &ref,
+                            (int)PerceptualLoss::SsimBlurTolerant);
+        worst = 0.0;
+        for (size_t i = 0; i < l1.v_render_rgb.size(); i++)
+            worst = std::max(worst, (double)std::fabs(l1.v_render_rgb[i] -
+                                                      l1_bt.v_render_rgb[i]));
+        check(worst == 0.0, "ssim_lambda 0: ssim_blur_tolerant adds no gradient");
     }
 
     std::printf("%s\n", g_failures ? "FAILED" : "all ok");

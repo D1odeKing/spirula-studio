@@ -136,7 +136,12 @@ enum class PerceptualLoss : int {
     Ssim = 0,
     SCielab = 1,
     Flip = 2,
+    SsimBlurTolerant = 3,
 };
+
+// SsimBlurTolerant's blur sigma in full-resolution pixels; each coarser loss
+// scale halves it (docs/notes/ssim-blur-tolerance.md).
+constexpr float kSsimBlurTolerance = 1.5f;
 
 // The S-CIELAB term is mean dE*ab / 100, so L* spans [0, 1] as the image does.
 constexpr float kScielabLossPerDeltaE = 0.01f;

@@ -2373,6 +2373,55 @@ SS_MSG(preparing_engine,
     TR("Motor hazırlanıyor (splat'lar tohumlanıyor, görüntüler önbelleğe "
        "alınıyor)…"));
 
+// {0} a file name, {1} FileDownload's status ("42% of 553 MB").
+SS_MSG(fetching_lpips,
+    EN("Downloading the LPIPS checkpoint {0}: {1}"),
+    JA("LPIPS チェックポイント {0} をダウンロード中: {1}"),
+    ZH_HANS("正在下载 LPIPS 检查点 {0}：{1}"),
+    ZH_HANT("正在下載 LPIPS 檢查點 {0}：{1}"),
+    KO("LPIPS 체크포인트 {0} 내려받는 중: {1}"),
+    DE("LPIPS-Checkpoint {0} wird heruntergeladen: {1}"),
+    FR("Téléchargement du point de contrôle LPIPS {0} : {1}"),
+    ES("Descargando el punto de control de LPIPS {0}: {1}"),
+    PT("Baixando o checkpoint do LPIPS {0}: {1}"),
+    IT("Download del checkpoint LPIPS {0}: {1}"),
+    NL("LPIPS-checkpoint {0} wordt gedownload: {1}"),
+    RU("Загрузка контрольной точки LPIPS {0}: {1}"),
+    TR("LPIPS denetim noktası {0} indiriliyor: {1}"));
+
+SS_MSG(lpips_fetch_failed,
+    EN("Could not download the LPIPS checkpoint {0}, which evaluation needs: {1}. "
+       "Turn LPIPS off in the training options to train without it."),
+    JA("評価に必要な LPIPS チェックポイント {0} をダウンロードできませんでした: {1}。"
+       "LPIPS なしで学習するには、学習オプションで LPIPS をオフにしてください。"),
+    ZH_HANS("无法下载评估所需的 LPIPS 检查点 {0}：{1}。若要不用 LPIPS 训练，"
+            "请在训练选项中关闭 LPIPS。"),
+    ZH_HANT("無法下載評估所需的 LPIPS 檢查點 {0}：{1}。若要不用 LPIPS 訓練，"
+            "請在訓練選項中關閉 LPIPS。"),
+    KO("평가에 필요한 LPIPS 체크포인트 {0} 파일을 내려받지 못했습니다: {1}. "
+       "LPIPS 없이 학습하려면 학습 옵션에서 LPIPS를 끄세요."),
+    DE("Der LPIPS-Checkpoint {0}, den die Auswertung braucht, ließ sich nicht "
+       "herunterladen: {1}. Um ohne ihn zu trainieren, LPIPS in den "
+       "Trainingsoptionen ausschalten."),
+    FR("Impossible de télécharger le point de contrôle LPIPS {0}, nécessaire à "
+       "l'évaluation : {1}. Pour entraîner sans lui, désactivez LPIPS dans les "
+       "options d'entraînement."),
+    ES("No se pudo descargar el punto de control de LPIPS {0}, que la evaluación "
+       "necesita: {1}. Para entrenar sin él, desactive LPIPS en las opciones de "
+       "entrenamiento."),
+    PT("Não foi possível baixar o checkpoint do LPIPS {0}, de que a avaliação "
+       "precisa: {1}. Para treinar sem ele, desative o LPIPS nas opções de "
+       "treinamento."),
+    IT("Impossibile scaricare il checkpoint LPIPS {0}, necessario alla "
+       "valutazione: {1}. Per addestrare senza, disattiva LPIPS nelle opzioni di "
+       "addestramento."),
+    NL("Het LPIPS-checkpoint {0}, dat de evaluatie nodig heeft, kon niet worden "
+       "gedownload: {1}. Zet LPIPS uit in de trainingsopties om zonder te trainen."),
+    RU("Не удалось скачать контрольную точку LPIPS {0}, нужную для оценки: {1}. "
+       "Чтобы обучать без неё, отключите LPIPS в параметрах обучения."),
+    TR("Değerlendirmenin ihtiyaç duyduğu LPIPS denetim noktası {0} indirilemedi: "
+       "{1}. Onsuz eğitmek için eğitim seçeneklerinde LPIPS'i kapatın."));
+
 SS_MSG(pause,
     EN("Pause"),         JA("一時停止"),      ZH_HANS("暂停"),     ZH_HANT("暫停"),
     KO("일시 정지"),      DE("Pause"),        FR("Pause"),        ES("Pausar"),

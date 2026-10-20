@@ -45,7 +45,9 @@ float fused_ssim_inplace(
     int ssim_loss_map_mode,
     // Positive: a pixel above it in every channel of BOTH images drops out,
     // exactly as a masked one does.
-    float saturation_threshold
+    float saturation_threshold,
+    // Positive: the blur sigma, in pixels, of blur-tolerant SSIM.
+    float blur_tolerance
 );
 
 
@@ -59,6 +61,7 @@ float fused_ssim_inplace_async(
     float ssim_loss_map_weight,
     int ssim_loss_map_mode,
     float saturation_threshold,
+    float blur_tolerance,
     AsyncReadout<float>& readout
 );
 

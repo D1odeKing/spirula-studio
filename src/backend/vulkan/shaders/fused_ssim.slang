@@ -1181,3 +1181,329 @@ void flip_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             atomic_add_f32(p.val, _fl_sm[0]);
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Blur-tolerant SSIM (kernels/loss/FusedSSIM.cu's _ssim_bt_* kernels)
+// ---------------------------------------------------------------------------
+
+// The main kernel takes SSIM's tile (kSsimTile); the blur passes keep 16.
+static const int BT_T = kSsimTile;
+static const int BT_S = BT_T + 2 * HALO;
+static const int BT_L = BT_T + 4 * HALO;
+static const int BT_R = 6;
+static const int BT_NW = 5;   // window slots per thread, enough for tile 24
+static const int BB_T = 16;
+static const float kBtTemp = 50.0f;
+
+struct BtParams {
+    uint* img1;
+    uint* img2;
+    uint* masks;
+    float* mask_w;
+    float* blurred;    // [B,H,W,3] B img1
+    float* norm;       // [B,H,W] the blur's kept weight
+    float* g_blur;     // [B,H,W,3] dL/d(B img1) / norm
+    float* dL_dimg1;   // [B,H,W,3], accumulated
+    float* val;
+    float* loss_map;
+    int B, H, W;
+    int Bm, Hm, Wm;
+    float dL_dmap, map_weight, sat;
+    int mode;          // SsimLossMapMode
+    uint flags;        // kSsim* bits
+    int r;             // blur radius
+    float w[BT_R + 1]; // blur taps by |offset|
+};
+
+[ForceInline]
+bool _bt_mask(BtParams p, int b, int y, int x) {
+    if ((p.flags & kSsimHasMask) != 0 &&
+            !_fs_mask_at(p.masks, p.Bm, p.Hm, p.Wm, p.H, p.W, b, y, x))
+        return false;
+    return _fs_unclipped(p.img1, p.img2, uint(kSsimFmts), p.sat, p.H, p.W, b, y, x);
+}
+
+static const int BT_BS = BB_T + 2 * BT_R;
+groupshared float _bt_bt[BT_BS * BT_BS * 4];
+groupshared float _bt_bh[BT_BS * BB_T * 4];
+
+// Forward: blurred = B(m img1) / B(m), norm = B(m), m the kept pixels.
+// Adjoint: dL_dimg1 += m B^T g_blur.
+[ForceInline]
+void _bt_blur(uint3 wg, uint tid, BtParams p, bool adjoint) {
+    const int S = BB_T + 2 * p.r;
+    const int b = int(wg.z);
+    const int x0 = int(wg.x) * BB_T - p.r, y0 = int(wg.y) * BB_T - p.r;
+    const uint fmt1 = uint(kSsimFmts) & 3u;
+    for (int i = int(tid); i < S * S; i += 256) {
+        int x = x0 + i % S, y = y0 + i / S;
+        float4 v = float4(0.0f);
+        if (uint(x) < uint(p.W) && uint(y) < uint(p.H)) {
+            int pix = (b * p.H + y) * p.W + x;
+            if (adjoint)
+                v = float4(p.g_blur[pix * 3], p.g_blur[pix * 3 + 1], p.g_blur[pix * 3 + 2], 0.0f);
+            else if (_bt_mask(p, b, y, x))
+                v = float4(rgb_load3(p.img1, pix, fmt1), 1.0f);
+        }
+        _bt_bt[i * 4] = v.x;
+        _bt_bt[i * 4 + 1] = v.y;
+        _bt_bt[i * 4 + 2] = v.z;
+        _bt_bt[i * 4 + 3] = v.w;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    for (int i = int(tid); i < S * BB_T; i += 256) {
+        int ly = i / BB_T, lx = i % BB_T;
+        float4 a = float4(0.0f);
+        for (int d = -p.r; d <= p.r; d++) {
+            int j = (ly * S + lx + p.r + d) * 4;
+            a += p.w[abs(d)] * float4(_bt_bt[j], _bt_bt[j + 1], _bt_bt[j + 2], _bt_bt[j + 3]);
+        }
+        _bt_bh[i * 4] = a.x;
+        _bt_bh[i * 4 + 1] = a.y;
+        _bt_bh[i * 4 + 2] = a.z;
+        _bt_bh[i * 4 + 3] = a.w;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    int tx = int(tid) % BB_T, ty = int(tid) / BB_T;
+    int x = int(wg.x) * BB_T + tx, y = int(wg.y) * BB_T + ty;
+    if (x >= p.W || y >= p.H) return;
+    float4 a = float4(0.0f);
+    for (int d = -p.r; d <= p.r; d++) {
+        int j = ((ty + p.r + d) * BB_T + tx) * 4;
+        a += p.w[abs(d)] * float4(_bt_bh[j], _bt_bh[j + 1], _bt_bh[j + 2], _bt_bh[j + 3]);
+    }
+    int pix = (b * p.H + y) * p.W + x;
+    if (adjoint) {
+        if (_bt_mask(p, b, y, x)) {
+            p.dL_dimg1[pix * 3] += a.x;
+            p.dL_dimg1[pix * 3 + 1] += a.y;
+            p.dL_dimg1[pix * 3 + 2] += a.z;
+        }
+    } else {
+        float n = a.w > 0.0f ? 1.0f / a.w : 0.0f;
+        p.blurred[pix * 3] = a.x * n;
+        p.blurred[pix * 3 + 1] = a.y * n;
+        p.blurred[pix * 3 + 2] = a.z * n;
+        p.norm[pix] = a.w;
+    }
+}
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ssim_bt_blur(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID, uniform BtParams p) {
+    _bt_blur(wg, tid, p, false);
+}
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ssim_bt_blur_adj(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID, uniform BtParams p) {
+    _bt_blur(wg, tid, p, true);
+}
+
+// SSIM of one window and its adjoints w.r.t. the first image's raw window sums.
+[ForceInline]
+float _bt_ssim(float mu1, float mu2, float s11, float s22, float s12,
+               out float a_mu, out float a_11, out float a_12, out float cs) {
+    float A = mu1 * mu1 + mu2 * mu2 + kC1, Bv = s11 + s22 + kC2;
+    float C = 2.0f * mu1 * mu2 + kC1, D = 2.0f * s12 + kC2;
+    a_mu = (mu2 * 2.0f * D) / (A * Bv) - (mu2 * 2.0f * C) / (A * Bv) -
+           (mu1 * 2.0f * C * D) / (A * A * Bv) + (mu1 * 2.0f * C * D) / (A * Bv * Bv);
+    a_11 = (-C * D) / (A * Bv * Bv);
+    a_12 = (2.0f * C) / (A * Bv);
+    cs = D / Bv;
+    return (C * D) / (A * Bv);
+}
+
+groupshared float _bt_sm[2 * BT_L * BT_L + 5 * BT_L * BT_S];   // 7272 / 11352
+groupshared float _bt_map[BT_T * BT_T];
+
+[shader("compute")]
+[numthreads(256, 1, 1)]
+void ssim_bt_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID, uniform BtParams p) {
+    const int b = int(wg.z);
+    const int sx0 = int(wg.x) * BT_T, sy0 = int(wg.y) * BT_T;
+    const uint fmt1 = uint(kSsimFmts) & 3u;
+    const uint fmt2 = (uint(kSsimFmts) >> 2) & 3u;
+    const bool lm_active = p.mode != 0 && (p.flags & kSsimHasLossMap) != 0;
+    const bool has_cov = (p.flags & kSsimHasCov) != 0;
+    const float grad = p.dL_dmap / (3.0f * float(p.B) * float(p.W) * float(p.H));
+    const int XC = 2 * BT_L * BT_L;     // window sums [BT_L][BT_S][5]
+    // Unblurred adjoints overwrite the tile in pass 1 (its window loop reads
+    // only the sums); the blurred ones follow once the sums are done.
+    const int ADJB = XC;                // [3][BT_S][BT_S]
+    const int SCR = ADJB + 3 * BT_S * BT_S;   // [BT_S][BT_T][3]
+    float val = 0.0f;
+
+    for (int ci = 0; ci < 3; ci++) {
+        float m[BT_NW][5] = {};
+        float gb[BT_NW][3];
+        for (int pass = 0; pass < 2; pass++) {
+            GroupMemoryBarrierWithGroupSync();
+            for (int i = int(tid); i < BT_L * BT_L; i += 256) {
+                int gy = sy0 + i / BT_L - 2 * HALO, gx = sx0 + i % BT_L - 2 * HALO;
+                bool keep = _bt_mask(p, b, gy, gx);
+                float X = 0.0f;
+                if (keep && uint(gx) < uint(p.W) && uint(gy) < uint(p.H))
+                    X = pass == 0 ? _fs_pix(p.img1, fmt1, b, gy, gx, ci, p.H, p.W)
+                                  : p.blurred[((b * p.H + gy) * p.W + gx) * 3 + ci];
+                _bt_sm[i * 2] = X;
+                if (pass == 0)
+                    _bt_sm[i * 2 + 1] = keep ? _fs_pix(p.img2, fmt2, b, gy, gx, ci, p.H, p.W) : 0.0f;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            // Pass 1 needs only the blurred render's three sums; y's are kept.
+            const int nk = pass == 0 ? 5 : 3;
+            for (int l = int(tid); l < BT_S * BT_L; l += 256) {
+                int lx = l % BT_S + HALO, ly = l / BT_S;
+                float s[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+                [ForceUnroll]
+                for (int d = -HALO; d <= HALO; d++) {
+                    float w = kGauss[HALO - abs(d)];
+                    float X = _bt_sm[(ly * BT_L + lx + d) * 2];
+                    float Y = _bt_sm[(ly * BT_L + lx + d) * 2 + 1];
+                    s[0] += X * w;
+                    s[1] += X * X * w;
+                    s[2] += X * Y * w;
+                    if (pass == 0) {
+                        s[3] += Y * w;
+                        s[4] += Y * Y * w;
+                    }
+                }
+                [ForceUnroll]
+                for (int k = 0; k < 5; k++)
+                    if (k < nk) _bt_sm[XC + (ly * BT_S + lx - HALO) * 5 + k] = s[k];
+            }
+            GroupMemoryBarrierWithGroupSync();
+            [ForceUnroll]
+            for (int k = 0; k < BT_NW; k++) {
+                int l = int(tid) + k * 256;
+                if (l >= BT_S * BT_S) break;
+                int lx = l % BT_S, ly = l / BT_S + HALO;
+                float s[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+                [ForceUnroll]
+                for (int d = -HALO; d <= HALO; d++) {
+                    float w = kGauss[HALO - abs(d)];
+                    [ForceUnroll]
+                    for (int j = 0; j < 5; j++)
+                        if (j < nk) s[j] += _bt_sm[XC + ((ly + d) * BT_S + lx) * 5 + j] * w;
+                }
+                if (pass == 0) {
+                    [ForceUnroll]
+                    for (int j = 0; j < 5; j++) m[k][j] = s[j];
+                    continue;
+                }
+                int cy = sy0 + ly - 2 * HALO, cx = sx0 + lx - HALO;
+                bool in = uint(cx) < uint(p.W) && uint(cy) < uint(p.H);
+                float inv_cov = 1.0f;
+                if (has_cov && in)
+                    inv_cov = 1.0f / max(p.mask_w[(b * p.H + cy) * p.W + cx], 1e-6f);
+                float mx = m[k][0] * inv_cov, my = m[k][3] * inv_cov;
+                float syy = m[k][4] * inv_cov - my * my;
+                float sxx = m[k][1] * inv_cov - mx * mx, sxy = m[k][2] * inv_cov - mx * my;
+                float mb = s[0] * inv_cov;
+                float sbb = s[1] * inv_cov - mb * mb, sby = s[2] * inv_cov - mb * my;
+                float cs0, cs1, a0, a1, a2;
+                float S0 = _bt_ssim(mx, my, sxx, syy, sxy, a0, a1, a2, cs0);
+                float S1 = _bt_ssim(mb, my, sbb, syy, sby, gb[k][0], gb[k][1], gb[k][2], cs1);
+                float top = max(S0, S1);
+                float e0 = exp(kBtTemp * (S0 - top)), e1 = exp(kBtTemp * (S1 - top));
+                float w0 = e0 / (e0 + e1), w1 = 1.0f - w0;
+                float S = top + (log(e0 + e1) - 0.69314718f) / kBtTemp;
+                bool cmask = !in || _bt_mask(p, b, cy, cx);
+                if (lx >= HALO && lx < HALO + BT_T && ly >= 2 * HALO &&
+                        ly < 2 * HALO + BT_T && in) {
+                    if (lm_active) {
+                        float lm = S;
+                        if (p.mode == 2) {  // contrast*structure
+                            lm = w0 * cs0 + w1 * cs1;
+                        } else if (p.mode == 3) {  // structure only
+                            float vy = max(syy, 0.0f);
+                            lm = w0 * (2.0f * sxy + kC2) / (2.0f * sqrt(max(sxx, 0.0f) * vy) + kC2) +
+                                 w1 * (2.0f * sby + kC2) / (2.0f * sqrt(max(sbb, 0.0f) * vy) + kC2);
+                        }
+                        if (!cmask) lm = 1.0f;
+                        int r = (ly - 2 * HALO) * BT_T + lx - HALO;
+                        if (ci == 0) _bt_map[r] = lm;
+                        else _bt_map[r] += lm;
+                    }
+                    val += cmask ? S : 1.0f;
+                }
+                float gw = (in && cmask) ? grad * inv_cov : 0.0f;
+                _bt_sm[l] = a0 * w0 * gw;
+                _bt_sm[BT_S * BT_S + l] = a1 * w0 * gw;
+                _bt_sm[2 * BT_S * BT_S + l] = a2 * w0 * gw;
+                gb[k][0] *= w1 * gw; gb[k][1] *= w1 * gw; gb[k][2] *= w1 * gw;
+            }
+        }
+        GroupMemoryBarrierWithGroupSync();
+        [ForceUnroll]
+        for (int k = 0; k < BT_NW; k++) {
+            int l = int(tid) + k * 256;
+            if (l >= BT_S * BT_S) break;
+            [ForceUnroll]
+            for (int j = 0; j < 3; j++) _bt_sm[ADJB + j * BT_S * BT_S + l] = gb[k][j];
+        }
+        // One branch at a time, so the 24-pixel tile fits 48 KB.
+        for (int br = 0; br < 2; br++) {
+            GroupMemoryBarrierWithGroupSync();
+            const int G = br == 0 ? 0 : ADJB;
+            for (int l = int(tid); l < BT_S * BT_T; l += 256) {
+                int yy = l / BT_T, cx = l % BT_T;
+                float a[3] = { 0.0f, 0.0f, 0.0f };
+                [ForceUnroll]
+                for (int d = -HALO; d <= HALO; d++) {
+                    float w = kGauss[HALO - abs(d)];
+                    const int o = G + yy * BT_S + cx + HALO + d;
+                    [ForceUnroll]
+                    for (int j = 0; j < 3; j++) a[j] += _bt_sm[o + j * BT_S * BT_S] * w;
+                }
+                [ForceUnroll]
+                for (int j = 0; j < 3; j++) _bt_sm[SCR + l * 3 + j] = a[j];
+            }
+            GroupMemoryBarrierWithGroupSync();
+            if ((p.flags & kSsimWriteGrad) == 0) continue;
+            for (int l = int(tid); l < BT_T * BT_T; l += 256) {
+                int tx = l % BT_T, ty = l / BT_T;
+                int px = sx0 + tx, py = sy0 + ty;
+                if (px >= p.W || py >= p.H) continue;
+                float a[3] = { 0.0f, 0.0f, 0.0f };
+                [ForceUnroll]
+                for (int d = -HALO; d <= HALO; d++) {
+                    float w = kGauss[HALO - abs(d)];
+                    [ForceUnroll]
+                    for (int j = 0; j < 3; j++) a[j] += _bt_sm[SCR + ((ty + HALO + d) * BT_T + tx) * 3 + j] * w;
+                }
+                int pix = (b * p.H + py) * p.W + px;
+                int o = pix * 3 + ci;
+                bool keep = _bt_mask(p, b, py, px);
+                float Y = _fs_pix(p.img2, fmt2, b, py, px, ci, p.H, p.W);
+                if (br == 0) {
+                    float X = _fs_pix(p.img1, fmt1, b, py, px, ci, p.H, p.W);
+                    p.dL_dimg1[o] += keep ? a[0] + 2.0f * X * a[1] + Y * a[2] : 0.0f;
+                } else {
+                    p.g_blur[o] = keep ? (a[0] + 2.0f * p.blurred[o] * a[1] + Y * a[2]) / p.norm[pix]
+                                       : 0.0f;
+                }
+            }
+        }
+    }
+
+    if (lm_active) {
+        for (int l = int(tid); l < BT_T * BT_T; l += 256) {
+            int px = sx0 + l % BT_T, py = sy0 + l / BT_T;
+            if (px < p.W && py < p.H)
+                p.loss_map[(b * p.H + py) * p.W + px] += p.map_weight * (1.0f - _bt_map[l] / 3.0f);
+        }
+    }
+    if ((p.flags & kSsimHasVal) != 0) {
+        GroupMemoryBarrierWithGroupSync();
+        _bt_map[tid] = val / (3.0f * float(p.B) * float(p.H) * float(p.W));
+        GroupMemoryBarrierWithGroupSync();
+        for (uint s = 128; s > 0; s >>= 1) {
+            if (tid < s) _bt_map[tid] += _bt_map[tid + s];
+            GroupMemoryBarrierWithGroupSync();
+        }
+        if (tid == 0 && _bt_map[0] != 0.0f) atomic_add_f32(p.val, _bt_map[0]);
+    }
+}

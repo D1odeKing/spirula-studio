@@ -1,11 +1,8 @@
 #pragma once
 
 // Image metrics for the eval pass. All host-side, all on [0,1] float RGB in
-// HWC order, matching what the Python eval computed with torchmetrics.
-//
-// LPIPS is deliberately absent: it needs AlexNet + VGG16, and lives in
-// reference/python/eval_lpips.py, which reads the PNGs `--save-eval-images`
-// writes. Everything here is arithmetic with no model behind it.
+// HWC order, matching torchmetrics. LPIPS has a model behind it and is
+// src/lpips/, which the eval reaches through TrainerCore's LpipsHooks.
 
 #include <cstdint>
 #include <vector>

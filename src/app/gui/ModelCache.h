@@ -137,6 +137,9 @@ struct PendingDownload {
     std::string mirror;          // tried when `url` fails; empty: none
     std::string license_family;  // empty: none needed
     std::string sha256;          // lowercase hex the file must match; empty: unchecked
+    // Not a file at a URL but a child that builds the model (`spirula
+    // geometry --install`), its progress read off geometry::log_install_progress.
+    std::vector<std::string> command;
 };
 
 // A single background download. One at a time is enough for the GUI, so this
@@ -168,6 +171,7 @@ public:
 
 private:
     void run(std::vector<std::string> urls, std::string dest, uint64_t expected_bytes, std::string sha256);
+    void run_command(std::vector<std::string> argv);
     int fetch(const std::string& url, const std::string& part, uint64_t expected_bytes);
     void log(const std::string& line);
 

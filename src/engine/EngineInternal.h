@@ -174,6 +174,7 @@ void _engine_background_backward_hook(
 // bg.fwd_background (forward) and taken back from its image gradient.
 void _engine_background_chain_params(AppearanceChainParams& p);
 void _engine_background_sh_backward(const float* v_background);
+void _ensure_bg_sh_optim_state();
 
 // Background blend, PPISP and the display encode in one kernel each way, from
 // forward_3dgs; engine().appearance says whether this step's forward took it.

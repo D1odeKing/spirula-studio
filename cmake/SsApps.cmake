@@ -171,7 +171,12 @@ if(SS_BUILD_SAM)
     list(APPEND SS_TOOL_DEFS SS_TOOL_GEOMETRY=1)
     list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/DenseProcessing.cpp)
     list(APPEND SS_TOOL_DEFS SS_HAVE_ROMA=1)
-    list(APPEND SS_TOOL_LIBS ss_metric3d ss_moge ss_roma)
+    list(APPEND SS_TOOL_LIBS ss_metric3d ss_moge ss_marigold ss_roma)
+
+    # ---- LPIPS in the eval pass, installed into TrainerCore by Main.cpp ----
+    list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/EvalLpips.cpp)
+    list(APPEND SS_TOOL_DEFS SS_HAVE_LPIPS=1)
+    list(APPEND SS_TOOL_LIBS ss_lpips)
 endif()
 
 # ---------------------------------------------------------------------------

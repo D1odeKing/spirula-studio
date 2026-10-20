@@ -49,6 +49,12 @@ trainer's Basic Options shows **Use dataset depth maps** (off by default; on
 sets `depth_supervision_weight` to the preset's value, or 0.05) and **Use
 dataset normal maps** (on by default); unticking zeroes the weight.
 
+Which network makes them is `--model`: MoGe-2 (the default, ~0.4 s an image),
+Metric3D v2, or Marigold v2, whose detail is the finest by a margin and which
+takes seconds an image and an 11 GB install built from 45 GB streamed once
+(`spirula geometry --install marigold-v2`, or the GUI's download button).
+`src/marigold/README.md` has its numbers.
+
 ## Masks
 
 A training image's mask comes from up to two places:

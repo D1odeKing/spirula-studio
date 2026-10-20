@@ -1040,7 +1040,8 @@ LossValues compute_multi_scale_per_pixel_losses(
     pool_begin_phase(PoolPhase::Loss);
     const auto _mode = densify_loss_map_base((DensifyLossMapMode)loss_map_mode);
     const bool _nms = densify_loss_map_has_nms((DensifyLossMapMode)loss_map_mode);
-    const bool _ssim = perceptual_loss == (int)PerceptualLoss::Ssim;
+    const bool _ssim_bt = perceptual_loss == (int)PerceptualLoss::SsimBlurTolerant;
+    const bool _ssim = perceptual_loss == (int)PerceptualLoss::Ssim || _ssim_bt;
     const bool _scielab = perceptual_loss == (int)PerceptualLoss::SCielab;
     const bool _flip = perceptual_loss == (int)PerceptualLoss::Flip;
     // Per-pixel L1/L2/aux terms contribute to the loss map only for LossFull.
@@ -1306,18 +1307,21 @@ LossValues compute_multi_scale_per_pixel_losses(
         static AsyncReadout<float> ssim_readout(1);
         static AsyncReadout<float> scielab_readout(1);
         static AsyncReadout<float> flip_readout(1);
+        // A map-only SSIM pass stays plain: only the trained term tolerates blur.
+        const float ssim_blur =
+            _ssim_bt ? kSsimBlurTolerance / (float)(1 << scale) : 0.0f;
         if (_ssim && scale == 0) {
             ssim_val = fused_ssim_inplace_async(
                 render_rgb_s[scale], ref_rgb_s[scale], ref_alpha_s[scale],
                 -w_ssim, scale_grads.v_render_rgb, loss_map_scale, _map_w,
-                _ssim_mode, saturation_threshold, ssim_readout);
+                _ssim_mode, saturation_threshold, ssim_blur, ssim_readout);
         } else if (_ssim || _ssim_mode != (int)SsimLossMapMode::SsimNone) {
             fused_ssim_inplace(
                 render_rgb_s[scale], ref_rgb_s[scale], ref_alpha_s[scale],
                 _ssim ? -w_ssim : 0.0f,
                 _ssim ? scale_grads.v_render_rgb : TorchTensorView{},
                 /*return_ssim_val=*/false, loss_map_scale, _map_w,
-                _ssim_mode, saturation_threshold);
+                _ssim_mode, saturation_threshold, ssim_blur);
         }
         TorchTensorView scielab_map = _scielab_map ? loss_map_scale : TorchTensorView{};
         if (_scielab && scale == 0) {

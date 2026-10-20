@@ -439,6 +439,18 @@ int main(int argc, char** argv) {
         {"sc_xff_nms", 1, 37, 53, 1, 0, 0, 0, 0, 16, 16, true, false, true,
          (int)DensifyLossMapMode::FlipFeatureNms, 0.9f, 0.5f, -1.0f,
          (int)PerceptualLoss::SCielab},
+        // Blur-tolerant SSIM: its cs map (the auto default) with a mask over
+        // three scales, where the blur shrinks per scale, and LossFull with
+        // the clip test and a smaller mask.
+        {"ssim_bt", 2, 40, 48, 3, 0, 0, 0, 0, 0, 0, true, false, true,
+         (int)DensifyLossMapMode::SsimContrastStruct, 0.9f, 0.5f, -1.0f,
+         (int)PerceptualLoss::SsimBlurTolerant},
+        {"ssim_bt_lf", 1, 37, 53, 2, 0, 0, 0, 0, 16, 16, true, false, false,
+         (int)DensifyLossMapMode::LossFull, 0.9f, 0.5f, 0.98f,
+         (int)PerceptualLoss::SsimBlurTolerant},
+        {"ssim_bt_str", 1, 32, 32, 1, 0, 0, 0, 0, 0, 0, false, false, true,
+         (int)DensifyLossMapMode::SsimStructure, 0.9f, 0.5f, -1.0f,
+         (int)PerceptualLoss::SsimBlurTolerant},
     };
     for (const MsCfg& c : cfgs) run_ms_cfg(r, c);
     run_quantile(r);

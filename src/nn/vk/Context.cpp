@@ -800,6 +800,19 @@ void Context::createDevice(const ContextOptions& opts) {
     }
 #endif
 
+    // A transfer-only family is the copy engine: work on it runs beside the
+    // compute queue rather than between its dispatches.
+    if (envFlagDefaultOn("NN_TRANSFER_QUEUE"))
+        for (uint32_t i = 0; i < nq; ++i) {
+            const VkQueueFlags f = qf2[i].queueFamilyProperties.queueFlags;
+            if ((f & VK_QUEUE_TRANSFER_BIT) &&
+                !(f & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) &&
+                i != video_queue_family_ && i != encode_queue_family_) {
+                transfer_family_ = i;
+                break;
+            }
+        }
+
     // ---- queues ---------------------------------------------------------
     const float prio = 1.0f;
     std::vector<VkDeviceQueueCreateInfo> qcis;
@@ -816,6 +829,10 @@ void Context::createDevice(const ContextOptions& opts) {
         if (encode_queue_family_ != UINT32_MAX && encode_queue_family_ != queue_family_ &&
             encode_queue_family_ != video_queue_family_) {
             q.queueFamilyIndex = encode_queue_family_;
+            qcis.push_back(q);
+        }
+        if (transfer_family_ != UINT32_MAX) {
+            q.queueFamilyIndex = transfer_family_;
             qcis.push_back(q);
         }
     }
@@ -895,6 +912,8 @@ void Context::createDevice(const ContextOptions& opts) {
                          video_queue_family_ == queue_family_ ? 0 : 0, &video_queue_);
     if (encode_queue_family_ != UINT32_MAX)
         vkGetDeviceQueue(device_, encode_queue_family_, 0, &encode_queue_);
+    if (transfer_family_ != UINT32_MAX)
+        vkGetDeviceQueue(device_, transfer_family_, 0, &transfer_queue_);
 
 }
 

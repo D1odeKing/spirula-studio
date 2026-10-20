@@ -6203,7 +6203,7 @@ void GuiApp::draw_geometry_options() {
         }
         ImGui::EndCombo();
     }
-    ui::TextDisabled(*catalog[(size_t)model_idx].blurb);
+    ui::TextDisabledWrapped(*catalog[(size_t)model_idx].blurb);
 
     FileDownload& geom_dl = _geom_download.current();
     if (_geom_download.running()) {
@@ -6217,9 +6217,20 @@ void GuiApp::draw_geometry_options() {
         if (ui::Button(dmsg::stop)) _geom_download.cancel();
         ImGui::PopID();
     } else if (geometry_model_missing()) {
+        // Checked before a 45 GB stream starts, not discovered at 80%.
+        const GeometryDisk disk = geometry_model_disk(_geometry.model);
+        ImGui::BeginDisabled(!disk.fits);
         if (ui::Button(dmsg::geom_get_model)) request_geometry_download();
+        ImGui::EndDisabled();
         ImGui::SameLine();
         ui::TextDisabledRaw(human_bytes(catalog[(size_t)model_idx].bytes));
+        if (disk.needed && disk.fits)
+            ui::TextDisabledWrapped(dmsg::geom_install_disk,
+                                    {human_bytes(disk.disk), disk.where, human_bytes(disk.free)});
+        if (!disk.fits)
+            ui::TextColoredWrapped(kErr, dmsg::geom_install_no_disk,
+                                   {human_bytes(disk.disk), disk.where, human_bytes(disk.spare),
+                                    human_bytes(disk.free)});
         if (geom_dl.state() == FileDownload::State::Failed)
             ui::TextColoredWrappedRaw(kErr, geom_dl.status());
     } else {
@@ -12180,9 +12191,12 @@ void GuiApp::draw_train_controls() {
         case TrainRunner::Phase::Loading:
             ui::TextColored(kDim, msg::parsing_dataset);
             break;
-        case TrainRunner::Phase::Preparing:
-            ui::TextColored(kDim, msg::preparing_engine);
+        case TrainRunner::Phase::Preparing: {
+            const std::string fetching = _runner.fetch_line();
+            if (fetching.empty()) ui::TextColored(kDim, msg::preparing_engine);
+            else ui::TextColoredWrappedRaw(kDim, fetching);
             break;
+        }
         case TrainRunner::Phase::Evaluating: {
             ui::TextColored(kDim, msg::status_evaluating);
             const bool stopping = _runner.session() &&
@@ -12301,8 +12315,13 @@ void GuiApp::draw_status_strip() {
                         {p.step + 1, format_duration(_runner.elapsed_seconds())});
         ui::TextDisabled(msg::status_explore);
     } else if (ph == TrainRunner::Phase::Preparing) {
-        ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0),
-                        msg::status_preparing);
+        const std::string fetching = _runner.fetch_line();
+        const float frac = _runner.fetch_progress();
+        if (fetching.empty())
+            ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0), msg::status_preparing);
+        else
+            ui::ProgressBarRaw(frac >= 0.0f ? frac : -(float)ImGui::GetTime(), ImVec2(-8, 0),
+                               fetching.c_str());
         ui::TextDisabledRaw(" ");
     } else if (ph == TrainRunner::Phase::Evaluating) {
         const spirula::EvalProgress p = _runner.latest_eval_progress();

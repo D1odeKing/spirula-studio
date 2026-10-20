@@ -482,6 +482,35 @@ void maxpool2x2(const Tensor& out, const Tensor& in) {
     resize_op("resample.maxpool2x2", out, in);
 }
 
+void maxpool(const Tensor& out, const Tensor& in, int kernel, int stride) {
+    NN_CHECK(out.ndim == 3 && in.ndim == 3, "maxpool expects [H, W, C] tensors");
+    NN_CHECK(out.shape[2] == in.shape[2], "maxpool: channel counts differ");
+    NN_CHECK(kernel > 0 && stride > 0 && in.shape[0] >= kernel && in.shape[1] >= kernel,
+             "maxpool(%d, %d) of %lldx%lld", kernel, stride, (long long)in.shape[0],
+             (long long)in.shape[1]);
+    const int64_t want_h = (in.shape[0] - kernel) / stride + 1;
+    const int64_t want_w = (in.shape[1] - kernel) / stride + 1;
+    NN_CHECK(out.shape[0] == want_h && out.shape[1] == want_w,
+             "maxpool(%d, %d) of %lldx%lld is %lldx%lld, but out is %lldx%lld", kernel, stride,
+             (long long)in.shape[0], (long long)in.shape[1], (long long)want_h,
+             (long long)want_w, (long long)out.shape[0], (long long)out.shape[1]);
+    const KernelName entry = span_entry("resample.maxpool", {out, in});
+
+    PoolParams p{};
+    p.out = out.ptr;
+    p.x = in.ptr;
+    p.Ho = (uint32_t)out.shape[0];
+    p.Wo = (uint32_t)out.shape[1];
+    p.Hi = (uint32_t)in.shape[0];
+    p.Wi = (uint32_t)in.shape[1];
+    p.C = (uint32_t)out.shape[2];
+    p.kh = p.kw = (uint32_t)kernel;
+    p.stride_y = p.stride_x = (uint32_t)stride;
+    vk::SpecList spec{(uint32_t)(in.dtype == DType::F16), 0u, 0u};
+    vk::Stream::get().dispatchFlat(entry, spec, out.numel(), 256, &p, sizeof(p),
+                                   &p.groups_per_row);
+}
+
 void resize_nearest(const Tensor& out, const Tensor& in, float scale_y, float scale_x) {
     NN_CHECK(out.ndim == 3 && in.ndim == 3, "resize_nearest expects [H, W, C] tensors");
     NN_CHECK(out.shape[2] == in.shape[2], "resize_nearest: channel counts differ");

@@ -1077,6 +1077,316 @@ __global__ void memory_efficient_ssim_backward_kernel(
 }
 
 // ------------------------------------------
+// Blur-tolerant SSIM
+// ------------------------------------------
+
+// Each window scores a soft max of SSIM(render, ref) and SSIM(B render, ref),
+// B a small Gaussian blur (docs/notes/ssim-blur-tolerance.md). Mirrored by
+// fused_ssim.slang's ssim_bt_* entries.
+
+#define BT_T 16      // the blur passes' tile
+#define BT_R 6
+#define BT_TEMP 50.0f
+
+// The blur's taps by |offset|, summing to 1 over -r..r.
+struct BtTaps {
+    float w[BT_R + 1];
+    int r;
+};
+
+// Forward: out = B(m img1) / B(m) and norm = B(m), m the kept pixels (in the
+// image, unmasked, unclipped). Adjoint: out += m B^T g, g already over norm.
+// The adjoint is its own pass because it needs g beyond a tile.
+template<bool adjoint, int kF1 = -1, int kF2 = -1>
+__global__ void _ssim_bt_blur_kernel(
+    int B, int H, int W, SsimImg img1, SsimImg img2, const bool* __restrict__ masks,
+    int B_mask, int H_mask, int W_mask, float sat, const float* __restrict__ g,
+    BtTaps t, float* __restrict__ out, float* __restrict__ norm
+) {
+    if constexpr (kF1 >= 0) img1.f = (PixelFormat)kF1;
+    if constexpr (kF2 >= 0) img2.f = (PixelFormat)kF2;
+    constexpr int kMax = BT_T + 2 * BT_R;
+    constexpr int kC = adjoint ? 3 : 4;
+    __shared__ float st[kMax * kMax * kC];
+    __shared__ float sh[kMax * BT_T * kC];
+    const int S = BT_T + 2 * t.r;
+    const int b = blockIdx.z;
+    const int x0 = blockIdx.x * BT_T - t.r, y0 = blockIdx.y * BT_T - t.r;
+    const int tid = threadIdx.x;
+    for (int i = tid; i < S * S; i += BT_T * BT_T) {
+        int x = x0 + i % S, y = y0 + i / S;
+        float v[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        if ((unsigned)x < (unsigned)W && (unsigned)y < (unsigned)H) {
+            size_t p = ((size_t)b * H + y) * W + x;
+            if constexpr (adjoint) {
+                for (int c = 0; c < 3; ++c) v[c] = g[p * 3 + c];
+            } else if (get_pix_mask(img1, img2, sat, masks, b, y, x, B_mask, H_mask,
+                                    W_mask, H, W)) {
+                for (int c = 0; c < 3; ++c) v[c] = pixel_load1(img1.p, img1.f, p * 3 + c);
+                v[3] = 1.0f;
+            }
+        }
+        for (int c = 0; c < kC; ++c) st[i * kC + c] = v[c];
+    }
+    __syncthreads();
+    for (int i = tid; i < S * BT_T; i += BT_T * BT_T) {
+        int ly = i / BT_T, lx = i % BT_T;
+        float a[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        for (int d = -t.r; d <= t.r; ++d) {
+            float w = t.w[abs(d)];
+            for (int c = 0; c < kC; ++c) a[c] += w * st[(ly * S + lx + t.r + d) * kC + c];
+        }
+        for (int c = 0; c < kC; ++c) sh[i * kC + c] = a[c];
+    }
+    __syncthreads();
+    const int tx = tid % BT_T, ty = tid / BT_T;
+    const int x = blockIdx.x * BT_T + tx, y = blockIdx.y * BT_T + ty;
+    if (x >= W || y >= H) return;
+    float a[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    for (int d = -t.r; d <= t.r; ++d) {
+        float w = t.w[abs(d)];
+        for (int c = 0; c < kC; ++c) a[c] += w * sh[((ty + t.r + d) * BT_T + tx) * kC + c];
+    }
+    size_t p = ((size_t)b * H + y) * W + x;
+    if constexpr (adjoint) {
+        if (get_pix_mask(img1, img2, sat, masks, b, y, x, B_mask, H_mask, W_mask, H, W))
+            for (int c = 0; c < 3; ++c) out[p * 3 + c] += a[c];
+    } else {
+        float n = a[3] > 0.0f ? 1.0f / a[3] : 0.0f;
+        for (int c = 0; c < 3; ++c) out[p * 3 + c] = a[c] * n;
+        norm[p] = a[3];
+    }
+}
+
+// SSIM of one window and its adjoints w.r.t. the raw window sums (mean,
+// E[x^2], E[xy]) of the first image, as the plain kernel takes them.
+__device__ __forceinline__ float _bt_ssim(float mu1, float mu2, float s11, float s22,
+                                          float s12, float& a_mu, float& a_11,
+                                          float& a_12, float& cs) {
+    constexpr float kC1 = 0.01f * 0.01f, kC2 = 0.03f * 0.03f;
+    float A = mu1 * mu1 + mu2 * mu2 + kC1, Bv = s11 + s22 + kC2;
+    float C = 2.0f * mu1 * mu2 + kC1, D = 2.0f * s12 + kC2;
+    a_mu = (mu2 * 2.0f * D) / (A * Bv) - (mu2 * 2.0f * C) / (A * Bv) -
+           (mu1 * 2.0f * C * D) / (A * A * Bv) + (mu1 * 2.0f * C * D) / (A * Bv * Bv);
+    a_11 = (-C * D) / (A * Bv * Bv);
+    a_12 = (2.0f * C) / (A * Bv);
+    cs = D / Bv;
+    return (C * D) / (A * Bv);
+}
+
+// The render's window sums wait in registers while the blurred render's take
+// the same shared buffer: 30 KB at T = 16. T = 24 (47.7 KB) needs 198
+// registers here, one block per SM, and ran 10% slower; Vulkan takes it.
+template<int T, int kF1 = -1, int kF2 = -1>
+__global__ void __launch_bounds__(256) _ssim_bt_kernel(
+    int B, int H, int W,
+    SsimImg img1, SsimImg img2,
+    const float* __restrict__ blurred,   // [B, H, W, 3] B img1
+    const float* __restrict__ norm,      // [B, H, W] the blur's kept weight
+    const bool* __restrict__ masks,
+    int B_mask, int H_mask, int W_mask,
+    float sat,
+    const float* __restrict__ mask_w,
+    float dL_dmap,
+    float* __restrict__ dL_dimg1,        // [B, H, W, 3], accumulated
+    float* __restrict__ g_blur,          // [B, H, W, 3], written
+    float* __restrict__ out_val,
+    float map_weight,
+    float* __restrict__ loss_map,
+    int map_mode
+) {
+    if constexpr (kF1 >= 0) img1.f = (PixelFormat)kF1;
+    if constexpr (kF2 >= 0) img2.f = (PixelFormat)kF2;
+    constexpr int kThreads = 256;
+    constexpr int S = T + 2 * HALO, L = T + 4 * HALO;
+    constexpr int NW = (S * S + kThreads - 1) / kThreads;
+    __shared__ float sm[2 * L * L + 5 * L * S];
+    __shared__ float smap[T * T];
+    const int tid = threadIdx.x;
+    const int b = blockIdx.z;
+    const int sx0 = blockIdx.x * T, sy0 = blockIdx.y * T;
+    float* lm_out = map_mode != 0 ? loss_map : nullptr;
+    const float grad = dL_dmap / (3.0f * B * W * H);
+    float* tile = sm;                       // [L][L][2]
+    float* xc = sm + 2 * L * L;             // [L][S][5]
+    // Unblurred adjoints overwrite the tile in pass 1 (its window loop reads
+    // only the sums); the blurred ones follow once the sums are done.
+    float* adj = sm;                        // [3][S][S]
+    float* adjb = sm + 2 * L * L;           // [3][S][S]
+    float* scr = adjb + 3 * S * S;          // [S][T][3]
+    float val = 0.0f;
+
+    for (int ci = 0; ci < 3; ++ci) {
+        float m[NW][5];   // pass 0's window sums
+        float gb[NW][3];  // the blurred branch's adjoints
+        // Pass 0: the render and the reference. Pass 1: the blurred render.
+        for (int pass = 0; pass < 2; ++pass) {
+            __syncthreads();
+            for (int i = tid; i < L * L; i += kThreads) {
+                int gy = sy0 + i / L - 2 * HALO, gx = sx0 + i % L - 2 * HALO;
+                bool keep = get_pix_mask(img1, img2, sat, masks, b, gy, gx,
+                                         B_mask, H_mask, W_mask, H, W);
+                float X = 0.0f;
+                if (keep && (unsigned)gx < (unsigned)W && (unsigned)gy < (unsigned)H)
+                    X = pass == 0 ? get_pix_value(img1, b, gy, gx, ci, H, W)
+                                  : blurred[(((size_t)b * H + gy) * W + gx) * 3 + ci];
+                tile[i * 2] = X;
+                if (pass == 0)
+                    tile[i * 2 + 1] = keep ? get_pix_value(img2, b, gy, gx, ci, H, W) : 0.0f;
+            }
+            __syncthreads();
+            // Pass 1 needs only the blurred render's three sums; y's are kept.
+            const int nk = pass == 0 ? 5 : 3;
+            for (int l = tid; l < S * L; l += kThreads) {
+                int lx = l % S + HALO, ly = l / S;
+                float s[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+                #pragma unroll
+                for (int d = -HALO; d <= HALO; ++d) {
+                    float w = cGauss[HALO - abs(d)];
+                    float X = tile[(ly * L + lx + d) * 2];
+                    float Y = tile[(ly * L + lx + d) * 2 + 1];
+                    s[0] += X * w;
+                    s[1] += X * X * w;
+                    s[2] += X * Y * w;
+                    if (pass == 0) {
+                        s[3] += Y * w;
+                        s[4] += Y * Y * w;
+                    }
+                }
+                #pragma unroll
+                for (int k = 0; k < 5; ++k)
+                    if (k < nk) xc[(ly * S + lx - HALO) * 5 + k] = s[k];
+            }
+            __syncthreads();
+            #pragma unroll
+            for (int k = 0; k < NW; ++k) {
+                int l = tid + k * kThreads;
+                if (l >= S * S) break;
+                int lx = l % S, ly = l / S + HALO;
+                float s[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+                #pragma unroll
+                for (int d = -HALO; d <= HALO; ++d) {
+                    float w = cGauss[HALO - abs(d)];
+                    #pragma unroll
+                    for (int j = 0; j < 5; ++j)
+                        if (j < nk) s[j] += xc[((ly + d) * S + lx) * 5 + j] * w;
+                }
+                if (pass == 0) {
+                    #pragma unroll
+                    for (int j = 0; j < 5; ++j) m[k][j] = s[j];
+                    continue;
+                }
+                int cy = sy0 + ly - 2 * HALO, cx = sx0 + lx - HALO;
+                bool in = (unsigned)cx < (unsigned)W && (unsigned)cy < (unsigned)H;
+                float inv_cov = 1.0f;
+                if (mask_w != nullptr && in)
+                    inv_cov = 1.0f / fmaxf(mask_w[((size_t)b * H + cy) * W + cx], 1e-6f);
+                float mx = m[k][0] * inv_cov, my = m[k][3] * inv_cov;
+                float syy = m[k][4] * inv_cov - my * my;
+                float sxx = m[k][1] * inv_cov - mx * mx, sxy = m[k][2] * inv_cov - mx * my;
+                float mb = s[0] * inv_cov;
+                float sbb = s[1] * inv_cov - mb * mb, sby = s[2] * inv_cov - mb * my;
+                float cs0, cs1, a0, a1, a2;
+                float S0 = _bt_ssim(mx, my, sxx, syy, sxy, a0, a1, a2, cs0);
+                float S1 = _bt_ssim(mb, my, sbb, syy, sby, gb[k][0], gb[k][1], gb[k][2], cs1);
+                float top = fmaxf(S0, S1);
+                float e0 = __expf(BT_TEMP * (S0 - top)), e1 = __expf(BT_TEMP * (S1 - top));
+                float w0 = e0 / (e0 + e1), w1 = 1.0f - w0;
+                // ln 2 off, so two equal branches score what either does.
+                float Sv = top + (__logf(e0 + e1) - 0.69314718f) / BT_TEMP;
+                bool cmask = !in || get_pix_mask(img1, img2, sat, masks, b, cy, cx,
+                                                  B_mask, H_mask, W_mask, H, W);
+                if (lx >= HALO && lx < HALO + T && ly >= 2 * HALO && ly < 2 * HALO + T && in) {
+                    if (lm_out) {
+                        float lm = Sv;
+                        if (map_mode == (int)SsimLossMapMode::SsimCs) {
+                            lm = w0 * cs0 + w1 * cs1;
+                        } else if (map_mode == (int)SsimLossMapMode::SsimStr) {
+                            constexpr float kC2 = 0.03f * 0.03f;
+                            float vy = fmaxf(syy, 0.0f);
+                            lm = w0 * (2.0f * sxy + kC2) / (2.0f * sqrtf(fmaxf(sxx, 0.0f) * vy) + kC2) +
+                                 w1 * (2.0f * sby + kC2) / (2.0f * sqrtf(fmaxf(sbb, 0.0f) * vy) + kC2);
+                        }
+                        if (!cmask) lm = 1.0f;
+                        int r = (ly - 2 * HALO) * T + lx - HALO;
+                        smap[r] = ci == 0 ? lm : smap[r] + lm;
+                    }
+                    val += cmask ? Sv : 1.0f;
+                }
+                // As in the plain kernel: no gradient from a dropped window.
+                float gw = (in && cmask) ? grad * inv_cov : 0.0f;
+                adj[l] = a0 * w0 * gw;
+                adj[S * S + l] = a1 * w0 * gw;
+                adj[2 * S * S + l] = a2 * w0 * gw;
+                gb[k][0] *= w1 * gw; gb[k][1] *= w1 * gw; gb[k][2] *= w1 * gw;
+            }
+        }
+        __syncthreads();
+        #pragma unroll
+        for (int k = 0; k < NW; ++k) {
+            int l = tid + k * kThreads;
+            if (l >= S * S) break;
+            #pragma unroll
+            for (int j = 0; j < 3; ++j) adjb[j * S * S + l] = gb[k][j];
+        }
+        // One branch at a time, so the 24-pixel tile fits 48 KB.
+        for (int br = 0; br < 2; ++br) {
+            __syncthreads();
+            const float* g = br == 0 ? adj : adjb;
+            for (int l = tid; l < S * T; l += kThreads) {
+                int yy = l / T, cx = l % T;
+                float a[3] = {0.0f, 0.0f, 0.0f};
+                #pragma unroll
+                for (int d = -HALO; d <= HALO; ++d) {
+                    float w = cGauss[HALO - abs(d)];
+                    const int o = yy * S + cx + HALO + d;
+                    #pragma unroll
+                    for (int j = 0; j < 3; ++j) a[j] += g[j * S * S + o] * w;
+                }
+                #pragma unroll
+                for (int j = 0; j < 3; ++j) scr[l * 3 + j] = a[j];
+            }
+            __syncthreads();
+            if (dL_dimg1 == nullptr) continue;
+            for (int l = tid; l < T * T; l += kThreads) {
+                int tx = l % T, ty = l / T;
+                int px = sx0 + tx, py = sy0 + ty;
+                if (px >= W || py >= H) continue;
+                float a[3] = {0.0f, 0.0f, 0.0f};
+                #pragma unroll
+                for (int d = -HALO; d <= HALO; ++d) {
+                    float w = cGauss[HALO - abs(d)];
+                    #pragma unroll
+                    for (int j = 0; j < 3; ++j) a[j] += scr[((ty + HALO + d) * T + tx) * 3 + j] * w;
+                }
+                size_t pix = ((size_t)b * H + py) * W + px, o = pix * 3 + ci;
+                bool keep = get_pix_mask(img1, img2, sat, masks, b, py, px,
+                                         B_mask, H_mask, W_mask, H, W);
+                float Y = get_pix_value(img2, b, py, px, ci, H, W);
+                if (br == 0) {
+                    float X = get_pix_value(img1, b, py, px, ci, H, W);
+                    dL_dimg1[o] += keep ? a[0] + 2.0f * X * a[1] + Y * a[2] : 0.0f;
+                } else {
+                    g_blur[o] = keep ? (a[0] + 2.0f * blurred[o] * a[1] + Y * a[2]) / norm[pix]
+                                     : 0.0f;
+                }
+            }
+        }
+    }
+
+    if (lm_out) {
+        for (int l = tid; l < T * T; l += kThreads) {
+            int px = sx0 + l % T, py = sy0 + l / T;
+            if (px < W && py < H)
+                lm_out[((size_t)b * H + py) * W + px] += map_weight * (1.0f - smap[l] / 3.0f);
+        }
+    }
+    if (out_val)
+        atomicAddFVec<kThreads>(out_val, val / (3.0f * B * H * W));
+}
+
+
+// ------------------------------------------
 // Fused S-CIELAB (Zhang & Wandell 1997)
 // ------------------------------------------
 
@@ -1915,6 +2225,61 @@ void fused_ssim_backward(
     }
 }
 
+static void _launch_ssim_bt(
+    int B, int H, int W, SsimImg img1, SsimImg img2, const bool* masks,
+    int B_mask, int H_mask, int W_mask, float sat, const float* mask_w,
+    float dL_dmap, float* dL_dimg1, float* val, float map_weight, float* map,
+    int map_mode, float sigma
+) {
+    BtTaps t{};
+    t.r = std::min(BT_R, (int)std::ceil(3.0f * sigma));
+    float sum = 0.0f;
+    for (int d = 0; d <= t.r; ++d) {
+        t.w[d] = std::exp(-0.5f * d * d / (sigma * sigma));
+        sum += (d ? 2.0f : 1.0f) * t.w[d];
+    }
+    for (int d = 0; d <= t.r; ++d) t.w[d] /= sum;
+    const size_t n = (size_t)B * H * W * 3;
+    auto& pool = DevicePool::global();
+    float* blurred = pool.acquire<float>(PoolSlot::SsimBlurred, n);
+    float* norm = pool.acquire<float>(PoolSlot::SsimBlurNorm, n / 3);
+    float* g_blur = dL_dimg1 != nullptr ? pool.acquire<float>(PoolSlot::SsimBlurGrad, n)
+                                        : nullptr;
+    const dim3 grid((W + BT_T - 1) / BT_T, (H + BT_T - 1) / BT_T, B);
+    auto with_f1 = [&](auto&& go) {
+        if (img1.f == PixelFormat::U8) go(std::integral_constant<int, (int)PixelFormat::U8>{});
+        else if (img1.f == PixelFormat::F16) go(std::integral_constant<int, (int)PixelFormat::F16>{});
+        else go(std::integral_constant<int, (int)PixelFormat::F32>{});
+    };
+    auto with_f12 = [&](auto&& go) {
+        with_f1([&](auto f1) {
+            if (img2.f == PixelFormat::U8) go(f1, std::integral_constant<int, (int)PixelFormat::U8>{});
+            else if (img2.f == PixelFormat::F16) go(f1, std::integral_constant<int, (int)PixelFormat::F16>{});
+            else go(f1, std::integral_constant<int, (int)PixelFormat::F32>{});
+        });
+    };
+    with_f12([&](auto f1, auto f2) {
+        _ssim_bt_blur_kernel<false, decltype(f1)::value, decltype(f2)::value>
+            <<<grid, BT_T * BT_T>>>(B, H, W, img1, img2, masks, B_mask, H_mask, W_mask,
+                                    sat, nullptr, t, blurred, norm);
+    });
+    CHECK_DEVICE_ERROR(cudaGetLastError());
+    with_f12([&](auto f1, auto f2) {
+        _ssim_bt_kernel<16, decltype(f1)::value, decltype(f2)::value><<<grid, 256>>>(
+            B, H, W, img1, img2, blurred, norm, masks, B_mask, H_mask, W_mask, sat, mask_w,
+            dL_dmap, dL_dimg1, g_blur, val, map_weight, map, map_mode);
+    });
+    CHECK_DEVICE_ERROR(cudaGetLastError());
+    if (g_blur != nullptr) {
+        with_f12([&](auto f1, auto f2) {
+            _ssim_bt_blur_kernel<true, decltype(f1)::value, decltype(f2)::value>
+                <<<grid, BT_T * BT_T>>>(B, H, W, img1, img2, masks, B_mask, H_mask, W_mask,
+                                        sat, g_blur, t, dL_dimg1, nullptr);
+        });
+        CHECK_DEVICE_ERROR(cudaGetLastError());
+    }
+}
+
 // Common kernel-launch helper: write SSIM scalar to ssim_buf if non-null,
 // accumulate gradient into dL_dimg1, optionally write loss map.
 // Internal: not exported through the auto-header generator.
@@ -1928,7 +2293,8 @@ static inline void _launch_fused_ssim_inplace(
     TorchTensorView ssim_loss_map,
     float ssim_loss_map_weight,
     int ssim_loss_map_mode,
-    float saturation_threshold
+    float saturation_threshold,
+    float blur_tolerance
 ) {
     const auto& s = std::get<2>(img1);
     int B = s[0], H = s[1], W = s[2];
@@ -1953,6 +2319,13 @@ static inline void _launch_fused_ssim_inplace(
         _ssim_mask_coverage(B, H, W, p_img1, p_img2, saturation_threshold,
                             mask_ptr, B_mask, H_mask, W_mask);
 
+    if (blur_tolerance > 0.0f) {
+        _launch_ssim_bt(B, H, W, p_img1, p_img2, mask_ptr, B_mask, H_mask, W_mask,
+                        saturation_threshold, mask_w, dL_dmap, _nullable_f(dL_dimg1),
+                        ssim_buf, ssim_loss_map_weight, _nullable_f(ssim_loss_map),
+                        ssim_loss_map_mode, blur_tolerance);
+        return;
+    }
     auto launch = [&](auto f1, auto f2) {
         memory_efficient_ssim_backward_kernel<true, decltype(f1)::value, decltype(f2)::value>
             <<<_LAUNCH_ARGS_3D(W, H, B, BLOCK_X_ME, BLOCK_Y_ME, 1)>>>(
@@ -1997,7 +2370,9 @@ float fused_ssim_inplace(
     int ssim_loss_map_mode,
     // Positive: a pixel above it in every channel of BOTH images drops out,
     // exactly as a masked one does.
-    float saturation_threshold
+    float saturation_threshold,
+    // Positive: the blur sigma, in pixels, of blur-tolerant SSIM.
+    float blur_tolerance
 ) {
     float* ssim_buf = nullptr;
     if (return_ssim_val) {
@@ -2008,7 +2383,7 @@ float fused_ssim_inplace(
     _launch_fused_ssim_inplace(
         img1, img2, mask, dL_dmap, dL_dimg1,
         ssim_buf, ssim_loss_map, ssim_loss_map_weight,
-        ssim_loss_map_mode, saturation_threshold);
+        ssim_loss_map_mode, saturation_threshold, blur_tolerance);
 
     if (return_ssim_val) {
         float val;
@@ -2029,6 +2404,7 @@ float fused_ssim_inplace_async(
     float ssim_loss_map_weight,
     int ssim_loss_map_mode,
     float saturation_threshold,
+    float blur_tolerance,
     AsyncReadout<float>& readout
 ) {
     float* ssim_buf = DevicePool::global().acquire<float>(PoolSlot::SsimScalar, 1);
@@ -2037,7 +2413,7 @@ float fused_ssim_inplace_async(
     _launch_fused_ssim_inplace(
         img1, img2, mask, dL_dmap, dL_dimg1,
         ssim_buf, ssim_loss_map, ssim_loss_map_weight,
-        ssim_loss_map_mode, saturation_threshold);
+        ssim_loss_map_mode, saturation_threshold, blur_tolerance);
 
     const float* prev = readout.read_previous();
     float val = prev ? prev[0] : 0.0f;

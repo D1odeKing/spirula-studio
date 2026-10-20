@@ -16226,6 +16226,125 @@ SS_MSG(geom_model_giant_blurb,
     TR("2,6 GB indirme ve kartta 2,6 GB, görüntü başına yaklaşık 2 s; büyüğe "
        "göre kazanç ölçülüdür."));
 
+SS_MSG(geom_model_marigold,
+    EN("Marigold v2 (finest, slow)"),
+    JA("Marigold v2（最も精細・低速）"), ZH_HANS("Marigold v2（最精细，较慢）"),
+    ZH_HANT("Marigold v2（最精細，較慢）"), KO("Marigold v2 (가장 정밀, 느림)"),
+    DE("Marigold v2 (feinste, langsam)"), FR("Marigold v2 (le plus fin, lent)"),
+    ES("Marigold v2 (el más fino, lento)"), PT("Marigold v2 (o mais fino, lento)"),
+    IT("Marigold v2 (il più fine, lento)"), NL("Marigold v2 (fijnste, traag)"),
+    RU("Marigold v2 (самая детальная, медленная)"), TR("Marigold v2 (en ince, yavaş)"));
+
+SS_MSG(geom_model_marigold_blurb,
+    EN("A 20-billion-parameter diffusion model tuned for depth and normals: the "
+       "finest detail here and by far the slowest, about 10 s an image for both "
+       "maps on an RTX 5070. It also runs on 6 GB cards, streaming its weights. "
+       "MoGe-2 base sets its depth's scale and finds the sky. Built once from "
+       "45 GB streamed; keeps 11 GB."),
+    JA("深度と法線向けに調整された 200 億パラメータの拡散モデルです。ここで最も"
+       "精細で、ずば抜けて遅く、RTX 5070 で両方のマップに 1 枚約 10 秒かかります。"
+       "重みをストリーミングするので 6 GB のカードでも動きます。深度の尺度と空の"
+       "判定には MoGe-2 ベースを使います。45 GB をストリーミングして一度だけ組み立て、"
+       "11 GB を残します。"),
+    ZH_HANS("为深度和法线微调的 200 亿参数扩散模型：这里细节最精细，也远比其他慢，"
+            "在 RTX 5070 上两种图合计每张约 10 秒。它流式加载权重，6 GB 显卡也能运行。"
+            "深度的尺度和天空由 MoGe-2 中确定。只需流式读取 45 GB 构建一次，保留 11 GB。"),
+    ZH_HANT("為深度和法線微調的 200 億參數擴散模型：這裡細節最精細，也遠比其他慢，"
+            "在 RTX 5070 上兩種圖合計每張約 10 秒。它串流載入權重，6 GB 顯示卡也能執行。"
+            "深度的尺度和天空由 MoGe-2 中確定。只需串流讀取 45 GB 建置一次，保留 11 GB。"),
+    KO("깊이와 법선용으로 조정된 200억 매개변수 확산 모델입니다. 여기서 가장 정밀하고 "
+       "단연 가장 느려서, RTX 5070 에서 두 맵에 장당 약 10 초가 걸립니다. 가중치를 "
+       "스트리밍하므로 6 GB 카드에서도 돌아갑니다. 깊이의 축척과 하늘은 MoGe-2 "
+       "베이스가 정합니다. 45 GB 를 스트리밍해 한 번 만들고 11 GB 를 남깁니다."),
+    DE("Ein Diffusionsmodell mit 20 Milliarden Parametern, auf Tiefe und "
+       "Normalen abgestimmt: das feinste Detail hier und mit Abstand das "
+       "langsamste, etwa 10 s je Bild für beide Karten auf einer RTX 5070. Es "
+       "läuft auch auf 6-GB-Karten, indem es seine Gewichte streamt. MoGe-2 "
+       "mittel legt den Maßstab der Tiefe fest und findet den Himmel. Einmal aus "
+       "45 GB gestreamt gebaut; belegt 11 GB."),
+    FR("Un modèle de diffusion de 20 milliards de paramètres adapté à la "
+       "profondeur et aux normales : le détail le plus fin ici, et de loin le "
+       "plus lent, environ 10 s par image pour les deux cartes sur une RTX 5070. "
+       "Il tourne aussi sur des cartes de 6 Go en lisant ses poids en flux. "
+       "MoGe-2 moyen fixe l'échelle de sa profondeur et trouve le ciel. "
+       "Construit une fois à partir de 45 Go lus en flux ; en garde 11 Go."),
+    ES("Un modelo de difusión de 20 mil millones de parámetros ajustado para "
+       "profundidad y normales: el detalle más fino aquí y, con diferencia, el "
+       "más lento, unos 10 s por imagen para ambos mapas en una RTX 5070. "
+       "También funciona en tarjetas de 6 GB transmitiendo sus pesos. MoGe-2 "
+       "medio fija la escala de su profundidad y detecta el cielo. Se construye "
+       "una vez a partir de 45 GB transmitidos; ocupa 11 GB."),
+    PT("Um modelo de difusão de 20 mil milhões de parâmetros afinado para "
+       "profundidade e normais: o detalhe mais fino aqui e, de longe, o mais "
+       "lento, cerca de 10 s por imagem para os dois mapas numa RTX 5070. Também "
+       "funciona em placas de 6 GB, transmitindo os pesos. O MoGe-2 médio fixa a "
+       "escala da profundidade e encontra o céu. Construído uma vez a partir de "
+       "45 GB transmitidos; ocupa 11 GB."),
+    IT("Un modello di diffusione da 20 miliardi di parametri adattato a "
+       "profondità e normali: il dettaglio più fine qui e di gran lunga il più "
+       "lento, circa 10 s per immagine per entrambe le mappe su una RTX 5070. "
+       "Gira anche su schede da 6 GB trasmettendo i pesi. MoGe-2 medio fissa la "
+       "scala della profondità e trova il cielo. Costruito una volta da 45 GB "
+       "trasmessi; ne tiene 11 GB."),
+    NL("Een diffusiemodel met 20 miljard parameters, afgestemd op diepte en "
+       "normalen: het fijnste detail hier en verreweg het traagst, ongeveer 10 s "
+       "per afbeelding voor beide kaarten op een RTX 5070. Het draait ook op "
+       "kaarten van 6 GB door zijn gewichten te streamen. MoGe-2 middel bepaalt "
+       "de schaal van zijn diepte en vindt de lucht. Eenmalig gebouwd uit 45 GB "
+       "gestreamd; houdt 11 GB."),
+    RU("Диффузионная модель на 20 миллиардов параметров, настроенная на глубину "
+       "и нормали: самая детальная здесь и самая медленная — около 10 с на "
+       "изображение для обеих карт на RTX 5070. Работает и на картах с 6 ГБ, "
+       "подгружая веса потоком. Масштаб глубины и небо определяет MoGe-2 средняя. "
+       "Собирается один раз из 45 ГБ, загружаемых потоком; занимает 11 ГБ."),
+    TR("Derinlik ve normaller için ayarlanmış 20 milyar parametreli bir "
+       "difüzyon modeli: buradaki en ince ayrıntı ve açık ara en yavaşı; RTX "
+       "5070'te iki harita için görüntü başına yaklaşık 10 sn. Ağırlıklarını "
+       "akıtarak 6 GB'lık kartlarda da çalışır. Derinliğin ölçeğini ve gökyüzünü "
+       "MoGe-2 orta belirler. Akıtılan 45 GB'tan bir kez oluşturulur; 11 GB yer "
+       "kaplar."));
+
+SS_MSG(geom_install_disk,
+    EN("Keeps {0} under {1}; that disk has {2} free."),
+    JA("{1} に {0} を残します。そのディスクの空きは {2} です。"),
+    ZH_HANS("将在 {1} 下保留 {0}；该磁盘剩余 {2}。"),
+    ZH_HANT("將在 {1} 下保留 {0}；該磁碟剩餘 {2}。"),
+    KO("{1} 에 {0} 를 남깁니다. 그 디스크의 여유 공간은 {2} 입니다."),
+    DE("Belegt {0} unter {1}; dort sind {2} frei."),
+    FR("Garde {0} sous {1} ; ce disque a {2} de libre."),
+    ES("Ocupa {0} en {1}; ese disco tiene {2} libres."),
+    PT("Ocupa {0} em {1}; esse disco tem {2} livres."),
+    IT("Occupa {0} in {1}; quel disco ha {2} liberi."),
+    NL("Houdt {0} onder {1}; die schijf heeft {2} vrij."),
+    RU("Займёт {0} в {1}; на этом диске свободно {2}."),
+    TR("{1} altında {0} yer kaplar; o diskte {2} boş."));
+
+SS_MSG(geom_install_no_disk,
+    EN("Not enough disk space: it keeps {0} under {1}, plus {2} spare, and that "
+       "disk has {3} free."),
+    JA("ディスクの空きが足りません。{1} に {0} を残し、さらに {2} の予備が要りますが、"
+       "そのディスクの空きは {3} です。"),
+    ZH_HANS("磁盘空间不足：需在 {1} 下保留 {0}，另加 {2} 余量，而该磁盘只剩 {3}。"),
+    ZH_HANT("磁碟空間不足：需在 {1} 下保留 {0}，另加 {2} 餘量，而該磁碟只剩 {3}。"),
+    KO("디스크 공간이 부족합니다. {1} 에 {0} 와 여분 {2} 가 필요한데 그 디스크의 여유 "
+       "공간은 {3} 입니다."),
+    DE("Zu wenig Speicherplatz: Es belegt {0} unter {1}, dazu {2} Reserve, und "
+       "dort sind {3} frei."),
+    FR("Pas assez d'espace disque : il garde {0} sous {1}, plus {2} de réserve, "
+       "et ce disque a {3} de libre."),
+    ES("No hay espacio suficiente: ocupa {0} en {1}, más {2} de reserva, y ese "
+       "disco tiene {3} libres."),
+    PT("Espaço em disco insuficiente: ocupa {0} em {1}, mais {2} de reserva, e "
+       "esse disco tem {3} livres."),
+    IT("Spazio su disco insufficiente: occupa {0} in {1}, più {2} di riserva, e "
+       "quel disco ha {3} liberi."),
+    NL("Te weinig schijfruimte: het houdt {0} onder {1}, plus {2} reserve, en "
+       "die schijf heeft {3} vrij."),
+    RU("Недостаточно места: нужно {0} в {1} и ещё {2} в запасе, а на этом диске "
+       "свободно {3}."),
+    TR("Yeterli disk alanı yok: {1} altında {0} ve {2} yedek gerekiyor, o diskte "
+       "{3} boş."));
+
 SS_MSG(geom_get_model,
     EN("Get the geometry model"),
     JA("ジオメトリのモデルを取得"), ZH_HANS("获取几何模型"), ZH_HANT("取得幾何模型"),

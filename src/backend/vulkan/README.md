@@ -812,6 +812,9 @@ the engine level.
     16x16 tile and 28 KB overlay, under the floor on every device; its
     `flip_*` entries port FLIP the same way at 31.4 KB, keeping each lane's
     window centres in registers across the passes, as the CUDA kernel does.
+    The `ssim_bt_*` entries are blur-tolerant SSIM: a blur pass, the fused
+    kernel on SSIM's tile (30 KB at 16, 47.7 KB at 24), and the blur's
+    adjoint (`docs/notes/ssim-blur-tolerance.md`).
   - `canny.slang` (canny rgb/scalar + BT.601 residual luma + Tukey
     biweight) with globally-clamped loads -> per-pixel deterministic, so
     even the RobustEdgeAware densification map compares tight.

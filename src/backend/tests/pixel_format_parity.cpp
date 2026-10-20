@@ -379,6 +379,8 @@ int main() {
         {(int)DensifyLossMapMode::LossFull, "loss_full on s_cielab", kScielab},
         {(int)DensifyLossMapMode::FlipFeature, "flip_feature", kFlip},
         {(int)DensifyLossMapMode::LossFull, "loss_full on flip", kFlip},
+        {(int)DensifyLossMapMode::SsimContrastStruct, "ssim_cs on ssim_blur_tolerant",
+         (int)PerceptualLoss::SsimBlurTolerant},
     };
     for (const auto& m : modes) {
         char what[128];
