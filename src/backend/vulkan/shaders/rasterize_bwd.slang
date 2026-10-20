@@ -33,6 +33,8 @@ static const int kAccumMax = 1, kAccumSum = 2, kAccumAvg = 3;
 const int kViewmatGrad = 0;   // 3dgut entry only
 [SpecializationConstant]
 const int kPacked = 0;        // gaussian_ids present
+[SpecializationConstant]
+const int kMaxWeight = 0;     // o_max_weight bound
 
 static const uint TILE_SIZE_DX = 8;
 static const uint TILE_SIZE_DY = 8;
@@ -251,6 +253,7 @@ struct Raster2dBwdParams {  // via params ring
     float* v_s_screen;  // [.., SCR2_STRIDE]
     uint* o_accum_weight;   // kAccumWeight; Max writes float bits, else float
     float* o_accum_weight_den;  // kAccumAvg lane 2
+    uint* o_max_weight;     // kMaxWeight; float bits
     uint32_t I;
     uint32_t N;
     uint32_t n_isects;
@@ -261,6 +264,8 @@ struct Raster2dBwdParams {  // via params ring
     uint32_t macro_log2;
     float v_dist_rgb_per_depth;
     uint32_t state_flags;  // kRb*
+    float max_weight_scale;
+    uint32_t _pad0;
 };
 
 struct Frag2d_ {
@@ -306,7 +311,7 @@ void _rb2_step(int pix_id, int splat_idx, bool active,
                uint wg_y, uint wg_z, Frag2d_ splat,
                inout Frag2d_ v_splat,
                inout float accum_weight, inout float accum_weight_den,
-               inout bool touched) {
+               inout float max_weight, inout bool touched) {
     if (pix_id < 0 || pix_id >= (int)RB_BLOCK || !active) return;
     if (splat_idx > _rb_bin[pix_id]) return;
     int gx = int(wg_z * TILE_SIZE_DX) + pix_id % (int)TILE_SIZE_DX;
@@ -328,14 +333,15 @@ void _rb2_step(int pix_id, int splat_idx, bool active,
     v_splat.depth += v_color.w;
     touched = true;
 
-    if (kAccumWeight != 0) {
+    if (kAccumWeight != 0 || kMaxWeight != 0) {
         float T0 = _rb_Tg[pix_id].x;  // just updated: T0 stored in .x
         // CUDA computes the weight with the pre-update T0 = T1/(1-alpha);
         // _rb_pixel_grad stored exactly that, so reuse it.
         float w = alpha * T0;
+        if (kMaxWeight != 0) max_weight = max(max_weight, w);
         if (kAccumWeight == kAccumMax)
             accum_weight = max(accum_weight, _rb_awmap[pix_id] * w);
-        else {
+        else if (kAccumWeight != 0) {
             accum_weight += _rb_awmap[pix_id] * w;
             if (kAccumWeight == kAccumAvg) accum_weight_den += w;
         }
@@ -471,11 +477,13 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                                float3(0.0f)};
             float accum_weight = 0.0f;
             float accum_weight_den = 0.0f;
+            float max_weight = 0.0f;
             bool touched = false;
 
             for (int t = 0; t < batch_size + (int)RB_BLOCK - 1; t++) {
                 _rb2_step(t - int(tid), splat_idx, active, wg.y, wg.z, splat,
-                          v_splat, accum_weight, accum_weight_den, touched);
+                          v_splat, accum_weight, accum_weight_den, max_weight,
+                          touched);
                 GroupMemoryBarrierWithGroupSync();
             }
 
@@ -501,6 +509,9 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                         atomic_add_f32(p.o_accum_weight_den + wid,
                                        accum_weight_den);
                 }
+                if (kMaxWeight != 0 && max_weight > 0.0f)
+                    atomic_max_f32_nonneg(p.o_max_weight + wid,
+                                          max_weight * p.max_weight_scale);
             }
         }
         GroupMemoryBarrierWithGroupSync();  // done reading surv[]
@@ -556,6 +567,7 @@ struct Raster3dgutBwdParams {  // via params ring
     float* v_s_screen;  // [.., SCRG_STRIDE]
     uint* o_accum_weight;  // kAccumWeight; Max writes float bits, else float
     float* o_accum_weight_den;  // kAccumAvg lane 2
+    uint* o_max_weight;    // kMaxWeight; float bits
     float* v_viewmats;   // [I,16], kViewmatGrad
     uint32_t I;
     uint32_t N;
@@ -567,6 +579,8 @@ struct Raster3dgutBwdParams {  // via params ring
     uint32_t macro_log2;
     float v_dist_rgb_per_depth;
     uint32_t state_flags;  // kRb*
+    float max_weight_scale;
+    uint32_t _pad0;
 };
 
 struct Frag3dgut_ {
@@ -588,7 +602,7 @@ struct VFrag3dgut_ {
 void _rb3_step(Raster3dgutBwdParams p, int pix_id, int splat_idx,
                bool active, float3 ray_o, Frag3dgut_ splat,
                inout VFrag3dgut_ v_splat, inout float accum_weight,
-               inout float accum_weight_den,
+               inout float accum_weight_den, inout float max_weight,
                inout float3 total_v_ray_o) {
     if (pix_id < 0 || pix_id >= (int)RB_BLOCK || !active) return;
     float4 rb = _rb_raybin[pix_id];
@@ -631,12 +645,13 @@ void _rb3_step(Raster3dgutBwdParams p, int pix_id, int splat_idx,
     v_splat.opacity += v_op;
     v_splat.rgb += v_rgb;
 
-    if (kAccumWeight != 0) {
+    if (kAccumWeight != 0 || kMaxWeight != 0) {
         float T0 = _rb_Tg[pix_id].x;
         float w = alpha * T0;
+        if (kMaxWeight != 0) max_weight = max(max_weight, w);
         if (kAccumWeight == kAccumMax)
             accum_weight = max(accum_weight, _rb_awmap[pix_id] * w);
-        else {
+        else if (kAccumWeight != 0) {
             accum_weight += _rb_awmap[pix_id] * w;
             if (kAccumWeight == kAccumAvg) accum_weight_den += w;
         }
@@ -831,10 +846,11 @@ void rasterize_bwd_3dgut(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             v_splat.rgb = float3(0.0f);
             float accum_weight = 0.0f;
             float accum_weight_den = 0.0f;
+            float max_weight = 0.0f;
 
             for (int t = 0; t < batch_size + (int)RB_BLOCK - 1; t++) {
                 _rb3_step(p, t - int(tid), splat_idx, active, ray_o, splat,
-                          v_splat, accum_weight, accum_weight_den,
+                          v_splat, accum_weight, accum_weight_den, max_weight,
                           total_v_ray_o);
                 GroupMemoryBarrierWithGroupSync();
             }
@@ -869,6 +885,9 @@ void rasterize_bwd_3dgut(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                         atomic_add_f32(p.o_accum_weight_den + splat_wid,
                                        accum_weight_den);
                 }
+                if (kMaxWeight != 0 && max_weight > 0.0f)
+                    atomic_max_f32_nonneg(p.o_max_weight + splat_wid,
+                                          max_weight * p.max_weight_scale);
             }
         }
 

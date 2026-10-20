@@ -90,6 +90,17 @@ static void remove_tree(const std::filesystem::path& p) {
 #endif
 }
 
+static LpipsHooks& lpips_hooks() {
+    static LpipsHooks hooks;
+    return hooks;
+}
+
+void set_lpips_hooks(LpipsHooks hooks) { lpips_hooks() = std::move(hooks); }
+
+bool lpips_wanted(const TrainConfig& cfg) {
+    return cfg.eval_lpips && cfg.eval_mode != "all";
+}
+
 // ===========================================================================
 // Color-space handling
 // ===========================================================================
@@ -444,7 +455,21 @@ void append_point_seeds(SeedSplats& s, const ColmapPoints3D& pts,
 
 namespace {
 
-int densify_loss_map_mode_int(const std::string& mode) {
+int perceptual_loss_int(const std::string& loss) {
+    if (loss == "ssim")     return (int)PerceptualLoss::Ssim;
+    if (loss == "ssim_blur_tolerant") return (int)PerceptualLoss::SsimBlurTolerant;
+    if (loss == "s_cielab") return (int)PerceptualLoss::SCielab;
+    if (loss == "flip")     return (int)PerceptualLoss::Flip;
+    throw std::runtime_error("unknown perceptual_loss: " + loss);
+}
+
+// `auto` is the contrast-structure half of SSIM, S-CIELAB, or FLIP's feature
+// error, whichever the loss is: the map comes from the kernel it runs anyway.
+int densify_loss_map_mode_int(const std::string& mode, const std::string& loss) {
+    if (mode == "auto")
+        return loss == "s_cielab" ? (int)DensifyLossMapMode::SCielab
+             : loss == "flip"     ? (int)DensifyLossMapMode::FlipFeature
+                                  : (int)DensifyLossMapMode::SsimContrastStruct;
     if (mode == "none")              return 0;
     if (mode == "loss_full")         return 1;
     if (mode == "ssim_full")         return 2;
@@ -456,7 +481,20 @@ int densify_loss_map_mode_int(const std::string& mode) {
     if (mode == "ssim_full_nms")       return 8;
     if (mode == "ssim_cs_nms")         return 9;
     if (mode == "ssim_structure_nms")  return 10;
+    if (mode == "s_cielab")            return 11;
+    if (mode == "s_cielab_nms")        return 12;
+    if (mode == "flip")                return 13;
+    if (mode == "flip_nms")            return 14;
+    if (mode == "flip_feature")        return 15;
+    if (mode == "flip_feature_nms")    return 16;
     throw std::runtime_error("unknown densify_loss_map_mode: " + mode);
+}
+
+DeadCriterion dead_criterion_enum(const std::string& c) {
+    if (c == "opacity")    return DeadCriterion::Opacity;
+    if (c == "max_weight") return DeadCriterion::MaxWeight;
+    if (c == "either")     return DeadCriterion::Either;
+    throw std::runtime_error("unknown dead_criterion: " + c);
 }
 
 int densify_accum_mode_int(const std::string& mode) {
@@ -522,9 +560,11 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     // ---- loss ----------------------------------------------------------
     cfg.loss.weights = build_loss_weights(c, step);
     cfg.loss.w_ssim = c.ssim_lambda;
+    cfg.loss.perceptual_loss = perceptual_loss_int(c.perceptual_loss);
     cfg.loss.num_loss_scales = c.num_loss_scales + 1;
     cfg.loss.loss_scale_min_pixels = c.loss_scale_min_pixels;
-    int loss_map_mode = densify_loss_map_mode_int(c.densify_loss_map_mode);
+    int loss_map_mode =
+        densify_loss_map_mode_int(c.densify_loss_map_mode, c.perceptual_loss);
     // blend >= 1: world-grad score only, loss map has no consumer.
     if (c.densify_score_blend_world_grad >= 1.0f) loss_map_mode = 0;
     cfg.loss.loss_map_mode = loss_map_mode;
@@ -534,7 +574,9 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.loss.loss_map_normalize = c.densify_loss_map_normalize;
     cfg.loss.loss_map_clip_quantile = c.densify_loss_map_clip_quantile;
     cfg.loss.loss_map_power = c.densify_loss_map_power;
-    cfg.loss.loss_map_accum_mode = densify_accum_mode_int(c.densify_accum_mode);
+    // The learned score's update needs the ratio map's weighted mean.
+    cfg.loss.loss_map_accum_mode = c.densify_learned_score
+        ? (int)DensifyAccumMode::Avg : densify_accum_mode_int(c.densify_accum_mode);
     cfg.loss.saturation_threshold = c.loss_saturation_threshold;
     cfg.loss.luminance_normalization = c.loss_luminance_normalization;
     cfg.loss.overexposure_reg_weight = c.overexposure_reg;
@@ -600,6 +642,8 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.densify.refine_every                  = c.refine_every;
     cfg.densify.growth_factor                 = c.growth_factor;
     cfg.densify.min_opacity                   = c.min_opacity;
+    cfg.densify.dead_criterion = dead_criterion_enum(c.dead_criterion);
+    cfg.densify.max_weight_half_life = (float)std::max(c.max_batch_per_epoch, 1);
     cfg.densify.max_screen_size               = c.max_screen_size;
     cfg.densify.max_screen_size_clip_hardness = c.max_screen_size_clip_hardness;
     cfg.densify.clip_screen_size_at_refine    = c.max_screen_size_penalty > 0.0f;
@@ -614,6 +658,9 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.densify.score_power = c.densify_score_power;
     cfg.densify.score_clip_quantile = c.densify_score_clip_quantile;
     cfg.densify.final_score_power = c.densify_final_score_power;
+    cfg.densify.learned_score = c.densify_learned_score;
+    cfg.loss.learned_score = c.densify_learned_score && loss_map_mode != 0 &&
+        step < std::max(c.refine_stop_iter, c.num_iterations - c.refine_stop_num_iter);
     cfg.densify.oversize_split_fraction = c.densify_oversize_split_fraction;
     cfg.densify.oversize_score_blend = c.densify_oversize_score_blend;
     cfg.densify.las_split_opacity_k_init   = c.long_axis_split_opacity_k[0];
@@ -691,14 +738,14 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
 
 // p_train = relative_scale * (p_dataset - center): the parser's shift and the
 // trainer's own rescale, which is every way the splats' frame differs from
-// the dataset's.
+// the dataset's. A dataset fitted to GPS adds where its own frame sits on Earth.
 void save_scene_transform_json(const ParsedDataset& ds, const TrainConfig& c,
                                const fs::path& out_dir) {
     SceneTransform T;
     T.scale = (double)c.relative_scale.value_or(1.0f);
     for (int i = 0; i < 3; i++) T.t[i] = -T.scale * ds.center[i];
     const std::string text =
-        scene_transform_json(T, ds.center_mode, ds.center.data());
+        scene_transform_json(T, ds.center_mode, ds.center.data(), ds.gauge_geo);
     const fs::path path = out_dir / "scene_transform.json";
     FILE* f = std::fopen(path.string().c_str(), "w");
     if (!f) throw std::runtime_error("cannot write " + path.string());
@@ -754,6 +801,13 @@ std::string train_config_unsupported(const TrainConfig& c) {
         return lmsg::bad_quantization_level.get();
     if (c.sb_lobes < 0 || c.sb_lobes > ColorBasis::kMaxSbLobes)
         return lfmt(lmsg::bad_sb_lobes, {ColorBasis::kMaxSbLobes});
+    if (c.dead_criterion != "opacity" && !c.use_revised_densification)
+        return lfmt(lmsg::dead_criterion_needs_revised, {c.dead_criterion});
+    if (c.densify_learned_score &&
+        (!c.use_revised_densification || c.densify_loss_map_mode == "none" ||
+         c.densify_score_blend_world_grad != 0.0f || !(c.densify_score_power > 0.0f) ||
+         !(c.densify_loss_map_power > 0.0f)))
+        return lmsg::learned_score_needs.get();
 #ifndef SS_BACKEND_VULKAN
     if (c.sb_lobes > 0) return lmsg::sb_lobes_need_vulkan.get();
 #endif
@@ -1002,10 +1056,9 @@ void TrainerSession::load_dataset() {
                                            : lmsg::alpha_masks_with_files,
                  {n, (long long)ds.num_cameras}));
     }
-    // Dense seeds and alpha cut-outs treat excluded pixels as empty space.
+    // Alpha cut-outs treat excluded pixels as empty space.
     if (!cfg.apply_loss_for_mask.has_value()) {
-        cfg.apply_loss_for_mask = spirula::dense::is_dense_seed(cfg.data, cfg.seed_pointcloud) ||
-            (!alpha_images.empty() && ds.mask_filenames.empty());
+        cfg.apply_loss_for_mask = !alpha_images.empty() && ds.mask_filenames.empty();
         if (*cfg.apply_loss_for_mask) log(lmsg::alpha_masks_cut_out.get());
     }
     has_depth  = !ds.depth_filenames.empty()  && cfg.load_depths &&
@@ -1175,6 +1228,15 @@ void TrainerSession::setup_engine() {
 #ifndef SS_BACKEND_VULKAN
     check_cuda_runtime();
 #endif
+    if (lpips_wanted(cfg) && !lpips_hooks().prepare) {
+        log(lmsg::eval_lpips_unavailable.get());
+    } else if (lpips_wanted(cfg)) {
+        try {
+            lpips_hooks().prepare(cfg);
+        } catch (const std::exception& e) {
+            throw std::runtime_error(lfmt(lmsg::eval_lpips_missing, {std::string(e.what())}));
+        }
+    }
 
     // ---- Output dir ----------------------------------------------------
     if (!out_dir_override.empty()) {
@@ -1241,8 +1303,12 @@ void TrainerSession::setup_engine() {
         }
         if (!has_mask) ds.mask_filenames.clear();
         double share = 0;
+        Sim3 to_region;
+        to_region.s = 1.0 / rs;
+        for (int r = 0; r < 3; r++) to_region.t[r] = ds.center[(size_t)r];
         ds.mask_filenames = write_region_masks(ds, xyz.data(), (int64_t)inside.size(), inside.data(),
-                                               (out_dir / "roi_masks").string(), cfg.flip_mask, &share);
+                                               (out_dir / "roi_masks").string(), cfg.flip_mask, &share,
+                                               roi.get(), to_region);
         has_mask = true;
         char pct[16];
         std::snprintf(pct, sizeof pct, "%.0f", 100.0 * share);
@@ -1917,6 +1983,12 @@ std::vector<uint8_t> to_png_bytes(const std::vector<float>& rgb) {
     return out;
 }
 
+// In place: what to_png_bytes stores, read back as eval_lpips.py reads a PNG.
+void quantize_8bit(std::vector<float>& rgb) {
+    for (float& x : rgb)
+        x = (float)std::lround(std::min(std::max(x, 0.0f), 1.0f) * 255.0f) / 255.0f;
+}
+
 }  // namespace
 
 void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_progress) {
@@ -2020,7 +2092,24 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
     struct ViewScore {
         bool  filled = false;
         float l1 = 0, psnr = 0, ssim = 0, cc_l1 = 0, cc_psnr = 0, cc_ssim = 0;
+        std::vector<float> lpips, cc_lpips;   // one per lpips_names entry
     };
+
+    // On the inference layer's device, which takes one view at a time. A
+    // failure drops LPIPS from metrics.json and keeps everything else.
+    std::unique_ptr<LpipsScorer> lpips;
+    std::vector<std::string> lpips_names;
+    if (lpips_wanted(cfg) && lpips_hooks().open) {
+        try {
+            lpips = lpips_hooks().open(cfg);
+            lpips_names = lpips->names();
+        } catch (const std::exception& e) {
+            lpips.reset();
+            log(lfmt(lmsg::eval_lpips_failed, {std::string(e.what())}));
+        }
+    }
+    std::mutex lpips_mu;
+    std::atomic<bool> lpips_ok{lpips != nullptr};
 
     // Per worker: a GT + a render + the colour-corrected copy (3 x H*W*C
     // floats) plus SSIM's eleven H*W double buffers. ~725 MB at 4K, so the
@@ -2065,6 +2154,26 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
         s.cc_l1   = image_l1(g, cc.data(), view_px);
         s.cc_psnr = image_psnr(g, cc.data(), view_px);
         s.cc_ssim = image_ssim(g, cc.data(), j.H, j.W, j.C);
+        if (lpips_ok.load()) {
+            // On the 8-bit images, as eval_lpips.py and 3DGS's metrics.py score
+            // them: bonsai's float renders averaged 1.8% (alex) / 0.9% (vgg)
+            // higher, the size of what LPIPS gets compared on. PNGs are unchanged.
+            quantize_8bit(j.gt);
+            quantize_8bit(j.pred);
+            color_correct_into(j.pred.data(), g, (int64_t)j.H * j.W, j.C, cc);
+            try {
+                if (j.C != 3) throw std::runtime_error("LPIPS needs RGB views");
+                std::lock_guard<std::mutex> lk(lpips_mu);
+                for (const std::vector<float>& m :
+                     lpips->score(g, {j.pred.data(), cc.data()}, j.W, j.H)) {
+                    s.lpips.push_back(m[0]);
+                    s.cc_lpips.push_back(m[1]);
+                }
+            } catch (const std::exception& e) {
+                if (lpips_ok.exchange(false))
+                    log(lfmt(lmsg::eval_lpips_failed, {std::string(e.what())}));
+            }
+        }
         {
             std::lock_guard<std::mutex> lk(smu);
             if ((size_t)j.index >= scores.size()) scores.resize((size_t)j.index + 1);
@@ -2081,9 +2190,8 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
                                     bytes.data(), j.W * j.C))
                     throw std::runtime_error("cannot write " + path.string());
             };
-            // Both sides, because the LPIPS tool needs the pair -- and the
-            // 8-bit clip here is what it will score, so its numbers are
-            // reproducible from the files alone.
+            // Both sides, and 8-bit: what LPIPS scores, so the pair rescores
+            // from the files alone (reference/python/eval_lpips.py).
             png("gt", j.gt);
             png("render", j.pred);
         }
@@ -2183,8 +2291,12 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
     }
     qcv.notify_all();
     for (auto& t : workers) t.join();
+    lpips.reset();
     if (worker_error) std::rethrow_exception(worker_error);
 
+    bool with_lpips = lpips_ok.load();
+    for (const ViewScore& s : scores)
+        with_lpips = with_lpips && (!s.filled || s.lpips.size() == lpips_names.size());
     std::map<std::string, std::vector<float>> per_image;
     for (const ViewScore& s : scores) {
         if (!s.filled) continue;
@@ -2194,6 +2306,10 @@ void TrainerSession::eval(const std::function<void(const EvalProgress&)>& on_pro
         per_image["cc_l1"].push_back(s.cc_l1);
         per_image["cc_psnr"].push_back(s.cc_psnr);
         per_image["cc_ssim"].push_back(s.cc_ssim);
+        for (size_t m = 0; with_lpips && m < lpips_names.size(); ++m) {
+            per_image[lpips_names[m]].push_back(s.lpips[m]);
+            per_image["cc_" + lpips_names[m]].push_back(s.cc_lpips[m]);
+        }
     }
 
     if (per_image.empty()) {

@@ -11,8 +11,10 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -811,7 +813,7 @@ static void addCapture(SensorCaptures& sc, const Telemetry& t) {
     lc->timeline.init(t, telemetry_check(t), err);
     lc->cap.fps = t.video_fps;
     lc->cap.timeline = &lc->timeline;
-    lc->carrier = t.carrier;
+    lc->cap.carrier = t.carrier;
     sc.loaded.push_back(std::move(lc));
 }
 
@@ -942,10 +944,75 @@ static void testKeptFrame() {
               gauge[1].scale == "gps",
           "kept: the mapper's level GPS frame, metric and oriented by the declared up");
     check(n == 39 && rms < 1.5, "kept: the cameras sit on their fixes, in metres");
+    double worst = 0;
+    for (size_t k = 0; k < L.fixes.size(); k++) {
+        Vec3 p;
+        if (!L.fixes[k] || !src.position((uint32_t)k, p)) continue;
+        worst = std::max(worst, (enuFromGeodetic({*L.fixes[k]}, gauge[1].origin.at)[0] - p).norm());
+    }
+    check(gauge[1].origin.ok && gauge[1].origin.alt == "exif" && worst < 1e-6,
+          "kept: the origin is the point the positions are east-north-up about");
+    check(!gauge[0].origin.ok, "kept: a model with no GPS frame has no origin");
+
+    writeModels({models[1]}, dir / "sparse", false, {gauge[1]});
+    std::map<std::string, std::string> keys;
+    std::ifstream gf(dir / "sparse" / "0" / "gauge.txt");
+    std::string line;
+    while (std::getline(gf, line)) {
+        std::istringstream in(line);
+        std::string k, v;
+        if (in >> k >> v) keys[k] = v;
+    }
+    auto number = [&](const char* k) { return keys.count(k) ? std::atof(keys[k].c_str()) : 1e9; };
+    check(std::fabs(number("origin_lat") - gauge[1].origin.at.lat_deg) < 1e-9 &&
+              std::fabs(number("origin_lon") - gauge[1].origin.at.lon_deg) < 1e-9 &&
+              std::fabs(number("origin_alt") - gauge[1].origin.at.alt_m) < 1e-3 &&
+              keys["alt_source"] == "exif",
+          "kept: gauge.txt carries the origin");
 
     std::vector<Reconstruction> bare{modelOf(L.imgs)};
     fixGauge(bare, cfg, dir.string(), false, gauge, &none, nullptr);
     check(!gauge[0].metric, "kept: without the mapper's source there is nothing to keep");
+    fs::remove_all(dir);
+}
+
+// A level fit leaves the height to --level ground, which moves z = 0 onto the
+// ground; the origin's altitude has to follow it or every height is off by that.
+static void testOriginFollowsGround() {
+    const Loop L = makeLoop(0.0, true, 0.002);
+    ExifGpsPriors src(L.fixes, SensorPriorOptions{}, std::vector<char>(40, 1));
+    const fs::path dir = fs::temp_directory_path() / "sfm_origin_ground_test";
+    fs::create_directories(dir);
+    SfmConfig cfg;
+    cfg.metric_gps = "horizontal";
+    cfg.exif_attitude = "none";
+    std::vector<Reconstruction> models{modelOf(L.imgs)};
+    uint64_t id = 1;
+    for (double x = -40; x <= 40; x += 4)
+        for (double y = -30; y <= 30; y += 4) {
+            Point3D pt;
+            pt.xyz = mul(L.Rm, Vec3{x, y, -10.0}) * L.sm + Vec3{1, 2, 3};
+            models[0].points3D[id++] = pt;
+        }
+    std::vector<ModelGauge> gauge;
+    const SensorCaptures none;
+    fixGauge(models, cfg, dir.string(), false, gauge, &none, &src);
+    double ground = 0, r2 = 0;
+    for (const auto& kv : models[0].points3D) ground += kv.second.xyz.z;
+    ground /= (double)models[0].points3D.size();
+    int n = 0;
+    for (const auto& kv : models[0].images) {
+        if (!L.fixes[kv.first]) continue;
+        const double alt = gauge[0].origin.at.alt_m + cameraCenter(kv.second.pose).z;
+        r2 += std::pow(alt - L.fixes[kv.first]->alt_m, 2);
+        n++;
+    }
+    const double rms = std::sqrt(r2 / std::max(n, 1));
+    std::printf("origin on ground: ground z %.3f, origin alt %.3f, camera heights %.3f m RMS off\n",
+                ground, gauge[0].origin.at.alt_m, rms);
+    check(gauge[0].origin.ok && std::fabs(ground) < 0.05,
+          "ground: the level frame was moved onto its ground");
+    check(n == 39 && rms < 1.5, "ground: origin_alt plus z is still each camera's GPS altitude");
     fs::remove_all(dir);
 }
 
@@ -963,6 +1030,7 @@ static int run(int, char**) {
     testAutoRule();
     testAutoFromCapture();
     testKeptFrame();
+    testOriginFollowsGround();
     std::printf("%s (%d failure%s)\n", fails ? "FAILED" : "OK", fails, fails == 1 ? "" : "s");
     return fails;
 }

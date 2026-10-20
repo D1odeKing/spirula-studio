@@ -243,7 +243,8 @@ void rotation_to_euler_intrinsic(const double R[9], const char order[3],
 
 std::string scene_transform_json(const SceneTransform& train_from_world,
                                  const std::string& center_mode,
-                                 const double center_world[3]) {
+                                 const double center_world[3],
+                                 const GeoReference& world_geo) {
     const SceneTransform world_from_train = train_from_world.inverse();
     std::string s = "{\n";
     s += "  \"format\": \"spirula-scene-transform\",\n";
@@ -276,6 +277,11 @@ std::string scene_transform_json(const SceneTransform& train_from_world,
         "t). translation_before_rotation is the equivalent shift applied first "
         "(p_out = s R (p + t_pre)); for train_from_world it is minus "
         "centering.center_world.",
+        "georeference, present when the dataset was fitted to GPS, places the "
+        "world frame on Earth: x east, y north and z up, in metres from the "
+        "point at origin_lat, origin_lon (WGS-84 degrees) and origin_alt "
+        "(metres, the height as alt_source recorded it; absent when the fixes "
+        "carried none).",
     };
     const int n_lines = (int)(sizeof(lines) / sizeof(lines[0]));
     for (int i = 0; i < n_lines; i++)
@@ -283,6 +289,14 @@ std::string scene_transform_json(const SceneTransform& train_from_world,
     s += "  ],\n";
     s += "  \"centering\": {\"mode\": " + quoted(center_mode) +
          ", \"center_world\": " + arr(center_world, 3) + "},\n";
+    if (world_geo.ok) {
+        s += "  \"georeference\": {\"frame\": \"enu\", \"origin_lat\": " + num(world_geo.lat_deg) +
+             ", \"origin_lon\": " + num(world_geo.lon_deg);
+        if (!world_geo.alt_source.empty())
+            s += ", \"origin_alt\": " + num(world_geo.alt_m) +
+                 ", \"alt_source\": " + quoted(world_geo.alt_source);
+        s += "},\n";
+    }
     s += "  \"train_from_world\": {\n";
     s += similarity_block(train_from_world, "    ");
     s += "  },\n";

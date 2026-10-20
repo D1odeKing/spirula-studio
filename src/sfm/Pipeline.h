@@ -69,7 +69,6 @@ struct MatchStats {
 struct LoadedCapture {
     SensorCapture cap;
     SensorTimeline timeline;
-    TelemetryCarrier carrier = TelemetryCarrier::None;
 };
 
 struct SensorCaptures {
@@ -227,6 +226,7 @@ struct ModelGauge {
     std::string up = "none";
     std::string scale = "none";
     double scale_sigma = 0;  // relative; 0 when nothing estimated one
+    GeoOrigin origin;        // a GPS fit's: the frame is then east-north-up about it
 };
 
 // Levelling, centring and the metric gauge. False when no metric frame fitted.

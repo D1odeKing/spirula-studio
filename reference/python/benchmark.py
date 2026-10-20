@@ -6,11 +6,12 @@ bilagrid/PPISP/background, optimizer moments, colour-space matrices, device
 pool) starts clean. Several scenes in one process leak state between them and
 silently degrade the later ones.
 
-Each run writes its own metrics.json -- l1/psnr/ssim, their colour-corrected
-`cc_` variants, `training_time` and `engine_vram`, all native. This script
-reads those back and prints a table. With --lpips it also runs
-eval_lpips.py per scene, which needs torch + torchmetrics; without it, this
-script needs nothing beyond the standard library.
+Each run writes its own metrics.json -- l1/psnr/ssim, LPIPS where the build
+has the inference layer, their colour-corrected `cc_` variants,
+`training_time` and `engine_vram`, all native. This script reads those back
+and prints a table. With --lpips it also runs eval_lpips.py per scene, for a
+build without native LPIPS; that needs torch + torchmetrics, and without it
+this script needs nothing beyond the standard library.
 
     python3 reference/python/benchmark.py 360_v2 --data /path/to/360_v2
     python3 reference/python/benchmark.py zipnerf --data /path/to/zipnerf \\

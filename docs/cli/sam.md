@@ -140,6 +140,10 @@ Frame selection:
 | `--sync` | off | Decode a multi-track file in lockstep so every track keeps the same instants; the frames of one name are then a rig. |
 | `--adaptive` | off | Space kept frames by how much the view changes rather than by time; `--skip` then sets the average. |
 | `--adaptive-range <f>` | 4 | How far the adaptive rate may stray from the average, either way. |
+| `--blur-reject <f>` | 0 (off) | Measure how blurred each chosen frame is, from how wide its edges are, and leave out a frame blurred across more than this many pixels, never more than two in a row. |
+| `--similar <n>` | 0 (off) | Leave out a frame whose 64-bit fingerprint differs from the last kept frame's by fewer than `n` bits, as when the camera stood still. |
+| `--skipped-dir <dir>` | | Write the frames left out to this folder rather than nowhere (one video track, not 360). |
+| `--report <file>` | | Write one line for each chosen frame to this CSV file: its number, its edge width and blur in pixels, and whether it was kept. |
 | `--threads <n>` | cores - 1 | Image-encoder threads. |
 | `--decoder <d>` | `auto` | `auto`, `builtin` or `ffmpeg`. |
 | `--ffmpeg <exe>` | `ffmpeg` on `PATH` | The ffmpeg executable. |

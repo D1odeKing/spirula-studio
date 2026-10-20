@@ -4,12 +4,14 @@
 // user quoted the token, and it carries nothing a JSON payload or a command
 // line would have to escape (no backslash, no straight quote, no control
 // character). The GUI's Test button is how a user checks their own command;
-// this is how the substitution itself stays honest.
+// this is how the substitution itself stays honest. Also command_exists, which
+// checks the Tool locations.
 
 #include "app/gui/Subprocess.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -131,12 +133,27 @@ void test_multiline() {
        "a message cannot break out of the JSON body");
 }
 
+// Issue #201: a folder typed as the ffmpeg location passed, then failed to
+// start with nothing in the log.
+void test_command_exists() {
+    const std::string dir = std::filesystem::temp_directory_path().string();
+    check(!gui::command_exists(dir), "a folder is not a command");
+    check(!gui::command_exists(dir + "/"), "nor with a trailing separator");
+#ifdef _WIN32
+    check(gui::command_exists("cmd"), "a program on PATH is found");
+#else
+    check(gui::command_exists("sh"), "a program on PATH is found");
+    check(gui::command_exists("/bin/sh"), "and by its path");
+#endif
+}
+
 }  // namespace
 
 int main() {
     test_safe_arg();
     test_command_argv();
     test_multiline();
+    test_command_exists();
     if (g_failed) {
         std::printf("\n%d failed\n", g_failed);
         return 1;

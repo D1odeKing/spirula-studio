@@ -103,7 +103,10 @@ __global__ void rasterize_to_pixels_bwd_kernel(
     typename SplatPrimitive::WorldBuffer v_splat_wbuffer,
     typename SplatPrimitive::ScreenBuffer v_splat_sbuffer,
     float *__restrict__ o_accum_weight,
-    float *__restrict__ o_accum_weight_den  // Avg lane 2, else null
+    float *__restrict__ o_accum_weight_den,  // Avg lane 2, else null
+    // Peak alpha * T per splat, atomic-maxed times max_weight_scale; null = off.
+    float *__restrict__ o_max_weight,
+    const float max_weight_scale
 #if IS_EVAL3D
     ,
     float *__restrict__ v_viewmats // [B, C, 4, 4]
@@ -390,6 +393,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
         typename SplatPrimitive::FragmentBwd v_splat = SplatPrimitive::FragmentBwd::zero(splat);
         [[maybe_unused]] float accum_weight = 0.0f;
         [[maybe_unused]] float accum_weight_den = 0.0f;
+        float max_weight = 0.0f;
         // A survivor overlaps the sub-tile but often clears no pixel's alpha
         // threshold; its gradient is then all zeros and the ~12 atomics that
         // write it are pure cost.
@@ -560,6 +564,8 @@ __global__ void rasterize_to_pixels_bwd_kernel(
             #endif
             }
 
+            if (o_max_weight != nullptr)
+                max_weight = fmaxf(max_weight, alpha * T0);
             if constexpr (output_accum_weight) {
                 const float w = alpha * T0;  // this splat's contribution here
                 if constexpr (accum_mode == DensifyAccumMode::Max) {
@@ -599,6 +605,8 @@ __global__ void rasterize_to_pixels_bwd_kernel(
                                   accum_weight_den);
                 }
             }
+            if (o_max_weight != nullptr && max_weight > 0.0f)
+                atomicMax(o_max_weight + splat_wid, max_weight * max_weight_scale);
         }
     }  // for splat_b (within segment)
 
@@ -716,7 +724,10 @@ void rasterize_to_pixels_bwd_kernel_wrapper(
     typename SplatPrimitive::WorldBuffer v_splat_wbuffer,
     typename SplatPrimitive::ScreenBuffer v_splat_sbuffer,
     float *__restrict__ o_accum_weight,
-    float *__restrict__ o_accum_weight_den  // Avg lane 2, else null
+    float *__restrict__ o_accum_weight_den,  // Avg lane 2, else null
+    // Peak alpha * T per splat, atomic-maxed times max_weight_scale; null = off.
+    float *__restrict__ o_max_weight,
+    const float max_weight_scale
 #if IS_EVAL3D
     ,
     float *__restrict__ v_viewmats // [B, C, 4, 4]
@@ -762,7 +773,9 @@ void rasterize_to_pixels_bwd_kernel_wrapper(
         v_dist_rgb_per_depth,
         v_splat_wbuffer, v_splat_sbuffer,
         o_accum_weight,
-        o_accum_weight_den
+        o_accum_weight_den,
+        o_max_weight,
+        max_weight_scale
     #if IS_EVAL3D
         , v_viewmats
     #endif

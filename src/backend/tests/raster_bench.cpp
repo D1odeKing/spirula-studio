@@ -170,7 +170,8 @@ int main(int argc, char** argv) {
     auto fwd = [&] {
         return rasterize_to_pixels_3dgs_fwd(N, splats, splats_s, gauss_ids, W,
                                             H, tile_offsets, flatten_ids,
-                                            macro_log2, dt, false, true);
+                                            macro_log2, dt, false, true,
+                                            SplatScoreRender{});
     };
     auto rout = fwd();
     backend::device_synchronize();
@@ -191,19 +192,25 @@ int main(int argc, char** argv) {
     });
     if (check_error("isect bench")) return 1;
 
-    auto bwd = [&] {
+    // --dead-criterion max_weight adds the per-splat peak alpha * T output.
+    float* d_mw = (float*)backend::device_malloc(N * sizeof(float));
+    backend::memset_sync(d_mw, 0, N * sizeof(float));
+    auto bwd = [&](DeviceVector<float> max_weight) {
         (void)rasterize_to_pixels_3dgs_bwd(
             N, splats, splats_s, gauss_ids, W, H, tile_offsets, flatten_ids,
             macro_log2, std::get<1>(rout), std::get<2>(rout),
-            std::get<0>(rout), std::nullopt, dt, t3f1(d_awmap), aw, v_renders,
+            std::get<0>(rout), std::nullopt, dt, t3f1(d_awmap), aw,
+            max_weight, 1.0f, v_renders,
             t3f1(d_v_T), DeviceTensor3D<float>{}, std::nullopt, 0.0f,
             std::nullopt, std::nullopt);
     };
-    const double bwd_ms = time_ms(iters, bwd);
+    const double bwd_ms = time_ms(iters, [&] { bwd({}); });
+    const double bwd_mw_ms =
+        time_ms(iters, [&] { bwd(DeviceVector<float>(ttv(d_mw, {N, 1}))); });
     if (check_error("bwd bench")) return 1;
 
     std::printf("raster fwd: %8.3f ms/call\nraster bwd: %8.3f ms/call\n"
-                "tile isect: %8.3f ms/call\n",
-                fwd_ms, bwd_ms, isect_ms);
+                "  + max wt: %8.3f ms/call\ntile isect: %8.3f ms/call\n",
+                fwd_ms, bwd_ms, bwd_mw_ms, isect_ms);
     return 0;
 }

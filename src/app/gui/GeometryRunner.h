@@ -61,6 +61,15 @@ bool geometry_model_cached(const std::string& id);
 // resolves the second one by name, so both land in the same directory.
 std::vector<PendingDownload> geometry_model_downloads(const std::string& id);
 
+// The disk an install that is built rather than downloaded (Marigold v2) still
+// needs, beside what it has; `needed` false for every other model.
+struct GeometryDisk {
+    bool needed = false, fits = true;
+    uint64_t disk = 0, free = 0, spare = 0;
+    std::string where;
+};
+GeometryDisk geometry_model_disk(const std::string& id);
+
 // "" when this build can estimate geometry, otherwise why it cannot.
 std::string geometry_availability();
 

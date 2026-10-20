@@ -36,7 +36,30 @@ struct SensorCapture {
     double time_offset = 0;    // seconds added to every frame time
     double readout = 0;        // rolling-shutter readout, seconds
     const SensorTimeline* timeline = nullptr;
+    TelemetryCarrier carrier = TelemetryCarrier::None;
 };
+
+// The point every telemetry GPS position is stated east-north-up about: the
+// mean of all the captures' fixes, so the gauge and the mapper's priors share it.
+inline GeoOrigin telemetryGeoOrigin(const std::vector<SensorCapture>& caps,
+                                    size_t min_fixes = 1) {
+    std::vector<Geodetic> all;
+    std::vector<std::string> sources;
+    bool every_alt = true;
+    for (const SensorCapture& c : caps) {
+        if (!c.timeline || !c.timeline->hasGps()) continue;
+        for (const TelemetryGps& g : c.timeline->gpsFixes()) {
+            all.push_back({g.lat, g.lon, g.has_alt ? g.alt : 0.0});
+            every_alt = every_alt && g.has_alt;
+        }
+        const std::string tok = telemetry_carrier_token(c.carrier);
+        if (std::find(sources.begin(), sources.end(), tok) == sources.end()) sources.push_back(tok);
+    }
+    if (all.empty() || all.size() < min_fixes) return {};
+    std::string alt;
+    for (const std::string& t : sources) alt += (alt.empty() ? "" : "+") + t;
+    return {true, meanGeodetic(all), every_alt ? alt : ""};
+}
 
 enum class SensorMode { Auto, Up, None };
 
@@ -79,6 +102,7 @@ struct SensorGaugeResult {
     double scale = 1, scale_sigma = 0;           // the joint answer
     double tilt_sigma_deg = 0;
     MetricFit gps;
+    GeoOrigin origin;        // where the GPS's frame is centred, with place_from_gps
     int gps_frames = 0;
     int lm_iterations = 0;
     double lm_cost0 = 0, lm_cost = 0;
@@ -402,17 +426,8 @@ private:
     void gpsScale(SensorGaugeResult& out) {
         _gps_enu.assign(_frames.size(), Vec3{0, 0, 0});
         _gps_ok.assign(_frames.size(), 0);
-        std::vector<Geodetic> all;
-        for (const SensorCapture& c : _caps)
-            if (c.timeline && c.timeline->hasGps())
-                for (const TelemetryGps& g : c.timeline->gpsFixes()) all.push_back({g.lat, g.lon, g.has_alt ? g.alt : 0.0});
-        if (all.size() < 5) return;
-        Geodetic origin;
-        for (const Geodetic& g : all) {
-            origin.lat_deg += g.lat_deg / (double)all.size();
-            origin.lon_deg += g.lon_deg / (double)all.size();
-            origin.alt_m += g.alt_m / (double)all.size();
-        }
+        const GeoOrigin origin = telemetryGeoOrigin(_caps, 5);
+        if (!origin.ok) return;
         std::vector<Geodetic> geo;
         std::vector<int> owner;
         for (size_t i = 0; i < _frames.size(); i++) {
@@ -422,7 +437,7 @@ private:
             geo.push_back({g.lat, g.lon, g.has_alt ? g.alt : 0.0});
             owner.push_back((int)i);
         }
-        const std::vector<Vec3> enu = enuFromGeodetic(geo, origin);
+        const std::vector<Vec3> enu = enuFromGeodetic(geo, origin.at);
         MetricRef ref;
         const Mat3 R_up = rotationUpToZ(_up_w);
         for (size_t i = 0; i < enu.size(); i++) {
@@ -445,6 +460,7 @@ private:
         out.scale_gps_sigma = 4.0 * out.gps.scale_unc / 100.0;
         out.scale_from_gps = true;
         out.place_from_gps = true;
+        out.origin = origin;
     }
 
     // ---- the joint solve --------------------------------------------------

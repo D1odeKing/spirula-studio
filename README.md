@@ -173,6 +173,6 @@ Some splats created by the author of Spirula Studio can also be found on my [Sup
 
 Spirula Studio (formerly spirulae-splat) is named after the now-inactive project [spirulae](https://github.com/harry7557558/spirulae), which was named after the [deep-ocean cephalopod mollusk](https://en.wikipedia.org/wiki/Spirula).
 
-Spirula Studio is developed and maintained almost entirely by one person. Issues and PRs welcome &ndash; I sometimes respond late, but rest assured that I do review them all.
+Spirula Studio is maintained almost entirely by one person. Issues and PRs welcome &ndash; I sometimes respond late, but rest assured that I do review them all.
 
 <!-- If you want to sponsor Spirula Studio, you may use [GitHub sponsor](https://github.com/sponsors/harry7557558) for voluntary donation. For custom arrangements, please reach out to me. -->

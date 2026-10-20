@@ -18,7 +18,8 @@ continues where the last one stopped unless `--overwrite`.
 | flag | default | meaning |
 |---|---|---|
 | `--image-dir <dir>` | `images` | The images, relative to the dataset or absolute. |
-| `--model <id\|file>` | `moge2-vitb` | `moge2-vits`, `moge2-vitb`, `moge2-vitl`, `moge3-vitl`, `metric3d-vit-small`, `metric3d-vit-large`, `metric3d-vit-giant2`, or a path to an `.onnx` file. A known id is downloaded and cached. |
+| `--model <id\|file>` | `moge2-vitb` | `moge2-vits`, `moge2-vitb`, `moge2-vitl`, `moge3-vitl`, `metric3d-vit-small`, `metric3d-vit-large`, `metric3d-vit-giant2`, `marigold-v2`, or a path to an `.onnx` file. A known id is downloaded and cached; `marigold-v2` must be installed first with `--install`. |
+| `--install <id>` | | Fetch what `--model <id>` needs and stop; no dataset. Only Marigold v2 needs it: it is built from about 45 GB streamed from Hugging Face (its ModelScope mirror when that fails) and keeps 11 GB. `--depth` and `--no-normal` choose which of its two networks to build. The free disk space is checked first. |
 | `--max-size <n>` | 1064 | Longest side of the maps written, and of one image the network runs. |
 | `--num-tokens <n>` | 3600 | Patches MoGe's transformer runs (its range is 1200 to 3600); sets its cost. Metric3D ignores it. |
 | `--refine-steps <n>` | 3 | MoGe-3's depth refinement passes, each sharpening depth edges a little more; 0 skips refinement. Other models ignore it. |

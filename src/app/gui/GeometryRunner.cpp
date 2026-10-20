@@ -11,6 +11,8 @@
 #include "i18n/catalog/Log.h"
 
 #ifdef SS_TOOL_GEOMETRY
+#include "app/GeometryModel.h"
+#include "marigold/model/Fetch.h"
 #include "metric3d/model/Fetch.h"
 #include "moge/model/Fetch.h"
 #include "nn/Device.h"
@@ -44,6 +46,8 @@ constexpr uint64_t kMogeSBytes = 140852051ull;
 constexpr uint64_t kMogeBBytes = 419411850ull;
 constexpr uint64_t kMogeLBytes = 1324265014ull;
 constexpr uint64_t kMoge3LBytes = 1481333394ull;
+// Streamed, never stored: the files on disk come to 11 GB.
+constexpr uint64_t kMarigoldBytes = 44844605868ull;
 
 std::string trim_right(const std::string& s) {
     size_t n = s.size();
@@ -69,6 +73,8 @@ const std::vector<GeometryModel>& geometry_models() {
          &dmsg::geom_model_large_blurb, kLargeBytes},
         {"metric3d-vit-giant2", &dmsg::geom_model_giant,
          &dmsg::geom_model_giant_blurb, kGiantBytes},
+        {"marigold-v2", &dmsg::geom_model_marigold, &dmsg::geom_model_marigold_blurb,
+         kMarigoldBytes},
     };
     return kModels;
 }
@@ -81,7 +87,20 @@ std::vector<PendingDownload> geometry_model_downloads(const std::string& id) {
         const std::string dest = nn::cached_path(f);
         if (!file_is_cached(dest, f.bytes)) out.push_back(pending_download(f));
     };
-    if (const moge::ModelSource* m = moge::find_model_source(id)) {
+    if (id == marigold::kModelId) {
+        // Both maps: a run that later turns depth on should not stop for a second
+        // install. The child checks the disk before anything streams.
+        const app::GeometryInstall need = app::geometry_install_needs(id, true, true);
+        if (need.needed()) {
+            PendingDownload d;
+            d.bytes = need.download;
+            d.command = {app::exe_path(), "--lang", spirula::i18n::code(spirula::i18n::current()),
+                         "geometry", "--install", id, "--depth"};
+            out.push_back(d);
+        }
+        // Its depth is anchored to MoGe-2's.
+        want(moge::find_model_source("moge2-vitb")->checkpoint);
+    } else if (const moge::ModelSource* m = moge::find_model_source(id)) {
         want(m->checkpoint);
     } else if (const metric3d::ModelSource* src = metric3d::find_model_source(id)) {
         want(src->onnx);
@@ -95,7 +114,8 @@ std::vector<PendingDownload> geometry_model_downloads(const std::string& id) {
 
 bool geometry_model_cached(const std::string& id) {
 #ifdef SS_TOOL_GEOMETRY
-    if (!moge::find_model_source(id) && !metric3d::find_model_source(id)) {
+    if (!moge::find_model_source(id) && !metric3d::find_model_source(id) &&
+        id != marigold::kModelId) {
         std::error_code ec;
         return fs::is_regular_file(id, ec);   // a file the user pointed at
     }
@@ -104,6 +124,22 @@ bool geometry_model_cached(const std::string& id) {
     (void)id;
     return false;
 #endif
+}
+
+GeometryDisk geometry_model_disk(const std::string& id) {
+    GeometryDisk d;
+#ifdef SS_TOOL_GEOMETRY
+    const app::GeometryInstall need = app::geometry_install_needs(id, true, true);
+    d.needed = need.needed();
+    d.fits = need.fits();
+    d.disk = need.disk;
+    d.free = need.free;
+    d.spare = need.spare;
+    d.where = need.where;
+#else
+    (void)id;
+#endif
+    return d;
 }
 
 std::string geometry_availability() {

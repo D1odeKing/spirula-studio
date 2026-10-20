@@ -12,6 +12,7 @@
 // at K=1, or the pinhole faces camhost::plan_split_faces cuts a wide camera into.
 
 #include "data/SceneCenter.h"
+#include "data/SceneTransform.h"
 
 #include <array>
 #include <cstdint>
@@ -282,6 +283,7 @@ struct ParsedDataset {
     // such file, which is every dataset that did not come from this tool.
     bool                     gauge_oriented = false;   // +Z is up, measured
     bool                     gauge_metric = false;     // one unit is one metre
+    spirula::GeoReference    gauge_geo;                // where (0,0,0) is, from GPS
 
     // An editor save left `<name>.orig` beside the files it replaced
     // (data/SparseEdit.h): the frame is one somebody chose, not one to guess at.

@@ -788,6 +788,206 @@ SS_MSG(kept_frames,
     RU("Оставлено кадров: {0} -> {1}"),
     TR("{0} kare tutuldu -> {1}"));
 
+SS_MSG(blurry_skipped,
+    EN("Blurry frames skipped: {0}"),
+    JA("ぶれのため除外したフレーム: {0}"),
+    ZH_HANS("跳过的模糊帧：{0}"),
+    ZH_HANT("略過的模糊影格：{0}"),
+    KO("건너뛴 흐린 프레임: {0}"),
+    DE("Unscharfe Bilder übersprungen: {0}"),
+    FR("Images floues ignorées : {0}"),
+    ES("Fotogramas borrosos omitidos: {0}"),
+    PT("Quadros borrados ignorados: {0}"),
+    IT("Fotogrammi sfocati saltati: {0}"),
+    NL("Onscherpe beelden overgeslagen: {0}"),
+    RU("Пропущено размытых кадров: {0}"),
+    TR("Atlanan bulanık kareler: {0}"));
+
+SS_MSG(similar_skipped,
+    EN("Frames skipped as too similar: {0}"),
+    JA("似すぎのため除外したフレーム: {0}"),
+    ZH_HANS("因过于相似而跳过的帧：{0}"),
+    ZH_HANT("因過於相似而略過的影格：{0}"),
+    KO("너무 비슷해서 건너뛴 프레임: {0}"),
+    DE("Als zu ähnlich übersprungene Bilder: {0}"),
+    FR("Images ignorées car trop semblables : {0}"),
+    ES("Fotogramas omitidos por demasiado parecidos: {0}"),
+    PT("Quadros ignorados por serem parecidos demais: {0}"),
+    IT("Fotogrammi saltati perché troppo simili: {0}"),
+    NL("Als te gelijkend overgeslagen beelden: {0}"),
+    RU("Пропущено слишком похожих кадров: {0}"),
+    TR("Fazla benzer olduğu için atlanan kareler: {0}"));
+
+SS_MSG(stage_review_frames,
+    EN("Waiting for the frames to be reviewed"),
+    JA("フレームの確認を待っています"),
+    ZH_HANS("正在等待检查帧"),
+    ZH_HANT("正在等待檢查影格"),
+    KO("프레임 확인을 기다리는 중"),
+    DE("Warten auf die Durchsicht der Bilder"),
+    FR("En attente de la vérification des images"),
+    ES("Esperando la revisión de los fotogramas"),
+    PT("Aguardando a revisão dos quadros"),
+    IT("In attesa della revisione dei fotogrammi"),
+    NL("Wachten op de controle van de beelden"),
+    RU("Ожидание проверки кадров"),
+    TR("Karelerin gözden geçirilmesi bekleniyor"));
+
+SS_MSG(stage_judging_photos,
+    EN("Measuring how sharp the frames are"),
+    JA("フレームのシャープさを測っています"),
+    ZH_HANS("正在测量帧的清晰度"),
+    ZH_HANT("正在測量影格的清晰度"),
+    KO("프레임의 선명도를 측정하는 중"),
+    DE("Schärfe der Bilder wird gemessen"),
+    FR("Mesure de la netteté des images"),
+    ES("Midiendo la nitidez de los fotogramas"),
+    PT("Medindo a nitidez dos quadros"),
+    IT("Misura della nitidezza dei fotogrammi"),
+    NL("Scherpte van de beelden meten"),
+    RU("Измерение резкости кадров"),
+    TR("Karelerin keskinliği ölçülüyor"));
+
+SS_MSG(skipped_discarded,
+    EN("Skipped frames not kept, deleted: {0}"),
+    JA("除外したフレームは残しません。削除: {0}"),
+    ZH_HANS("未保留被跳过的帧，已删除：{0}"),
+    ZH_HANT("未保留被略過的影格，已刪除：{0}"),
+    KO("건너뛴 프레임을 보관하지 않음, 삭제: {0}"),
+    DE("Übersprungene Bilder nicht aufbewahrt, gelöscht: {0}"),
+    FR("Images ignorées non conservées, supprimées : {0}"),
+    ES("Fotogramas omitidos no conservados, eliminados: {0}"),
+    PT("Quadros ignorados não guardados, apagados: {0}"),
+    IT("Fotogrammi saltati non conservati, eliminati: {0}"),
+    NL("Overgeslagen beelden niet bewaard, verwijderd: {0}"),
+    RU("Пропущенные кадры не сохранены, удалено: {0}"),
+    TR("Atlanan kareler saklanmadı, silinen: {0}"));
+
+SS_MSG(plan_frames_sorted,
+    EN("the blur rule is applied to the frames already there: the ones "
+       "left out move to images_skipped, and what was made from them is "
+       "kept"),
+    JA("すでにあるフレームにぶれの判定を適用します。外したものは images_"
+       "skipped に移し、そこから作ったものは残します"),
+    ZH_HANS("模糊规则应用于已有的帧：被剔除的移到 images_skipped，由它"
+            "们生成的内容保留"),
+    ZH_HANT("模糊規則套用到已有的影格：被剔除的移到 images_skipped，由"
+            "它們建立的內容保留"),
+    KO("이미 있는 프레임에 흐림 규칙을 적용합니다. 빠진 프레임은 ima"
+       "ges_skipped로 옮기고, 그것으로 만든 결과는 유지합니다"),
+    DE("die Unschärferegel wird auf die vorhandenen Bilder angewendet: die"
+       " ausgelassenen wandern nach images_skipped, und was aus ihnen "
+       "erstellt wurde, bleibt"),
+    FR("la règle de flou est appliquée aux images déjà présentes : celles "
+       "écartées vont dans images_skipped, et ce qui en a été tiré est "
+       "conservé"),
+    ES("la regla de desenfoque se aplica a los fotogramas que ya hay: los "
+       "apartados pasan a images_skipped y lo que se hizo con ellos se "
+       "conserva"),
+    PT("a regra de borrão é aplicada aos quadros que já existem: os "
+       "deixados de fora vão para images_skipped e o que foi feito a "
+       "partir deles é mantido"),
+    IT("la regola di sfocatura si applica ai fotogrammi già presenti: "
+       "quelli scartati vanno in images_skipped e ciò che ne è stato "
+       "ricavato resta"),
+    NL("de onscherpteregel wordt toegepast op de aanwezige beelden: de "
+       "weggelaten beelden gaan naar images_skipped, en wat ervan gemaakt "
+       "is blijft"),
+    RU("правило размытия применяется к уже имеющимся кадрам: исключённые "
+       "переносятся в images_skipped, а сделанное из них остаётся"),
+    TR("bulanıklık kuralı mevcut karelere uygulanıyor: dışarıda "
+       "bırakılanlar images_skipped klasörüne taşınır, onlardan "
+       "üretilenler korunur"));
+
+SS_MSG(frames_resorted,
+    EN("Frames that changed sides after the review: {0}"),
+    JA("確認後に振り分けが変わったフレーム: {0}"),
+    ZH_HANS("检查后改变去留的帧：{0}"),
+    ZH_HANT("檢查後改變去留的影格：{0}"),
+    KO("확인 후 분류가 바뀐 프레임: {0}"),
+    DE("Bilder, die nach der Durchsicht die Seite gewechselt haben: {0}"),
+    FR("Images ayant changé de côté après la vérification : {0}"),
+    ES("Fotogramas que cambiaron de lado tras la revisión: {0}"),
+    PT("Quadros que mudaram de lado após a revisão: {0}"),
+    IT("Fotogrammi che hanno cambiato lato dopo la revisione: {0}"),
+    NL("Beelden die na de controle van kant wisselden: {0}"),
+    RU("Кадров, сменивших сторону после проверки: {0}"),
+    TR("Gözden geçirmeden sonra taraf değiştiren kareler: {0}"));
+
+SS_MSG(frames_settled,
+    EN("Frames that changed sides once the whole capture was measured: {0}"),
+    JA("撮影全体を測定した後に振り分けが変わったフレーム: {0}"),
+    ZH_HANS("测量完整个拍摄后改变去留的帧：{0}"),
+    ZH_HANT("測量完整個拍攝後改變去留的影格：{0}"),
+    KO("촬영 전체를 측정한 뒤 분류가 바뀐 프레임: {0}"),
+    DE("Bilder, die die Seite wechselten, nachdem die ganze Aufnahme gemessen war: {0}"),
+    FR("Images ayant changé de côté une fois toute la prise mesurée : {0}"),
+    ES("Fotogramas que cambiaron de lado al medir toda la toma: {0}"),
+    PT("Quadros que mudaram de lado depois de medida toda a captura: {0}"),
+    IT("Fotogrammi che hanno cambiato lato una volta misurata tutta la ripresa: {0}"),
+    NL("Beelden die van kant wisselden toen de hele opname gemeten was: {0}"),
+    RU("Кадров, сменивших сторону после замера всей съёмки: {0}"),
+    TR("Çekimin tamamı ölçüldükten sonra taraf değiştiren kareler: {0}"));
+
+SS_MSG(review_not_movable,
+    EN("No pause for the threshold: some frames (of a rig, of a 360 video, or"
+       " not kept aside) cannot change sides afterwards, so it is applied as "
+       "set"),
+    JA("しきい値のための一時停止はしません。一部のフレーム（リグ、360度動画、また"
+       "は退避していないもの）は後から振り分けを変えられないため、設定どおりに適用"
+       "します"),
+    ZH_HANS("不为阈值暂停：部分帧（装置、360 视频或未另行保留的帧）之后无法改变去留，"
+            "因此按当前设置应用"),
+    ZH_HANT("不為閾值暫停：部分影格（裝置、360 影片或未另行保留的影格）之後無法改變去"
+            "留，因此依目前設定套用"),
+    KO("임계값을 위해 멈추지 않습니다. 일부 프레임(리그, 360 동영상, 따로 "
+       "보관하지 않은 프레임)은 나중에 분류를 바꿀 수 없어 설정대로 적용합니다"),
+    DE("Keine Pause für die Schwelle: Manche Bilder (eines Rigs, eines "
+       "360-Videos oder nicht beiseitegelegte) können nachträglich nicht die "
+       "Seite wechseln, daher gilt sie wie eingestellt"),
+    FR("Pas de pause pour le seuil : certaines images (d’un rig, d’une vidéo"
+       " 360 ou non mises de côté) ne peuvent plus changer de côté, il est "
+       "donc appliqué tel quel"),
+    ES("Sin pausa para el umbral: algunos fotogramas (de un rig, de un vídeo"
+       " 360 o no apartados) no pueden cambiar de lado después, así que se "
+       "aplica tal cual"),
+    PT("Sem pausa para o limiar: alguns quadros (de um rig, de um vídeo 360 "
+       "ou não guardados à parte) não podem mudar de lado depois, por isso é "
+       "aplicado como está"),
+    IT("Nessuna pausa per la soglia: alcuni fotogrammi (di un rig, di un "
+       "video 360 o non messi da parte) non possono più cambiare lato, quindi"
+       " si applica così com’è"),
+    NL("Geen pauze voor de drempel: sommige beelden (van een rig, van een "
+       "360-video of niet apart gezet) kunnen achteraf niet van kant wisselen,"
+       " dus hij geldt zoals ingesteld"),
+    RU("Без паузы для порога: некоторые кадры (рига, видео 360 или не "
+       "отложенные) уже не могут сменить сторону, поэтому он применяется как "
+       "задан"),
+    TR("Eşik için duraklatılmıyor: bazı kareler (bir düzeneğin, bir 360 "
+       "videonun ya da ayrı tutulmayanlar) sonradan taraf değiştiremez, bu "
+       "yüzden ayarlandığı gibi uygulanır"));
+
+SS_MSG(photos_in_place_unsorted,
+    EN("Photos read where they are stay unsorted: nothing of theirs is "
+       "moved"),
+    JA("元の場所で読み込む写真は仕分けしません。写真は一切移動しません"),
+    ZH_HANS("原地读取的照片不做整理：不会移动其中任何文件"),
+    ZH_HANT("原地讀取的照片不做整理：不會移動其中任何檔案"),
+    KO("제자리에서 읽는 사진은 정리하지 않습니다. 사진은 하나도 옮기지 "
+       "않습니다"),
+    DE("Fotos, die an ihrem Ort gelesen werden, bleiben unsortiert: nichts"
+       " davon wird verschoben"),
+    FR("Les photos lues sur place ne sont pas triées : rien n’est déplacé"),
+    ES("Las fotos leídas en su sitio no se ordenan: no se mueve ninguna"),
+    PT("As fotos lidas no lugar não são organizadas: nada é movido"),
+    IT("Le foto lette dove si trovano non vengono riordinate: nulla viene "
+       "spostato"),
+    NL("Foto’s die ter plekke worden gelezen blijven ongesorteerd: er "
+       "wordt niets verplaatst"),
+    RU("Фотографии, читаемые на месте, не сортируются: ничего не "
+       "перемещается"),
+    TR("Yerinde okunan fotoğraflar ayıklanmaz: hiçbiri taşınmaz"));
+
 SS_MSG(stage_warp_360,
     EN("Warping 360 frames into views"),
     JA("360 フレームを各ビューに変換しています"),
@@ -2196,6 +2396,100 @@ SS_MSG(eval_metrics_written,
     RU("Показатели оценки записаны в {0}"),
     TR("Değerlendirme ölçütleri {0} dosyasına yazıldı"));
 
+SS_MSG(eval_lpips_unavailable,
+    EN("Eval: this build has no inference layer (SS_BUILD_SAM), so LPIPS is left "
+       "out; reference/python/eval_lpips.py scores the images --save-eval-images "
+       "writes."),
+    JA("評価: このビルドには推論レイヤー（SS_BUILD_SAM）がないため、LPIPS は省きます。"
+       "--save-eval-images が書き出す画像は reference/python/eval_lpips.py で採点できます。"),
+    ZH_HANS("评估：此构建不含推理层（SS_BUILD_SAM），因此不计算 LPIPS；"
+            "reference/python/eval_lpips.py 可为 --save-eval-images 写出的图像评分。"),
+    ZH_HANT("評估：此建置不含推論層（SS_BUILD_SAM），因此不計算 LPIPS；"
+            "reference/python/eval_lpips.py 可為 --save-eval-images 寫出的影像評分。"),
+    KO("평가: 이 빌드에는 추론 계층(SS_BUILD_SAM)이 없어 LPIPS를 뺍니다. "
+       "--save-eval-images가 쓰는 이미지는 reference/python/eval_lpips.py로 채점할 수 "
+       "있습니다."),
+    DE("Auswertung: Dieser Build hat keine Inferenzschicht (SS_BUILD_SAM), daher "
+       "fehlt LPIPS; reference/python/eval_lpips.py bewertet die Bilder, die "
+       "--save-eval-images schreibt."),
+    FR("Évaluation : ce build n'a pas de couche d'inférence (SS_BUILD_SAM), LPIPS est "
+       "donc omis ; reference/python/eval_lpips.py note les images qu'écrit "
+       "--save-eval-images."),
+    ES("Evaluación: esta compilación no tiene capa de inferencia (SS_BUILD_SAM), así "
+       "que se omite LPIPS; reference/python/eval_lpips.py puntúa las imágenes que "
+       "escribe --save-eval-images."),
+    PT("Avaliação: esta compilação não tem camada de inferência (SS_BUILD_SAM), então "
+       "o LPIPS fica de fora; reference/python/eval_lpips.py pontua as imagens que "
+       "--save-eval-images grava."),
+    IT("Valutazione: questa build non ha il livello di inferenza (SS_BUILD_SAM), "
+       "quindi LPIPS è escluso; reference/python/eval_lpips.py valuta le immagini "
+       "scritte da --save-eval-images."),
+    NL("Evaluatie: deze build heeft geen inferentielaag (SS_BUILD_SAM), dus LPIPS "
+       "ontbreekt; reference/python/eval_lpips.py scoort de beelden die "
+       "--save-eval-images wegschrijft."),
+    RU("Оценка: в этой сборке нет слоя вывода (SS_BUILD_SAM), поэтому LPIPS "
+       "пропускается; reference/python/eval_lpips.py оценивает изображения, которые "
+       "пишет --save-eval-images."),
+    TR("Değerlendirme: bu derlemede çıkarım katmanı (SS_BUILD_SAM) yok, bu yüzden "
+       "LPIPS atlanıyor; reference/python/eval_lpips.py, --save-eval-images'ın yazdığı "
+       "görüntüleri puanlar."));
+
+SS_MSG(eval_lpips_missing,
+    EN("{0}\nThe eval pass scores held-out views with LPIPS, which needs these "
+       "checkpoints: --lpips-checkpoints <folder> reads them from a folder, and "
+       "--eval-lpips 0 trains without LPIPS."),
+    JA("{0}\n評価では取り分けた視点を LPIPS で採点し、そのためにこれらのチェック"
+       "ポイントが必要です。--lpips-checkpoints <folder> でフォルダーから読み込むか、"
+       "--eval-lpips 0 で LPIPS なしに学習してください。"),
+    ZH_HANS("{0}\n评估用 LPIPS 为留出的视角评分，需要这些检查点："
+            "--lpips-checkpoints <folder> 从文件夹读取它们，--eval-lpips 0 则不用 "
+            "LPIPS 训练。"),
+    ZH_HANT("{0}\n評估用 LPIPS 為留出的視角評分，需要這些檢查點："
+            "--lpips-checkpoints <folder> 從資料夾讀取它們，--eval-lpips 0 則不用 "
+            "LPIPS 訓練。"),
+    KO("{0}\n평가는 떼어 둔 시점을 LPIPS로 채점하며 이 체크포인트가 필요합니다. "
+       "--lpips-checkpoints <folder>는 폴더에서 읽고, --eval-lpips 0은 LPIPS 없이 "
+       "학습합니다."),
+    DE("{0}\nDie Auswertung bewertet zurückgehaltene Ansichten mit LPIPS und braucht "
+       "dafür diese Checkpoints: --lpips-checkpoints <folder> liest sie aus einem "
+       "Ordner, --eval-lpips 0 trainiert ohne LPIPS."),
+    FR("{0}\nL'évaluation note les vues mises de côté avec LPIPS, qui a besoin de ces "
+       "points de contrôle : --lpips-checkpoints <folder> les lit dans un dossier, "
+       "et --eval-lpips 0 entraîne sans LPIPS."),
+    ES("{0}\nLa evaluación puntúa las vistas apartadas con LPIPS, que necesita estos "
+       "puntos de control: --lpips-checkpoints <folder> los lee de una carpeta y "
+       "--eval-lpips 0 entrena sin LPIPS."),
+    PT("{0}\nA avaliação pontua as vistas reservadas com LPIPS, que precisa destes "
+       "checkpoints: --lpips-checkpoints <folder> os lê de uma pasta e "
+       "--eval-lpips 0 treina sem LPIPS."),
+    IT("{0}\nLa valutazione assegna un punteggio LPIPS alle viste messe da parte, e "
+       "le servono questi checkpoint: --lpips-checkpoints <folder> li legge da una "
+       "cartella, --eval-lpips 0 addestra senza LPIPS."),
+    NL("{0}\nDe evaluatie scoort opzijgezette aanzichten met LPIPS, dat deze "
+       "checkpoints nodig heeft: --lpips-checkpoints <folder> leest ze uit een map, "
+       "--eval-lpips 0 traint zonder LPIPS."),
+    RU("{0}\nОценка проверяет отложенные виды по LPIPS, и ей нужны эти контрольные "
+       "точки: --lpips-checkpoints <folder> читает их из папки, а --eval-lpips 0 "
+       "обучает без LPIPS."),
+    TR("{0}\nDeğerlendirme ayrılmış görünümleri LPIPS ile puanlar ve bu denetim "
+       "noktalarına ihtiyaç duyar: --lpips-checkpoints <folder> onları bir klasörden "
+       "okur, --eval-lpips 0 ise LPIPS olmadan eğitir."));
+
+SS_MSG(eval_lpips_failed,
+    EN("Eval: LPIPS failed and is left out of metrics.json: {0}"),
+    JA("評価: LPIPS に失敗したため metrics.json から省きます: {0}"),
+    ZH_HANS("评估：LPIPS 失败，metrics.json 中不含它：{0}"),
+    ZH_HANT("評估：LPIPS 失敗，metrics.json 中不含它：{0}"),
+    KO("평가: LPIPS가 실패해 metrics.json에서 뺍니다: {0}"),
+    DE("Auswertung: LPIPS ist fehlgeschlagen und fehlt in metrics.json: {0}"),
+    FR("Évaluation : LPIPS a échoué et est omis de metrics.json : {0}"),
+    ES("Evaluación: LPIPS falló y se omite de metrics.json: {0}"),
+    PT("Avaliação: o LPIPS falhou e fica fora de metrics.json: {0}"),
+    IT("Valutazione: LPIPS non è riuscito ed è escluso da metrics.json: {0}"),
+    NL("Evaluatie: LPIPS is mislukt en ontbreekt in metrics.json: {0}"),
+    RU("Оценка: LPIPS не удалось, в metrics.json его нет: {0}"),
+    TR("Değerlendirme: LPIPS başarısız oldu ve metrics.json'a yazılmadı: {0}"));
+
 // ===========================================================================
 // Failures -- what the screen says when a run stops
 // ===========================================================================
@@ -2257,6 +2551,26 @@ SS_MSG(err_unfinished_run,
     TR("Çıktı klasöründe yarım kalmış bir çalıştırma var (çıkarılmış kareler / "
        "öznitelikler / maskeler); yeniden kullanmak için \"Önceki çalıştırmayı "
        "sürdür\" seçeneğini işaretleyin ya da başka bir klasör seçin"));
+
+// {0} the folder, {1} the system's reason.
+SS_MSG(err_create_output_folder,
+    EN("could not create the output folder {0} ({1}); choose another folder"),
+    JA("出力先のフォルダー {0} を作成できませんでした（{1}）。別のフォルダーを"
+       "選んでください"),
+    ZH_HANS("无法创建输出文件夹 {0}（{1}）。请换一个文件夹"),
+    ZH_HANT("無法建立輸出資料夾 {0}（{1}）。請換一個資料夾"),
+    KO("출력 폴더 {0}을(를) 만들지 못했습니다({1}). 다른 폴더를 고르세요"),
+    DE("Der Ausgabeordner {0} konnte nicht angelegt werden ({1}); wählen Sie "
+       "einen anderen Ordner"),
+    FR("Impossible de créer le dossier de sortie {0} ({1}) ; choisissez un "
+       "autre dossier"),
+    ES("No se pudo crear la carpeta de salida {0} ({1}); elija otra carpeta"),
+    PT("Não foi possível criar a pasta de saída {0} ({1}); escolha outra pasta"),
+    IT("Non è stato possibile creare la cartella di uscita {0} ({1}); scelga "
+       "un'altra cartella"),
+    NL("De uitvoermap {0} kon niet worden aangemaakt ({1}); kies een andere map"),
+    RU("Не удалось создать папку вывода {0} ({1}); выберите другую папку"),
+    TR("Çıktı klasörü {0} oluşturulamadı ({1}); başka bir klasör seçin"));
 
 // {0} the program that would not start.
 SS_MSG(err_spawn_recon,
@@ -2464,6 +2778,76 @@ SS_MSG(ppisp_before_color_space_order,
     RU("{0} требует {1}: покадровая коррекция цвета всегда применяется в sRGB"),
     TR("{0}, {1} gerektirir: fotoğraf başına renk düzeltmesi her zaman sRGB'de "
        "uygulanır"));
+SS_MSG(learned_score_needs,
+    EN("--densify-learned-score needs --use-revised-densification, a "
+       "--densify-loss-map-mode other than none, --densify-score-blend-world-grad "
+       "0, and positive --densify-score-power and --densify-loss-map-power"),
+    JA("--densify-learned-score には --use-revised-densification、none 以外の "
+       "--densify-loss-map-mode、--densify-score-blend-world-grad 0、正の "
+       "--densify-score-power と --densify-loss-map-power が必要です"),
+    ZH_HANS("--densify-learned-score 需要开启 --use-revised-densification、"
+            "--densify-loss-map-mode 不为 none、--densify-score-blend-world-grad "
+            "为 0，以及正的 --densify-score-power 和 --densify-loss-map-power"),
+    ZH_HANT("--densify-learned-score 需要開啟 --use-revised-densification、"
+            "--densify-loss-map-mode 不為 none、--densify-score-blend-world-grad "
+            "為 0，以及正的 --densify-score-power 和 --densify-loss-map-power"),
+    KO("--densify-learned-score에는 --use-revised-densification, none이 아닌 "
+       "--densify-loss-map-mode, --densify-score-blend-world-grad 0, 양수인 "
+       "--densify-score-power와 --densify-loss-map-power가 필요합니다"),
+    DE("--densify-learned-score setzt --use-revised-densification, einen "
+       "--densify-loss-map-mode außer none, --densify-score-blend-world-grad 0 "
+       "sowie positive Werte für --densify-score-power und "
+       "--densify-loss-map-power voraus"),
+    FR("--densify-learned-score requiert --use-revised-densification, un "
+       "--densify-loss-map-mode autre que none, --densify-score-blend-world-grad "
+       "0, et des valeurs positives de --densify-score-power et "
+       "--densify-loss-map-power"),
+    ES("--densify-learned-score requiere --use-revised-densification, un "
+       "--densify-loss-map-mode distinto de none, --densify-score-blend-world-grad "
+       "0, y valores positivos de --densify-score-power y --densify-loss-map-power"),
+    PT("--densify-learned-score exige --use-revised-densification, um "
+       "--densify-loss-map-mode diferente de none, --densify-score-blend-world-grad "
+       "0, e valores positivos de --densify-score-power e --densify-loss-map-power"),
+    IT("--densify-learned-score richiede --use-revised-densification, un "
+       "--densify-loss-map-mode diverso da none, --densify-score-blend-world-grad "
+       "0, e valori positivi di --densify-score-power e --densify-loss-map-power"),
+    NL("--densify-learned-score vereist --use-revised-densification, een "
+       "--densify-loss-map-mode anders dan none, --densify-score-blend-world-grad "
+       "0, en positieve waarden voor --densify-score-power en "
+       "--densify-loss-map-power"),
+    RU("--densify-learned-score требует --use-revised-densification, "
+       "--densify-loss-map-mode, отличного от none, --densify-score-blend-world-grad "
+       "0 и положительных --densify-score-power и --densify-loss-map-power"),
+    TR("--densify-learned-score; --use-revised-densification, none dışında bir "
+       "--densify-loss-map-mode, --densify-score-blend-world-grad 0 ve pozitif "
+       "--densify-score-power ile --densify-loss-map-power gerektirir"));
+SS_MSG(dead_criterion_needs_revised,
+    EN("--dead-criterion {0} needs --use-revised-densification: the MCMC "
+       "relocation tests opacity only"),
+    JA("--dead-criterion {0} には --use-revised-densification が必要です。MCMC "
+       "の再配置は不透明度しか見ません"),
+    ZH_HANS("--dead-criterion {0} 需要开启 --use-revised-densification：MCMC "
+            "重定位只检查不透明度"),
+    ZH_HANT("--dead-criterion {0} 需要開啟 --use-revised-densification：MCMC "
+            "重定位只檢查不透明度"),
+    KO("--dead-criterion {0}에는 --use-revised-densification이 필요합니다. "
+       "MCMC 재배치는 불투명도만 봅니다"),
+    DE("--dead-criterion {0} setzt --use-revised-densification voraus: Die "
+       "MCMC-Umverteilung prüft nur die Deckkraft"),
+    FR("--dead-criterion {0} requiert --use-revised-densification : la "
+       "relocalisation MCMC ne teste que l'opacité"),
+    ES("--dead-criterion {0} requiere --use-revised-densification: la "
+       "reubicación MCMC solo comprueba la opacidad"),
+    PT("--dead-criterion {0} exige --use-revised-densification: a realocação "
+       "MCMC só testa a opacidade"),
+    IT("--dead-criterion {0} richiede --use-revised-densification: il "
+       "riposizionamento MCMC controlla solo l'opacità"),
+    NL("--dead-criterion {0} vereist --use-revised-densification: de "
+       "MCMC-herplaatsing test alleen de dekking"),
+    RU("--dead-criterion {0} требует --use-revised-densification: перемещение "
+       "MCMC проверяет только непрозрачность"),
+    TR("--dead-criterion {0}, --use-revised-densification gerektirir: MCMC "
+       "yeniden yerleştirmesi yalnızca saydamsızlığı sınar"));
 SS_MSG(bad_quantization_level,
     EN("quantization_level must be 0 or 1"),
     JA("quantization_level は 0 か 1 にしてください"),

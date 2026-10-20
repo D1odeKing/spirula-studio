@@ -143,6 +143,20 @@ RegionMesh region_boundary_mesh(const Region& r, const Aabb& box, int cells_long
     return extract(g, lab, 1, [&](const double* p) { return r.contains(p); });
 }
 
+Aabb region_mesh_box(const Region& r, const Aabb& scene) {
+    const Aabb rb = r.bounds();
+    bool bounded = !rb.empty();
+    for (int a = 0; a < 3; a++) bounded = bounded && rb.lo[a] > -1e299 && rb.hi[a] < 1e299;
+    if (!bounded) return scene;
+    Aabb box;
+    for (int a = 0; a < 3; a++) {
+        const double pad = 0.05 * (rb.hi[a] - rb.lo[a]) + 1e-9;
+        box.lo[a] = rb.lo[a] - pad;
+        box.hi[a] = rb.hi[a] + pad;
+    }
+    return box;
+}
+
 std::vector<RegionMesh> label_boundary_meshes(const LabelField& f, const Aabb& box, int cells_long_axis,
                                               const std::atomic<bool>* cancel) {
     auto stop = [&] { return cancel && cancel->load(std::memory_order_relaxed); };

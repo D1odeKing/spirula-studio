@@ -214,19 +214,34 @@ int main() {
         const fs::path dir = fs::temp_directory_path() / "spirula_region_masks_test";
         const std::vector<std::string> files =
             write_region_masks(c.ds, c.ds.points.xyz.data(), n, inside.data(), dir.string(), false);
-        auto kept = [&](int cam) {
+        auto kept_in = [&](const std::vector<std::string>& set, int cam) {
             int w = 0, h = 0, ch = 0;
-            stbi_uc* img = stbi_load(files[(size_t)cam].c_str(), &w, &h, &ch, 1);
+            stbi_uc* img = stbi_load(set[(size_t)cam].c_str(), &w, &h, &ch, 1);
             if (!img) return -1.0;
             double k = 0;
             for (int i = 0; i < w * h; i++) k += img[i] != 0;
             stbi_image_free(img);
             return k / (w * h);
         };
+        auto kept = [&](int cam) { return kept_in(files, cam); };
         check(files.size() == 40 && kept(5) > 0.99, "region masks: a camera over the inside keeps everything");
         // Pixels no point falls near stay kept: here the strip's two sides.
         check(kept(35) < 0.35, "region masks: one over the outside keeps little but what nothing covers");
         check(kept(20) > 0.3 && kept(20) < 0.9, "region masks: one over the boundary keeps its inside half and a margin");
+
+        // Given the region, the sides are rays that miss it.
+        BoxRegion box;
+        box.center[0] = 9.5;
+        box.half[0] = 10.5;
+        box.half[1] = 1.5;
+        box.half[2] = 0.2;
+        const std::vector<std::string> boxed = write_region_masks(
+            c.ds, c.ds.points.xyz.data(), n, inside.data(), (dir / "boxed").string(), false, nullptr, &box);
+        // The strip is 300 of the 500 px across, plus a 12 px margin a side.
+        const double k5 = kept_in(boxed, 5);
+        check(k5 > 0.6 && k5 < 0.75, "region masks: a camera over the inside keeps the region and a margin, not "
+                                     "the sides (" + std::to_string(k5) + ")");
+        check(kept_in(boxed, 35) == 0.0, "region masks: one wholly past the region keeps nothing");
         std::error_code ec;
         fs::remove_all(dir, ec);
     }

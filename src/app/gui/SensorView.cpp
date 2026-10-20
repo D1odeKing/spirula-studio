@@ -209,7 +209,8 @@ void fix_tooltip(const SensorData& d, const SensorFix& f) {
         ui::Text(pmsg::tip_heading, {fixed(f.yaw, 1)});
         ui::Text(pmsg::tip_pitch, {fixed(f.pitch, 1)});
     }
-    if (f.outlier) ui::TextColored(kBad, d.video ? pmsg::tip_outlier : pmsg::tip_far);
+    if (f.no_fix) ui::TextColored(kWarn, pmsg::tip_no_fix);
+    else if (f.outlier) ui::TextColored(kBad, d.video ? pmsg::tip_outlier : pmsg::tip_far);
     ui::TextDisabled(d.video ? pmsg::tip_click_seek : pmsg::tip_click_photo);
     ImGui::EndTooltip();
 }
@@ -303,10 +304,9 @@ std::shared_ptr<SensorData> read_video(const std::string& path) {
     std::vector<const sfm::TelemetryGps*> source;   // per fix, what it was read from
     size_t k = 0;
     for (const sfm::TelemetryGps& g : t.gps) {
-        if (!sfm::gps_valid(g)) {
-            d->no_fix++;
-            continue;
-        }
+        const bool valid = sfm::gps_valid(g);
+        if (!valid && (std::fabs(g.lat) > 90.0 || std::fabs(g.lon) > 180.0)) continue;
+        if (!valid) d->no_fix++;
         SensorFix f;
         f.t = g.t;
         f.lat = g.lat;
@@ -315,7 +315,9 @@ std::shared_ptr<SensorData> read_video(const std::string& path) {
         f.has_alt = g.has_alt;
         f.speed = (float)g.speed;
         f.dop = (float)g.dop;
-        if (k < kept.size() && kept[k].t == g.t && kept[k].lat == g.lat && kept[k].lon == g.lon)
+        if (!valid)
+            f.outlier = f.no_fix = true;
+        else if (k < kept.size() && kept[k].t == g.t && kept[k].lat == g.lat && kept[k].lon == g.lon)
             k++;
         else {
             f.outlier = true;
@@ -629,6 +631,9 @@ void SensorView::draw_status(const SensorData& d) {
              spirula::i18n::format(d.video ? pmsg::gps_outliers : pmsg::gps_far,
                                    {count_text((long long)d.outliers)}),
              d.video ? pmsg::gps_outliers_help.get() : pmsg::gps_far_help.get());
+    if (d.no_fix > 0)
+        chip(kWarn, spirula::i18n::format(pmsg::gps_no_fix, {count_text((long long)d.no_fix)}),
+             pmsg::gps_no_fix_help.get());
     if (d.zero > 0)
         chip(ImGui::GetStyle().Colors[ImGuiCol_TextDisabled],
              spirula::i18n::format(pmsg::gps_zero, {count_text((long long)d.zero)}),
@@ -877,20 +882,21 @@ void SensorView::draw_map(const SensorData& d, const ImVec2& size, double playhe
         }
     // Dropped fixes, where they are -- or pinned to the edge, pointing the
     // way, when they are off the map.
-    const ImU32 red = IM_COL32(240, 80, 70, 255);
+    const ImU32 red = IM_COL32(240, 80, 70, 255), amber = ImGui::ColorConvertFloat4ToU32(kWarn);
     for (const SensorFix& f : d.fixes) {
         if (!f.outlier) continue;
+        const ImU32 col = f.no_fix ? amber : red;
         ImVec2 p = to_screen(f.x, f.y);
         const bool inside = p.x >= at.x && p.x <= at.x + size.x && p.y >= at.y && p.y <= at.y + size.y;
         if (!inside) {
             p.x = std::clamp(p.x, at.x + px(6.0f), at.x + size.x - px(6.0f));
             p.y = std::clamp(p.y, at.y + px(6.0f), at.y + size.y - px(6.0f));
-            dl->AddCircle(p, px(5.0f), red, 0, px(2.0f));
+            dl->AddCircle(p, px(5.0f), col, 0, px(2.0f));
             continue;
         }
         const float s = px(4.0f);
-        dl->AddLine(ImVec2(p.x - s, p.y - s), ImVec2(p.x + s, p.y + s), red, px(2.0f));
-        dl->AddLine(ImVec2(p.x - s, p.y + s), ImVec2(p.x + s, p.y - s), red, px(2.0f));
+        dl->AddLine(ImVec2(p.x - s, p.y - s), ImVec2(p.x + s, p.y + s), col, px(2.0f));
+        dl->AddLine(ImVec2(p.x - s, p.y + s), ImVec2(p.x + s, p.y - s), col, px(2.0f));
     }
     if (!kept.empty()) {
         const SensorFix& a = d.fixes[kept.front()];
@@ -1166,7 +1172,7 @@ void SensorView::draw_track3d(const SensorData& d, const ImVec2& size, double pl
             }
             dl->AddCircleFilled(s, px(3.0f), col);
         }
-    const ImU32 red = IM_COL32(240, 80, 70, 255);
+    const ImU32 red = IM_COL32(240, 80, 70, 255), amber = ImGui::ColorConvertFloat4ToU32(kWarn);
     for (const SensorFix& fx : d.fixes) {
         if (!fx.outlier) continue;
         const P3 p = pos(fx);
@@ -1174,8 +1180,9 @@ void SensorView::draw_track3d(const SensorData& d, const ImVec2& size, double pl
         ImVec2 s;
         if (!project(p, s)) continue;
         const float k = px(4.0f);
-        dl->AddLine(ImVec2(s.x - k, s.y - k), ImVec2(s.x + k, s.y + k), red, px(2.0f));
-        dl->AddLine(ImVec2(s.x - k, s.y + k), ImVec2(s.x + k, s.y - k), red, px(2.0f));
+        const ImU32 col = fx.no_fix ? amber : red;
+        dl->AddLine(ImVec2(s.x - k, s.y - k), ImVec2(s.x + k, s.y + k), col, px(2.0f));
+        dl->AddLine(ImVec2(s.x - k, s.y + k), ImVec2(s.x + k, s.y - k), col, px(2.0f));
     }
     if (!kept.empty()) {
         ImVec2 s;

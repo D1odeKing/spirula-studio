@@ -231,10 +231,12 @@ void SourcePreview::join_listing() {
 }
 
 std::string SourcePreview::reload_key(const PreviewInput& in) const {
-    // Anything that changes what the frames look like is a new preview.
+    // Anything that changes what the frames look like, or what decodes them, is a new preview.
     std::string k = std::to_string((int)in.kind) + '\n' + in.path + '\n' + in.mask_dir + '\n' +
-                    in.src.device + '\n' + in.src.look.lut + '\n' +
+                    in.src.device + '\n' + std::to_string(in.src.builtin_decode) + '\n' +
+                    in.src.look.lut + '\n' +
                     std::to_string(in.src.look.auto_rotate) + '\n' +
+                    std::to_string(in.src.look.packed_lenses) + '\n' +
                     in.src.image_gamut + '\n' + in.src.image_exposure + '\n' +
                     std::to_string(in.src.image_is_linear.value_or(false)) +
                     std::to_string(in.src.image_is_linear.has_value());

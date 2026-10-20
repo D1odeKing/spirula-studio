@@ -161,6 +161,7 @@ std::map<std::string, float> engine_compute_loss_backward(
     // loss weights
     std::array<float, (int)LossWeightIndex::length> loss_weights,
     float w_ssim,
+    int perceptual_loss,  // PerceptualLoss: what w_ssim weights
     int num_loss_scales,
     // When positive, overrides num_loss_scales based on the render resolution
     // (see LossConfig::loss_scale_min_pixels). Zero leaves it untouched.

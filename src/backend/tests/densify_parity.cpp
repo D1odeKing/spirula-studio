@@ -376,7 +376,10 @@ int main(int argc, char** argv) {
     };
 
     // Argument pack shared by the four API calls.
-    auto call_relocate_las = [&](Model& m, float min_opacity, uint32_t seed) {
+    auto call_relocate_las = [&](Model& m, float min_opacity, uint32_t seed,
+                                 float* max_weight = nullptr,
+                                 bool dead_by_opacity = true,
+                                 int64_t* num_dead = nullptr) {
         relocate_splats_with_long_axis_split_tensor(
             N, min_opacity, /*split_opacity_k=*/0.6f,
             dv<float3>(m.means, CAP), dv<float4>(m.quats, CAP),
@@ -401,17 +404,19 @@ int main(int argc, char** argv) {
                        0),
             dv<float2>(m.accum, CAP), DeviceVector<float2>{},
             dv<int32_t>(m.bias_steps, CAP), dv<uint32_t>(m.visit, CAP), /*dead_after_steps=*/100u,
+            dv<float>(max_weight, max_weight ? CAP : 0), dead_by_opacity,
             m.sh_optim_bits, (int)m.num_sh,
             dv<float4>(m.sh_state_bounds, m.sh_state_bound_f / 4),
             m.bounds_per_splat, dv<uint8_t>(m.sh_value_packed,
                                             m.sh_value_bytes),
             dv<float2>(m.sh_value_bounds, m.sh_value_bound_f / 2),
             m.sh_value_bits, m.bounds_per_splat, (int)m.num_sh_buffer, m.nq,
-            seed, /*max_relocate=*/0, /*num_dead_out=*/nullptr);
+            seed, /*max_relocate=*/0, num_dead);
         backend::device_synchronize();
     };
 
-    auto call_add_las = [&](Model& m, int64_t num_add, uint32_t seed) {
+    auto call_add_las = [&](Model& m, int64_t num_add, uint32_t seed,
+                            float* max_weight = nullptr) {
         add_splats_with_long_axis_split_tensor(
             N, num_add, /*split_opacity_k=*/0.6f,
             dv<float3>(m.means, CAP), dv<float4>(m.quats, CAP),
@@ -436,6 +441,7 @@ int main(int argc, char** argv) {
                        0),
             dv<float2>(m.accum, CAP), DeviceVector<float2>{},
             dv<int32_t>(m.bias_steps, CAP), dv<uint32_t>(m.visit, CAP),
+            dv<float>(max_weight, max_weight ? CAP : 0),
             m.sh_optim_bits, (int)m.num_sh,
             dv<float4>(m.sh_state_bounds, m.sh_state_bound_f / 4),
             m.bounds_per_splat, dv<uint8_t>(m.sh_value_packed,
@@ -741,6 +747,89 @@ int main(int argc, char** argv) {
         call_add_mcmc(m, 600, 0.005f, 112u);
         check_inherited(m, N + 600, "add_mcmc q16");
         readback_model(m);
+    }
+
+    // Peak-weight dead test: a transparent splat seen in front stays unless
+    // opacity is tested too; an unseen opaque one dies. Rows start at half
+    // their opacity, and a split scales both. Self-checked, not dumped.
+    auto sig = [](float x) { return 1.0f / (1.0f + std::exp(-x)); };
+    auto mw_ratio_ok = [&](const std::vector<float>& op,
+                           const std::vector<float>& mw, int64_t n,
+                           auto&& skip) {
+        for (int64_t i = 0; i < n; i++) {
+            if (skip(i)) continue;
+            const float want = 0.5f * sig(op[i]);
+            if (std::fabs(mw[i] - want) > 1e-5f * want) return false;
+        }
+        return true;
+    };
+    for (int either = 0; either < 2; either++) {
+        Model m = build_model(32, 32, false, false, 15, 15, -1, -1, -1);
+        std::vector<float> op(CAP), mw(CAP), accum(2 * CAP);
+        backend::memcpy_sync(op.data(), m.opacs, CAP * 4, MemcpyKind::DeviceToHost);
+        backend::memcpy_sync(accum.data(), m.accum, 2 * CAP * 4,
+                             MemcpyKind::DeviceToHost);
+        auto transparent = [](int64_t i) { return i % 97 == 5; };
+        auto unseen = [&](int64_t i) { return i % 89 == 7 && !transparent(i); };
+        int64_t n_transparent = 0, n_unseen = 0;
+        for (int64_t i = 0; i < CAP; i++) {
+            if (i < N && transparent(i)) {
+                op[i] = -8.f;
+                accum[2 * i] = 0.f;  // never drawn as a source
+            }
+            mw[i] = 0.5f * sig(op[i]);
+            if (i < N && transparent(i)) { mw[i] = 0.5f; n_transparent++; }
+            if (i < N && unseen(i)) { mw[i] = 1e-3f; n_unseen++; }
+        }
+        backend::memcpy_sync(m.opacs, op.data(), CAP * 4, MemcpyKind::HostToDevice);
+        backend::memcpy_sync(m.accum, accum.data(), 2 * CAP * 4,
+                             MemcpyKind::HostToDevice);
+        float* d_mw = upload(mw);
+        int64_t num_dead = 0;
+        call_relocate_las(m, 0.005f, 151u + either, d_mw, either != 0, &num_dead);
+        backend::memcpy_sync(op.data(), m.opacs, CAP * 4, MemcpyKind::DeviceToHost);
+        backend::memcpy_sync(mw.data(), d_mw, CAP * 4, MemcpyKind::DeviceToHost);
+        int64_t kept = 0;
+        for (int64_t i = 0; i < N; i++)
+            kept += transparent(i) && op[i] == -8.f && mw[i] == 0.5f;
+        const int64_t want_dead = n_unseen + (either ? n_transparent : 0);
+        const int64_t want_kept = either ? 0 : n_transparent;
+        const bool ratio = mw_ratio_ok(op, mw, N, [&](int64_t i) {
+            return !either && transparent(i);
+        });
+        if (num_dead != want_dead || kept != want_kept || !ratio) {
+            std::printf("densify_parity: max-weight relocate (%s) found %lld "
+                        "dead (want %lld), kept %lld transparent (want %lld), "
+                        "weights %s\n", either ? "either" : "max_weight",
+                        (long long)num_dead, (long long)want_dead,
+                        (long long)kept, (long long)want_kept,
+                        ratio ? "ok" : "off");
+            revived_ok = false;
+        }
+        backend::device_free(d_mw);
+    }
+    {
+        Model m = build_model(32, 32, false, false, 15, 15, -1, -1, -1);
+        std::vector<float> op(CAP), mw(CAP), want(CAP);
+        backend::memcpy_sync(op.data(), m.opacs, CAP * 4, MemcpyKind::DeviceToHost);
+        float* d_mw = upload(mw);
+        densify_max_weight_init_tensor(N, dv<float>(m.opacs, CAP), dv<float>(d_mw, CAP));
+        densify_max_weight_scale_tensor(N, 0.5f, dv<float>(d_mw, CAP));
+        backend::device_synchronize();
+        backend::memcpy_sync(mw.data(), d_mw, CAP * 4, MemcpyKind::DeviceToHost);
+        const bool init_ok = mw_ratio_ok(op, mw, N, [](int64_t) { return false; });
+        const int64_t num_add = 555;
+        call_add_las(m, num_add, 161u, d_mw);
+        backend::memcpy_sync(op.data(), m.opacs, CAP * 4, MemcpyKind::DeviceToHost);
+        backend::memcpy_sync(mw.data(), d_mw, CAP * 4, MemcpyKind::DeviceToHost);
+        const bool add_ok =
+            mw_ratio_ok(op, mw, N + num_add, [](int64_t) { return false; });
+        if (!init_ok || !add_ok) {
+            std::printf("densify_parity: max-weight %s off\n",
+                        init_ok ? "after add" : "init/scale");
+            revived_ok = false;
+        }
+        backend::device_free(d_mw);
     }
 
     if (dumping) {

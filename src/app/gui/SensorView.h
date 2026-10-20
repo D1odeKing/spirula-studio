@@ -28,6 +28,7 @@ struct SensorFix {
     float speed = -1.0f, dop = 0.0f;
     int photo = -1;
     bool outlier = false;
+    bool no_fix = false;         // the receiver did not call it a fix: an outlier, drawn apart
     bool has_yaw = false;
     float yaw = 0.0f, pitch = 0.0f;   // degrees clockwise from north, up from the horizon
     double x = 0.0, y = 0.0;     // metres east and north of the data's origin
@@ -57,7 +58,7 @@ struct SensorData {
     std::vector<SensorFix> fixes;
     double lat0 = 0.0, lon0 = 0.0;
     size_t zero = 0;          // at 0, 0: no fix, ignored
-    size_t no_fix = 0;        // the receiver said so
+    size_t no_fix = 0;        // the receiver said so; drawn, not used
     size_t outliers = 0;
     size_t distinct = 0;
     double path_m = 0.0, spread_m = 0.0, rate_hz = 0.0, imu_rate_hz = 0.0;

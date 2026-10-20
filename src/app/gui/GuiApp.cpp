@@ -24,6 +24,7 @@
 #include "app/CrashLog.h"
 #include "app/CubeLut.h"
 #include "app/DeviceIssue.h"
+#include "app/FramePick.h"
 #include "app/LogLuts.h"
 #include "app/gui/DatasetPrep.h"
 #include "app/gui/Storage.h"
@@ -406,6 +407,20 @@ static std::string unescape_setting(const std::string& v) {
     return out;
 }
 
+// A tool location is typed as the folder that holds the program as often as
+// the program itself (issue #201). A bare name stays a PATH lookup.
+static std::string tool_in_folder(const std::string& path, const std::string& name) {
+    const fs::path dir(path);
+    std::error_code ec;
+    if (!dir.has_parent_path() || !fs::is_directory(dir, ec)) return path;
+#ifdef _WIN32
+    const fs::path exe = dir / (name + ".exe");
+#else
+    const fs::path exe = dir / name;
+#endif
+    return fs::is_regular_file(exe, ec) ? exe.string() : path;
+}
+
 std::string GuiApp::settings_path() {
     return (fs::path(app::config_dir()) / "gui.conf").string();
 }
@@ -429,8 +444,8 @@ void GuiApp::load_settings() {
         if (eq == std::string::npos) continue;
         std::string k = s.substr(0, eq), v = s.substr(eq + 1);
         if (_recent.read_setting(k, v)) continue;
-        if (k == "colmap_exe" && !v.empty()) _colmap_exe = v;
-        else if (k == "ffmpeg_exe" && !v.empty()) _ffmpeg_exe = v;
+        if (k == "colmap_exe" && !v.empty()) _colmap_exe = tool_in_folder(v, "colmap");
+        else if (k == "ffmpeg_exe" && !v.empty()) _ffmpeg_exe = tool_in_folder(v, "ffmpeg");
         else if (k == "sfm_engine") _engine = v == "colmap" ? Engine::Colmap
                                                             : Engine::BuiltIn;
         else if (k == "batch_command") _batch_cmd = unescape_setting(v);
@@ -750,6 +765,12 @@ void GuiApp::write_run_settings(std::ofstream& f) {
                  cfg_str((float)s.clip_start) + "-" +
                      (s.clip_end > 0.0 ? cfg_str((float)s.clip_end) : std::string("end")));
     line("sharp_window", std::to_string(j.prep.sharp_window));
+    line("skip_blurry", cfg_str(j.prep.skip_blurry));
+    if (j.prep.skip_blurry) {
+        line("blur_px", cfg_str(j.prep.blur_px));
+        line("blur_neighbour", cfg_str(j.prep.blur_neighbour));
+        if (j.prep.similar_bits > 0) line("similar_bits", std::to_string(j.prep.similar_bits));
+    }
     line("sync_tracks", cfg_str(j.prep.sync_tracks));
     line("max_frames", std::to_string(j.prep.max_frames));
     for (const auto& [flag, value] : j.options) line("--" + flag, value);
@@ -2707,8 +2728,13 @@ void GuiApp::pump_source_probes() {
             if (s.pano360.valid() || s.video_tracks >= 2) s.rig = kRigOwn;
         }
         const int packed = s.packed_lenses;
-        set_packed_lenses(s, info.width, info.height);
+        set_packed_lenses(s, info.width, info.height, info.unstitched);
         pano_changed = pano_changed || packed != s.packed_lenses;
+        if (info.unstitched && packed != s.packed_lenses) {
+            // What add_sources does for a fisheye file it knows by its name.
+            _border_enable = true;
+            if (s.stencil.empty()) s.stencil.detect_border = true;
+        }
         if (s.lut_detected != info.lut) {
             s.lut_detected = info.lut;
             lut_changed = true;
@@ -2723,6 +2749,7 @@ void GuiApp::pump_source_probes() {
     if (!pano_changed) return;
     const DatasetSettings before = capture_dataset_settings();
     apply_capture_defaults(_sources, _sfm_job, _colmap_job);
+    normalize_source_lenses(_sources, _sfm_job.camera_model);
     reapply_dataset_builtin(before);
 }
 
@@ -3306,6 +3333,10 @@ std::string GuiApp::state_json() {
     out += "\",\"step\":" + std::to_string(_runner.latest_progress().step);
     out += ",\"busy\":";
     out += native_work_busy() ? "true" : "false";
+    // A dataset run stopped for its frames to be looked at: `review_continue`
+    // is the widget that lets it go on.
+    out += ",\"reviewing_frames\":";
+    out += _sfm.reviewing() ? "true" : "false";
     out += ",\"dialog_open\":";
     out += _dialog.is_open() ? "true" : "false";
     out += ",\"models_open\":" + std::to_string(_compare.count());
@@ -4423,6 +4454,12 @@ void GuiApp::sync_dataset_jobs() {
     prep.adaptive_fps = _sfm_job.prep.adaptive_fps;
     prep.adaptive_range = _sfm_job.prep.adaptive_range;
     prep.sharp_window = _sfm_job.prep.sharp_window;
+    prep.skip_blurry = _sfm_job.prep.skip_blurry;
+    prep.blur_px = _sfm_job.prep.blur_px;
+    prep.blur_neighbour = _sfm_job.prep.blur_neighbour;
+    prep.similar_bits = _sfm_job.prep.similar_bits;
+    prep.blur_review = _sfm_job.prep.blur_review;
+    prep.keep_skipped = _sfm_job.prep.keep_skipped;
     prep.pano = _sfm_job.prep.pano;
     prep.max_frames = _sfm_job.prep.max_frames;
     prep.auto_rotate = _sfm_job.prep.auto_rotate;
@@ -4448,6 +4485,11 @@ void GuiApp::sync_dataset_jobs() {
     _colmap_job.adaptive_fps = prep.adaptive_fps;
     _colmap_job.adaptive_range = prep.adaptive_range;
     _colmap_job.sharp_window = prep.sharp_window;
+    _colmap_job.skip_blurry = prep.skip_blurry;
+    _colmap_job.blur_px = prep.blur_px;
+    _colmap_job.blur_neighbour = prep.blur_neighbour;
+    _colmap_job.similar_bits = prep.similar_bits;
+    _colmap_job.keep_skipped = prep.keep_skipped;
     _colmap_job.pano = prep.pano;
     _colmap_job.max_frames = prep.max_frames;
     _colmap_job.force_external_decode = prep.force_external_decode;
@@ -4568,6 +4610,9 @@ bool GuiApp::launch_dataset_job() {
         const DatasetPlan& plan = dataset_plan();
         bool made[kNumSteps];
         for (int k = 0; k < kNumSteps; k++) made[k] = makes(plan[(Step)k].act);
+        // Sorting leaves the frames as they were made but is what they are
+        // now: the rule's settings come back with the dataset.
+        made[(int)Step::Frames] = made[(int)Step::Frames] || plan[Step::Frames].sort;
         write_record_settings(_workspace, dataset_settings_json(capture_dataset_settings()),
                               encode_record_inputs({_sources, _mask.clicks}), made);
     }
@@ -4592,7 +4637,18 @@ bool GuiApp::launch_dataset_job() {
     // The preview holds a multi-gigabyte backbone; the run about to start
     // wants that VRAM for reconstruction.
     reset_dataset_preview(effective_engine() != Engine::BuiltIn);
-    const RunFilms films{&_film_frames, &_film_masks, &_film_geometry};
+    const RunFilms films{&_film_frames, &_film_masks, &_film_geometry, &_picks};
+    // An earlier run's picks would otherwise be the only view with anything in
+    // it for the first moments of this one, and the screen would open on them.
+    // A run that keeps this folder's frames keeps what was measured on them.
+    if (makes(dataset_plan()[Step::Frames].act) || dataset_plan()[Step::Frames].sort ||
+        _picks_workspace != _workspace) {
+        _picks.clear();
+        _picks_view.destroy_gl();
+        _picks_workspace = _workspace;
+    }
+    _sfm_job.prep.review_frames = !_batch_active && effective_engine() == Engine::BuiltIn &&
+                                  _sfm_job.prep.skip_blurry && _sfm_job.prep.blur_review;
     if (effective_engine() == Engine::BuiltIn) _sfm.start(_sfm_job, films);
     else                                      _colmap.start(_colmap_job, films);
     // A run is what the column is for while it goes.
@@ -5260,6 +5316,46 @@ void GuiApp::draw_dataset_basics() {
 
     ImGui::EndDisabled();
 
+    // Which frames are left out, of photographs and video alike: a switch,
+    // and while it is on, its settings whatever Advanced says.
+    const auto draw_skip_blurry = [&] {
+        PrepJob& prep = _sfm_job.prep;
+        ui::Checkbox(dmsg::skip_blurry, &prep.skip_blurry);
+        ui::help_on_hover(dmsg::skip_blurry_help);
+        // Kept frames are not sorted, whatever this says: without the note
+        // "Keep them, run the rest" looks like a run that did nothing.
+        const StepPlan& frames = dataset_plan()[Step::Frames];
+        bool kept_unsorted = false;
+        for (const FieldChange& c : frames.changes)
+            kept_unsorted = kept_unsorted || c.key == "skip_blurry" || c.key == "blur_px" ||
+                            c.key == "blur_neighbour" || c.key == "similar_bits";
+        if (frames.act == Act::Keep && kept_unsorted)
+            ui::TextColoredWrapped(kWarn, dmsg::blur_kept_note);
+        if (!prep.skip_blurry) return;
+        ImGui::Indent();
+        // "Every frame" means it: extraction leaves the rule out there.
+        if (all_videos_every_frame(_sources, prep.video_fps))
+            ui::TextColoredWrapped(kWarn, dmsg::blur_every_frame);
+        ImGui::SetNextItemWidth(px(220.0f));
+        // Whole pixels: a finer threshold than the measurement means nothing,
+        // and every other value is one more "made with other settings".
+        if (ui::SliderFloat(dmsg::blur_px, &prep.blur_px, 1.0f, 40.0f, "%.0f px"))
+            prep.blur_px = std::round(prep.blur_px);
+        ui::help_on_hover(dmsg::blur_px_help);
+        ui::Checkbox(dmsg::blur_neighbour, &prep.blur_neighbour);
+        ui::help_on_hover(dmsg::blur_neighbour_help);
+        ImGui::SetNextItemWidth(px(220.0f));
+        ui::SliderInt(dmsg::similar_bits, &prep.similar_bits, 0, 32);
+        ui::help_on_hover(dmsg::similar_bits_help);
+        ui::Checkbox(dmsg::blur_review, &prep.blur_review);
+        ui::help_on_hover(dmsg::blur_review_help);
+        if (prep.blur_review)
+            ui::TextDisabledWrapped(builtin ? dmsg::blur_review_note : dmsg::blur_review_no_pause);
+        ui::Checkbox(dmsg::keep_skipped, &prep.keep_skipped);
+        ui::help_on_hover(dmsg::keep_skipped_help);
+        ImGui::Unindent();
+    };
+
     bool any_video = false;
     for (const PrepInput& s : _sources) any_video = any_video || s.is_video;
     if (any_video) {
@@ -5271,7 +5367,7 @@ void GuiApp::draw_dataset_basics() {
         if (_sfm_job.prep.adaptive_fps &&
             all_videos_every_frame(_sources, _sfm_job.prep.video_fps))
             ui::TextColoredWrapped(kWarn, dmsg::adaptive_fps_every_frame);
-        if (_sfm_job.prep.adaptive_fps && _ds_advanced) {
+        if (_sfm_job.prep.adaptive_fps) {
             ImGui::Indent();
             ImGui::SetNextItemWidth(px(220.0f));
             ui::SliderFloat(dmsg::adaptive_range, &_sfm_job.prep.adaptive_range,
@@ -5281,9 +5377,10 @@ void GuiApp::draw_dataset_basics() {
         }
         if (_ds_advanced) {
             ImGui::SetNextItemWidth(px(220.0f));
-            ui::SliderInt(dmsg::sharpness_window, &_sfm_job.prep.sharp_window, 1, 8);
+            ui::SliderInt(dmsg::sharpness_window, &_sfm_job.prep.sharp_window, 1, 30);
             ui::help_on_hover(dmsg::sharpness_window_help);
         }
+        draw_skip_blurry();
         bool any_multi = false;
         for (const PrepInput& s : _sources)
             any_multi = any_multi || (s.is_video && !s.pano360.valid() && s.video_tracks >= 2);
@@ -5300,6 +5397,10 @@ void GuiApp::draw_dataset_basics() {
             ImGui::PopTextWrapPos();
             ui::help_on_hover_raw(backends().video_reason.c_str());
         }
+        ImGui::EndDisabled();
+    } else if (!_sources.empty()) {
+        ImGui::BeginDisabled(dataset_locked(Stage::Frames));
+        draw_skip_blurry();
         ImGui::EndDisabled();
     }
     if (dataset_busy()) ui::help_on_hover_disabled(dmsg::step_locked);
@@ -6287,7 +6388,7 @@ void GuiApp::draw_geometry_options() {
         }
         ImGui::EndCombo();
     }
-    ui::TextDisabled(*catalog[(size_t)model_idx].blurb);
+    ui::TextDisabledWrapped(*catalog[(size_t)model_idx].blurb);
 
     FileDownload& geom_dl = _geom_download.current();
     if (_geom_download.running()) {
@@ -6301,9 +6402,20 @@ void GuiApp::draw_geometry_options() {
         if (ui::Button(dmsg::stop)) _geom_download.cancel();
         ImGui::PopID();
     } else if (geometry_model_missing()) {
+        // Checked before a 45 GB stream starts, not discovered at 80%.
+        const GeometryDisk disk = geometry_model_disk(_geometry.model);
+        ImGui::BeginDisabled(!disk.fits);
         if (ui::Button(dmsg::geom_get_model)) request_geometry_download();
+        ImGui::EndDisabled();
         ImGui::SameLine();
         ui::TextDisabledRaw(human_bytes(catalog[(size_t)model_idx].bytes));
+        if (disk.needed && disk.fits)
+            ui::TextDisabledWrapped(dmsg::geom_install_disk,
+                                    {human_bytes(disk.disk), disk.where, human_bytes(disk.free)});
+        if (!disk.fits)
+            ui::TextColoredWrapped(kErr, dmsg::geom_install_no_disk,
+                                   {human_bytes(disk.disk), disk.where, human_bytes(disk.spare),
+                                    human_bytes(disk.free)});
         if (geom_dl.state() == FileDownload::State::Failed)
             ui::TextColoredWrappedRaw(kErr, geom_dl.status());
     } else {
@@ -6462,16 +6574,17 @@ void draw_run_steps(const RunProgress& prog, const std::vector<RunStep>& steps) 
 // The views that have something to show, as a row of choices; the one drawn
 // follows `implied`, the running step's, until the user picks one. -1 when
 // none has anything.
-int draw_view_tabs(const Msg* const* names, const bool* avail, int n, int implied,
-                   int& pinned) {
+int draw_view_tabs(const Msg* const* names, const bool* avail, const int* order, int n,
+                   int implied, int& pinned) {
     int tab = pinned >= 0 ? pinned : (implied >= 0 ? implied : 0);
     if (!avail[tab]) {
         tab = -1;
-        for (int i = 0; i < n && tab < 0; i++)
-            if (avail[i]) tab = i;
+        for (int k = 0; k < n && tab < 0; k++)
+            if (avail[order[k]]) tab = order[k];
     }
     bool first = true;
-    for (int i = 0; i < n; i++) {
+    for (int k = 0; k < n; k++) {
+        const int i = order[k];
         if (!avail[i]) continue;
         if (!first) ImGui::SameLine();
         first = false;
@@ -6756,6 +6869,223 @@ void GuiApp::draw_scan_view(float h) {
     ImGui::EndChild();
 }
 
+// The frames are the ones wanted. The record is told first: the thresholds
+// may have moved since the run started, and a workspace that restored the
+// older ones would find its own frames "made with other settings".
+void GuiApp::continue_frame_review() {
+    bool made[kNumSteps] = {};
+    made[(int)Step::Frames] = true;
+    write_record_settings(_workspace, dataset_settings_json(capture_dataset_settings()),
+                          encode_record_inputs({_sources, _mask.clicks}), made);
+    _sfm.continue_review();
+}
+
+namespace {
+
+// A threshold set against the distribution it cuts: one bar a bin of `values`,
+// dimmed where the threshold leaves them out, and a line a drag moves.
+bool histogram_slider(const char* id, const std::vector<float>& values, float lo,
+                      float hi, float* v, float v_min, float v_max, ImVec2 size,
+                      bool cut_above, const std::function<ImU32(float)>& ink) {
+    constexpr int kBins = 48;
+    int count[kBins] = {};
+    int top = 0;
+    for (float x : values) {
+        const int b = std::clamp((int)((x - lo) / (hi - lo) * kBins), 0, kBins - 1);
+        top = std::max(top, ++count[b]);
+    }
+    const ImVec2 at = ImGui::GetCursorScreenPos();
+    ui::InvisibleButtonRaw(id, size);
+    bool changed = false;
+    if (ImGui::IsItemActive()) {
+        const float x = (ImGui::GetIO().MousePos.x - at.x) / size.x;
+        const float to = std::clamp(lo + x * (hi - lo), v_min, v_max);
+        changed = to != *v;
+        *v = to;
+    }
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(at, ImVec2(at.x + size.x, at.y + size.y),
+                      ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
+    const float step = size.x / (float)kBins;
+    for (int b = 0; b < kBins && top > 0; b++) {
+        if (count[b] == 0) continue;
+        const float mid = lo + ((float)b + 0.5f) / kBins * (hi - lo);
+        const float tall = std::max(px(2.0f), size.y * (float)count[b] / (float)top);
+        const ImU32 c = ink(mid);
+        dl->AddRectFilled(ImVec2(at.x + step * (float)b, at.y + size.y - tall),
+                          ImVec2(at.x + step * (float)b + std::max(step - 1.0f, 1.0f),
+                                 at.y + size.y),
+                          (mid < *v) != cut_above ? (c & 0x00FFFFFF) | 0x50000000 : c);
+    }
+    const float x = at.x + (*v - lo) / (hi - lo) * size.x;
+    dl->AddLine(ImVec2(x, at.y), ImVec2(x, at.y + size.y),
+                ImGui::GetColorU32(ImGuiCol_Text), px(2.0f));
+    return changed;
+}
+
+}  // namespace
+
+// Every frame the run chose, input by input, under the settings that decide
+// which are left out. The picture follows the settings as they are moved: each
+// pick's measurements are held, so another threshold is a recount, not a run.
+void GuiApp::draw_sharpness_view(float h) {
+    const float y0 = ImGui::GetCursorPosY();
+    PrepJob& prep = _sfm_job.prep;
+    const PickStyle style{kErr, kWarn, kOk, prep.blur_px};
+    const std::vector<std::string> names = _picks.names();
+    // What is shown is what pressing Update would leave: the run's own
+    // verdicts when it would change nothing, the frames the dataset has
+    // sorted again when it would sort, every frame when it makes them again.
+    const bool reviewing = _sfm.reviewing();
+    const StepPlan& frames = dataset_plan()[Step::Frames];
+    const bool settled = !reviewing && !dataset_busy() && frames.act == Act::Reuse;
+    const app::PickRule rule = pick_rule(prep);
+    // Walked again only when the sheet or something the walk reads moves.
+    char key[160];
+    std::snprintf(key, sizeof key, "%llu %d %d %d %g %d %d",
+                  (unsigned long long)_picks.version(), settled, frames.sort, reviewing,
+                  rule.max_blur, rule.neighbour, rule.similar_bits);
+    if (_pick_walk.key != key) {
+        _pick_walk = PickWalk{};
+        _pick_walk.key = key;
+        _pick_walk.rows.resize(names.size());
+        for (size_t ri = 0; ri < names.size(); ri++) {
+            std::vector<Pick>& row = _pick_walk.rows[ri] = _picks.picks(ri);
+            // Left out as the frames were made: it has no camera, so a sort
+            // neither judges it nor brings it back.
+            const bool in_place = _picks.in_place(ri);
+            const auto as_run = [&](const Pick& p) {
+                return settled && (!frames.sort || (!in_place && p.verdict != app::PickVerdict::Kept));
+            };
+            std::vector<Pick> walked;
+            for (const Pick& p : row)
+                if (!as_run(p)) walked.push_back(p);
+            app::PickRule r = app::whole_capture(rule, walked);
+            for (size_t i = 0; i < row.size(); i++) {
+                Pick& p = row[i];
+                const app::PickVerdict ran = p.verdict;
+                if (as_run(p)) {
+                    p.as_run = true;
+                } else {
+                    p.dist = r.distance(p.hash);
+                    p.as_run = r.judge(p) == ran;
+                }
+                _pick_walk.differs = _pick_walk.differs || !p.as_run;
+                if (p.blur >= 0.0f) _pick_walk.blurs.push_back(p.blur);
+                if (i == 0) continue;
+                // Against the frame before it, whatever was kept: what the
+                // histogram shows must not move when its own threshold does.
+                int bits = 0;
+                for (uint64_t x = row[i].hash ^ row[i - 1].hash; x; x &= x - 1) bits++;
+                _pick_walk.steps.push_back((float)bits);
+            }
+        }
+    }
+    const std::vector<std::vector<Pick>>& rows = _pick_walk.rows;
+    const std::vector<float>& moved = _pick_walk.blurs;
+    const std::vector<float>& steps = _pick_walk.steps;
+    const bool differs = _pick_walk.differs;
+
+    // ---- the settings, which stay put while the frames scroll under them
+    const bool locked = dataset_locked(Stage::Frames) && !reviewing;
+    if (reviewing) {
+        if (ui::Button(dmsg::review_continue)) continue_frame_review();
+        ImGui::SameLine();
+        ui::TextColoredWrapped(kWarn, dmsg::review_hint);
+    }
+    ImGui::BeginDisabled(locked);
+    ui::Checkbox(dmsg::skip_blurry, &prep.skip_blurry);
+    ui::help_on_hover(dmsg::skip_blurry_help);
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!prep.skip_blurry);
+    ui::Checkbox(dmsg::blur_neighbour, &prep.blur_neighbour);
+    ui::help_on_hover(dmsg::blur_neighbour_help);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::EndDisabled();
+    ui::Checkbox(dmsg::scan_show_pictures, &_picks_pictures);
+    if (_picks_pictures) {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(px(140.0f));
+        ui::SliderFloat(dmsg::scan_picture_size, &_picks_size, 24.0f, 256.0f, "%.0f");
+    }
+    ImGui::BeginDisabled(locked);
+    const float half =
+        (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    const ImVec2 bars(std::max(px(120.0f), half), px(44.0f));
+    char value[32];
+    ImGui::BeginGroup();
+    ImGui::BeginDisabled(!prep.skip_blurry);
+    ui::Text(dmsg::blur_px);
+    ui::help_on_hover(dmsg::blur_px_help);
+    ImGui::SameLine();
+    std::snprintf(value, sizeof value, "%.0f px", prep.blur_px);
+    ui::TextDisabledRaw(value);
+    histogram_slider("##blurhist", moved, 0.0f, 40.0f, &prep.blur_px, 1.0f, 40.0f, bars,
+                     /*cut_above=*/true,
+                     [&](float blur) { return PickSheetView::colour(style, blur); });
+    // Whole pixels: a finer threshold than the measurement means nothing, and
+    // every other value is one more "made with other settings" in the plan.
+    prep.blur_px = std::round(prep.blur_px);
+    ImGui::EndDisabled();
+    ImGui::EndGroup();
+    ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::BeginDisabled(!prep.skip_blurry);
+    ui::Text(dmsg::similar_bits);
+    ui::help_on_hover(dmsg::similar_bits_help);
+    ImGui::SameLine();
+    std::snprintf(value, sizeof value, "%d", prep.similar_bits);
+    ui::TextDisabledRaw(value);
+    float similar = (float)prep.similar_bits;
+    const ImU32 plain = ImGui::GetColorU32(ImGuiCol_PlotHistogram);
+    if (histogram_slider("##similarhist", steps, 0.0f, 40.0f, &similar, 0.0f, 32.0f, bars,
+                         /*cut_above=*/false, [plain](float) { return plain; }))
+        prep.similar_bits = (int)std::lround(similar);
+    ImGui::EndDisabled();
+    ImGui::EndGroup();
+    ImGui::EndDisabled();
+
+    if (!prep.skip_blurry || moved.empty()) ui::TextDisabledWrapped(dmsg::blur_off_hint);
+    if (differs && !dataset_busy()) {
+        // The same button as the form's, where the settings were moved.
+        ImGui::BeginDisabled(native_work_busy() || _batch_active);
+        if (ui::Button(dmsg::sharpness_apply)) start_dataset_job();
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ui::TextColoredWrapped(kWarn, dmsg::sharpness_preview);
+    }
+
+    const float rest = std::max(px(60.0f), h - (ImGui::GetCursorPosY() - y0));
+    if (_picks_view.viewing() && _picks_view.open_row() < rows.size()) {
+        _picks_view.draw_viewer(_picks, rows[_picks_view.open_row()],
+                                ImVec2(ImGui::GetContentRegionAvail().x, rest), style);
+        return;
+    }
+    ImGui::BeginChild("##sharpview", ImVec2(0, rest));
+    const float wheel = ImGui::GetIO().MouseWheel;
+    if (ImGui::IsWindowHovered() && ImGui::GetIO().KeyCtrl && wheel != 0.0f) {
+        _picks_pictures = true;
+        _picks_size = std::clamp(_picks_size * std::pow(1.15f, wheel), 24.0f, 256.0f);
+    }
+    for (size_t ri = 0; ri < names.size(); ri++) {
+        if (rows[ri].empty()) continue;
+        long long kept = 0, blurry = 0;
+        for (const Pick& p : rows[ri]) {
+            kept += p.verdict == app::PickVerdict::Kept ? 1 : 0;
+            blurry += p.verdict == app::PickVerdict::Blurry ? 1 : 0;
+        }
+        ui::Text(dmsg::sharpness_counts,
+                 {names[ri], kept, blurry, (long long)rows[ri].size() - kept - blurry});
+        const float w = ImGui::GetContentRegionAvail().x;
+        if (w < px(48.0f)) break;
+        _picks_view.draw(_picks, ri, rows[ri], w,
+                         _picks_pictures ? px(_picks_size) : 0.0f, style);
+        ImGui::Spacing();
+    }
+    ImGui::EndChild();
+}
+
 // Which of the three previews the running step implies. Frames, masks and
 // feature extraction all show pictures, so they share one.
 int GuiApp::preview_for_stage() {
@@ -6766,7 +7096,9 @@ int GuiApp::preview_for_stage() {
     switch (dataset_steps()->current()) {
         // Nothing is written while the motion is being measured, so the reel
         // has nothing to show and the curves have everything.
-        case Stage::Frames:    return dataset_steps()->scanning() ? 6 : 0;
+        case Stage::Frames:
+            if (_sfm.reviewing()) return 7;
+            return dataset_steps()->scanning() ? 6 : 0;
         case Stage::Masks:     return 1;
         case Stage::Features:  return 2;
         case Stage::Matching:  return 3;
@@ -7133,6 +7465,9 @@ void GuiApp::reset_dataset_preview(bool sweep) {
     _live_model = LiveModel{};
     _matrix.clear();
     _matrix.destroy_gl();
+    // _picks stays: a run that keeps the frames keeps what was measured on
+    // them (launch_dataset_job drops it when it is another folder's).
+    _picks_view.destroy_gl();
     _pairs_view.clear();
     _pairs_view.destroy_gl();
     for (FilmReel* f : {&_film_frames, &_film_masks, &_film_features,
@@ -7162,7 +7497,8 @@ void GuiApp::reset_dataset_preview(bool sweep) {
 bool GuiApp::preview_has_content() const {
     return _film_frames.has_frames() || _film_masks.has_frames() ||
            _film_features.has_frames() || !_matrix.empty() || _model_attached ||
-           _film_geometry.has_frames() || !_image_stats.empty();
+           _film_geometry.has_frames() || (_picks.any() && _picks_workspace == _workspace) ||
+           !_image_stats.empty();
 }
 
 // The frames / match map / model area. Which one it shows follows the running
@@ -7173,12 +7509,14 @@ bool GuiApp::preview_has_content() const {
 // needs; a column of its own hands its own height down instead.
 void GuiApp::draw_dataset_preview(float height) {
     // Null where the view is not a reel: the match map, the model, the motion.
-    FilmReel* reels[8] = {&_film_frames, &_film_masks, &_film_features,
-                          nullptr, nullptr, &_film_geometry, nullptr, nullptr};
-    const bool avail[8] = {_film_frames.has_frames(), _film_masks.has_frames(),
+    FilmReel* reels[9] = {&_film_frames, &_film_masks, &_film_features,
+                          nullptr, nullptr, &_film_geometry, nullptr, nullptr, nullptr};
+    const bool avail[9] = {_film_frames.has_frames(), _film_masks.has_frames(),
                            _film_features.has_frames(), !_matrix.empty(),
                            _model_attached, _film_geometry.has_frames(),
-                           !dataset_steps()->scan().empty(), !_image_stats.empty()};
+                           !dataset_steps()->scan().empty(),
+                           _picks.any() && _picks_workspace == _workspace,
+                           !_image_stats.empty()};
     bool any_avail = false;
     for (bool v : avail) any_avail = any_avail || v;
     if (!any_avail && _dense_preview_error.empty() && !_dense_live) return;
@@ -7202,17 +7540,25 @@ void GuiApp::draw_dataset_preview(float height) {
         ui::help_on_hover(spirula::i18n::msg::dense::live_phase_help);
     }
 
+    // The run has stopped to be looked at: a view pinned earlier gives way.
+    if (_sfm.reviewing() && !_was_reviewing) _preview_tab = -1;
+    _was_reviewing = _sfm.reviewing();
     const int implied = preview_for_stage();
     if (dataset_busy() && implied >= 0) _preview_last_stage = implied;
     // Beside the switch, unless the paused-preview note took the line under it.
     if (_dense_preview_error.empty()) ImGui::SameLine(0.0f, px(24.0f));
-    const Msg* names[8] = {&dmsg::view_frames, &dmsg::view_masks,
+    const Msg* names[9] = {&dmsg::view_frames, &dmsg::view_masks,
                            &dmsg::view_features, &dmsg::view_matrix,
                            &dmsg::view_model, &dmsg::view_geometry,
-                           &dmsg::view_motion, &dmsg::view_images};
-    const int tab = draw_view_tabs(names, avail, 8, implied, _preview_tab);
+                           &dmsg::view_motion, &dmsg::view_sharpness,
+                           &dmsg::view_images};
+    // In the order a run reaches them: the frames are sorted before anything
+    // is made from them, and the image list comes from the model.
+    const int order[9] = {0, 7, 6, 1, 2, 3, 4, 5, 8};
+    const int tab = draw_view_tabs(names, avail, order, 9, implied, _preview_tab);
     if (tab == 3) ui::help_on_hover(dmsg::matrix_help);
     if (tab == 6) ui::help_on_hover(dmsg::frame_spacing_help);
+    if (tab == 7) ui::help_on_hover(dmsg::sharpness_view_help);
 
     // In a column of its own the height is the column's; otherwise a splitter,
     // as the log has -- what any of these views is worth depends entirely on
@@ -7243,6 +7589,10 @@ void GuiApp::draw_dataset_preview(float height) {
         return;
     }
     if (tab == 7) {
+        draw_sharpness_view(h - px(8.0f));
+        return;
+    }
+    if (tab == 8) {
         draw_image_list(h - px(8.0f));
         return;
     }
@@ -7888,6 +8238,7 @@ const Msg& plan_state(const StepPlan& s) {
             if (s.why == Why::Resume) return dmsg::plan_finish;
             return s.adds || s.why == Why::Unrecorded ? dmsg::plan_add : dmsg::plan_run;
         case Act::Reuse:
+            if (s.sort) return dmsg::plan_sort;
             if (s.why == Why::InDataset) return dmsg::plan_in_dataset;
             if (s.why == Why::Unrecorded) return dmsg::plan_unrecorded;
             return s.masks_changed ? dmsg::plan_reuse_masks_changed : dmsg::plan_reuse;
@@ -7946,7 +8297,7 @@ bool plan_parts_shown(const DatasetPlan& plan) {
 }
 
 ImVec4 plan_color(const StepPlan& s) {
-    if (s.act == Act::Redo || s.act == Act::Keep) return kWarn;
+    if (s.act == Act::Redo || s.act == Act::Keep || s.sort) return kWarn;
     if (s.act == Act::Run) return kOk;
     return kDim;
 }
@@ -7971,6 +8322,9 @@ std::string plan_key_label(const std::string& key) {
         {"decoder", &dmsg::use_ffmpeg}, {"adaptive_fps", &dmsg::adaptive_fps},
         {"adaptive_range", &dmsg::adaptive_range},
         {"sharp_window", &dmsg::sharpness_window}, {"sync_tracks", &dmsg::sync_lenses},
+        {"skip_blurry", &dmsg::skip_blurry}, {"blur_px", &dmsg::blur_px},
+        {"blur_neighbour", &dmsg::blur_neighbour},
+        {"similar_bits", &dmsg::similar_bits},
         {"pano_size", &dmsg::pano360_size}, {"mask_max_size", &dmsg::mask_max_size},
         {"mask_nms", &dmsg::mask_nms}, {"mask_detect_every", &dmsg::mask_detect_every},
         {"mask_memory_frames", &dmsg::mask_memory_frames},
@@ -8685,13 +9039,22 @@ void GuiApp::draw_colmap_options() {
 void GuiApp::draw_tool_locations() {
     if (ui::CollapsingHeader(dmsg::section_tool_locations)) {
         bool ch = false;
+        // A folder is resolved once the field is left, not under the cursor.
+        auto resolve = [](std::string& exe, const char* name) {
+            if (!ImGui::IsItemDeactivatedAfterEdit()) return false;
+            const std::string found = tool_in_folder(exe, name);
+            if (found == exe) return false;
+            exe = found;
+            return true;
+        };
         if (effective_engine() == Engine::Colmap) {
             ImGui::SetNextItemWidth(px(300.0f));
             ch |= ui::InputText(dmsg::colmap_executable, &_colmap_exe);
+            ch |= resolve(_colmap_exe, "colmap");
         }
         ImGui::SetNextItemWidth(px(300.0f));
-        const bool ffmpeg_changed =
-            ui::InputText(dmsg::ffmpeg_executable, &_ffmpeg_exe);
+        bool ffmpeg_changed = ui::InputText(dmsg::ffmpeg_executable, &_ffmpeg_exe);
+        ffmpeg_changed |= resolve(_ffmpeg_exe, "ffmpeg");
         ch |= ffmpeg_changed;
         ui::help_on_hover(backends().builtin_video
                               ? dmsg::ffmpeg_executable_help_fallback
@@ -8859,8 +9222,14 @@ void GuiApp::draw_dataset_form(float height, bool running) {
             draw_dataset_rerun(workspace_state());
             draw_dataset_reset();
         }
-    } else if (ui::Button(dmsg::cancel, ImVec2(px(200.0f), px(34.0f)))) {
-        cancel_dataset_job();
+    } else {
+        if (_sfm.reviewing()) {
+            if (ui::Button(dmsg::review_continue, ImVec2(px(200.0f), px(34.0f))))
+                continue_frame_review();
+            ui::help_on_hover(dmsg::review_hint);
+            ImGui::SameLine();
+        }
+        if (ui::Button(dmsg::cancel, ImVec2(px(200.0f), px(34.0f)))) cancel_dataset_job();
     }
 
     // Both runners report through the same three states.
@@ -10108,7 +10477,7 @@ bool GuiApp::launch_batch_merge(BatchTask& task, const BatchRow& row) {
     return true;
 }
 
-// The session's region as a boundary mesh, sized by the seed cloud. The
+// The session's region as a boundary mesh, the same one the editor draws. The
 // engine renders in the dataset frame less its centre; the preview draws the
 // points, which carry the relative scale as well.
 void GuiApp::update_roi_overlay() {
@@ -10134,13 +10503,8 @@ void GuiApp::update_roi_overlay() {
         if (!s->cfg.partition.empty() && s->cfg.partition_part >= 0)
             spirula::part_color(s->cfg.partition_part, rgb);
         _roi_job = std::async(std::launch::async, [roi, world, rs, c, rgb]() {
-            spirula::Aabb box = spirula::robust_bounds(world.data(), (int64_t)world.size() / 3);
-            const spirula::Aabb rb = roi->bounds();
-            if (!rb.empty() && !rb.unbounded())
-                for (int a = 0; a < 3; a++) {
-                    box.lo[a] = std::max(box.lo[a], rb.lo[a] - 0.05 * (rb.hi[a] - rb.lo[a]));
-                    box.hi[a] = std::min(box.hi[a], rb.hi[a] + 0.05 * (rb.hi[a] - rb.lo[a]));
-                }
+            const spirula::Aabb box = spirula::region_mesh_box(
+                *roi, spirula::robust_bounds(world.data(), (int64_t)world.size() / 3));
             const spirula::RegionMesh m = spirula::region_boundary_mesh(*roi, box, 128);
             const float to_engine[12] = {1, 0, 0, (float)-c[0], 0, 1, 0, (float)-c[1], 0, 0, 1, (float)-c[2]};
             const float to_preview[12] = {(float)rs, 0, 0, (float)(-rs * c[0]), 0, (float)rs, 0, (float)(-rs * c[1]),
@@ -11115,7 +11479,9 @@ void GuiApp::draw_train_settings() {
         // the two panels above always show the values the run will actually
         // use. None of what they write is a dataset-parsing field, so this
         // cannot make the snapshot below think the dataset went stale.
-        train_resolve_macros(_cfg, _cfg_ui.touched);
+        TrainConfig macro_base;   // not _defaults: a saved preset bakes in macros
+        train_apply_preset(macro_base, _preset);
+        train_resolve_macros(_cfg, _cfg_ui.touched, nullptr, &macro_base);
 
         if (_cfg.save_full_checkpoint != parse_before.save_full_checkpoint) {
             _keep_full_ckpt = _cfg.save_full_checkpoint;
@@ -11596,8 +11962,7 @@ void GuiApp::draw_preset_save_modal() {
 // generated editor does: a flag the user set by hand is off limits to the
 // macro options (see train_resolve_macros()).
 void GuiApp::draw_train_mask_mode(float width) {
-    bool cut_out = _cfg.apply_loss_for_mask.value_or(spirula::dense::is_dense_seed(_cfg.data, _cfg.seed_pointcloud) ||
-        (_cfg.seed_pointcloud.empty() && dense_cloud_present()) || (_dense.enable && _dense.use_for_training));
+    bool cut_out = _cfg.apply_loss_for_mask.value_or(false);
     const TrainRunner::Phase ph = _runner.phase();
     if (!_cfg.apply_loss_for_mask.has_value() &&
         (ph == TrainRunner::Phase::Ready || ph == TrainRunner::Phase::Training ||
@@ -11966,9 +12331,12 @@ void GuiApp::draw_train_controls() {
         case TrainRunner::Phase::Loading:
             ui::TextColored(kDim, msg::parsing_dataset);
             break;
-        case TrainRunner::Phase::Preparing:
-            ui::TextColored(kDim, msg::preparing_engine);
+        case TrainRunner::Phase::Preparing: {
+            const std::string fetching = _runner.fetch_line();
+            if (fetching.empty()) ui::TextColored(kDim, msg::preparing_engine);
+            else ui::TextColoredWrappedRaw(kDim, fetching);
             break;
+        }
         case TrainRunner::Phase::Evaluating: {
             ui::TextColored(kDim, msg::status_evaluating);
             const bool stopping = _runner.session() &&
@@ -12087,8 +12455,13 @@ void GuiApp::draw_status_strip() {
                         {p.step + 1, format_duration(_runner.elapsed_seconds())});
         ui::TextDisabled(msg::status_explore);
     } else if (ph == TrainRunner::Phase::Preparing) {
-        ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0),
-                        msg::status_preparing);
+        const std::string fetching = _runner.fetch_line();
+        const float frac = _runner.fetch_progress();
+        if (fetching.empty())
+            ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0), msg::status_preparing);
+        else
+            ui::ProgressBarRaw(frac >= 0.0f ? frac : -(float)ImGui::GetTime(), ImVec2(-8, 0),
+                               fetching.c_str());
         ui::TextDisabledRaw(" ");
     } else if (ph == TrainRunner::Phase::Evaluating) {
         const spirula::EvalProgress p = _runner.latest_eval_progress();

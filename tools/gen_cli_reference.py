@@ -29,6 +29,8 @@ def compiler():
 
 def build(exe):
     cmd = [compiler(), "-std=c++20", "-O0", "-w", "-I", str(ROOT / "src")]
+    if os.name == "nt":
+        cmd.append("-D_USE_MATH_DEFINES")   # MinGW's <cmath> has M_PI only with it
     sdk = os.environ.get("VULKAN_SDK")
     if sdk:
         cmd += ["-I", str(Path(sdk) / "include")]

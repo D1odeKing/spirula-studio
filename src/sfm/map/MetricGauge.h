@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "sfm/core/Exif.h"
+#include "sfm/core/Geodetic.h"
 #include "sfm/core/Model.h"
 #include "sfm/core/Pose.h"
 #include "sfm/map/Orient.h"
@@ -41,6 +42,7 @@ struct MetricRef {
     std::vector<Vec3> centres;
     std::vector<Vec3> targets;
     std::vector<uint32_t> image_ids;
+    GeoOrigin origin;   // where `targets` are centred, when they are GPS
 };
 
 enum class MetricFail { None, Pairs, Distinct, Spread, Inliers, Collinear, Tilted };
@@ -461,59 +463,6 @@ inline MetricPairCounts pairMetricRef(const Reconstruction& rec,
 }
 
 
-struct Geodetic {
-    double lat_deg = 0, lon_deg = 0, alt_m = 0;
-};
-
-// WGS-84 geodetic to earth-centred earth-fixed, in double: ECEF magnitudes are
-// ~6.4e6 m, where a float's half-ulp is 0.25 m.
-inline Vec3 ecefFromGeodetic(double lat_deg, double lon_deg, double h) {
-    constexpr double a = 6378137.0, f = 1.0 / 298.257223563;
-    constexpr double e2 = f * (2.0 - f);
-    const double p = lat_deg * M_PI / 180.0, l = lon_deg * M_PI / 180.0;
-    const double sp = std::sin(p), cp = std::cos(p);
-    const double N = a / std::sqrt(1.0 - e2 * sp * sp);
-    return {(N + h) * cp * std::cos(l), (N + h) * cp * std::sin(l), (N * (1.0 - e2) + h) * sp};
-}
-
-// A local east-north-up metre frame about `origin`. Right-handed, north
-// positive. Not valid across the antimeridian or over ~100 km.
-inline std::vector<Vec3> enuFromGeodetic(const std::vector<Geodetic>& g,
-                                         const Geodetic& origin) {
-    std::vector<Vec3> out;
-    if (g.empty()) return out;
-    const double lat0 = origin.lat_deg, lon0 = origin.lon_deg, h0 = origin.alt_m;
-    const Vec3 o = ecefFromGeodetic(lat0, lon0, h0);
-    const double p = lat0 * M_PI / 180.0, l = lon0 * M_PI / 180.0;
-    const double sp = std::sin(p), cp = std::cos(p), sl = std::sin(l), cl = std::cos(l);
-    out.reserve(g.size());
-    for (const Geodetic& q : g) {
-        const Vec3 d = ecefFromGeodetic(q.lat_deg, q.lon_deg, q.alt_m) - o;
-        out.push_back({-sl * d.x + cl * d.y,
-                       -sp * cl * d.x - sp * sl * d.y + cp * d.z,
-                       cp * cl * d.x + cp * sl * d.y + sp * d.z});
-    }
-    return out;
-}
-
-// The same, about the mean of the fixes. The rotation depends on where the
-// origin is, so two origins do not differ by a translation alone.
-inline std::vector<Vec3> enuFromGeodetic(const std::vector<Geodetic>& g) {
-    if (g.empty()) return {};
-    Geodetic o;
-    for (const Geodetic& q : g) {
-        o.lat_deg += q.lat_deg;
-        o.lon_deg += q.lon_deg;
-        o.alt_m += q.alt_m;
-    }
-    const double inv = 1.0 / (double)g.size();
-    o.lat_deg *= inv;
-    o.lon_deg *= inv;
-    o.alt_m *= inv;
-    return enuFromGeodetic(g, o);
-}
-
-
 // What reading GPS off the images found.
 struct MetricGpsCounts {
     int matched = 0;
@@ -547,7 +496,9 @@ inline MetricGpsCounts metricRefFromGps(const Reconstruction& rec, const std::st
         ids.push_back(kv.first);
         c.matched++;
     }
-    std::vector<Vec3> enu = enuFromGeodetic(g);
+    if (g.empty()) return c;
+    ref.origin = {true, meanGeodetic(g), c.no_alt ? "" : "exif"};
+    std::vector<Vec3> enu = enuFromGeodetic(g, ref.origin.at);
     for (size_t i = 0; i < enu.size(); i++) {
         ref.centres.push_back(centres[i]);
         ref.targets.push_back(enu[i]);

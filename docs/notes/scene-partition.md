@@ -213,7 +213,8 @@ matches the full model.
    cloud into each training image, labels every quarter-resolution cell by
    the nearest point over a footprint that grows as points come closer (so a
    sparse near floor still hides what lies behind it), fills holes from
-   neighbours, keeps what nothing covers, widens what is inside by a margin
+   neighbours, keeps what nothing covers if its ray meets the region at all
+   (the sky past a bounded region does not), widens what is inside by a margin
    so the seam stays supervised, ANDs any existing mask, and writes the
    result under `<run>/roi_masks/` (`write_region_masks`). On Dataset A a
    third of the pixels drop out.

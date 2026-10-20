@@ -11,7 +11,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <unistd.h>
+#include <random>
 
 namespace fs = std::filesystem;
 using gui::LocalCopies;
@@ -47,7 +47,7 @@ LocalCopies::Result finish(LocalCopies& lc) {
 
 int main() {
     const fs::path tmp = fs::weakly_canonical(fs::temp_directory_path()) /
-                         ("local_copies_test_" + std::to_string(::getpid()));
+                         ("local_copies_test_" + std::to_string(std::random_device{}()));
     fs::remove_all(tmp);
     const fs::path vol = tmp / "vol", disk = tmp / "disk";
     fs::create_directories(disk);

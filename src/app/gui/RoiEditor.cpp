@@ -1051,16 +1051,7 @@ void RoiEditor::refresh_overlays() {
             _mesh_gen = gen;
             changed = true;
         } else {
-            // All of a bounded region, however far past the points; an
-            // unbounded one (a list opening with a cut) up to the scene's edge.
-            spirula::Aabb box = _bounds;
-            const spirula::Aabb rb = r->bounds();
-            if (!rb.empty() && !rb.unbounded())
-                for (int a = 0; a < 3; a++) {
-                    const double pad = 0.05 * (rb.hi[a] - rb.lo[a]) + 1e-9;
-                    box.lo[a] = rb.lo[a] - pad;
-                    box.hi[a] = rb.hi[a] + pad;
-                }
+            const spirula::Aabb box = spirula::region_mesh_box(*r, _bounds);
             const std::array<double, 3> c = _ds.center;
             _mesh_job = std::async(std::launch::async, [r, box, c, gen]() {
                 Overlays o;

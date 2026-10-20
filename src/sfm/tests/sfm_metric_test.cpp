@@ -672,6 +672,15 @@ int cmdMetricSelftest(int, char**) {
         printf("  T6b: b - a = (%.4f, %.4f, %.4f) m\n", d.x, d.y, d.z);
         check(std::fabs(d.y - 215.99) < 0.05 && std::fabs(d.x) < 0.01,
               "T6b: 216 m due north, by the meridional radius not by a");
+        // d.jpg is at the three fixes' mean latitude and on their meridian, so
+        // the frame's origin is straight above it.
+        const double lat_d = 42.0 + 12.0 / 60.0 + 7.05 / 3600.0;
+        const double lon_d = -(83.0 + 40.0 / 60.0 + 17.86 / 3600.0);
+        check(ref.origin.ok && std::fabs(ref.origin.at.lat_deg - lat_d) < 1e-9 &&
+                  std::fabs(ref.origin.at.lon_deg - lon_d) < 1e-9 &&
+                  std::hypot(ref.targets[2].x, ref.targets[2].y) < 1e-6,
+              "T6b: the targets are east-north-up about the fixes' mean");
+        check(ref.origin.alt.empty(), "T6b: a fix with no altitude leaves the origin without one");
         fs::remove_all(dir);
     }
 

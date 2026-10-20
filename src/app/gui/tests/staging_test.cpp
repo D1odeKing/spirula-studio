@@ -10,7 +10,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <unistd.h>
+#include <random>
 
 namespace fs = std::filesystem;
 using namespace gui::staging;
@@ -126,7 +126,7 @@ void test_copy(const fs::path& tmp) {
 }  // namespace
 
 int main() {
-    const fs::path tmp = fs::temp_directory_path() / ("staging_test_" + std::to_string(::getpid()));
+    const fs::path tmp = fs::temp_directory_path() / ("staging_test_" + std::to_string(std::random_device{}()));
     fs::remove_all(tmp);
     test_mounts();
     test_copy(tmp);

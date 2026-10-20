@@ -452,6 +452,7 @@ int engine_load_checkpoint(std::string input_dir) {
     engine_ensure_optim_state(sh_opt_bits, sh_val_bits, non_sh_bits, bias != 0);
     _ensure_bilagrid_optim_state();
     _ensure_ppisp_optim_state();
+    _ensure_bg_sh_optim_state();
 
     // Restore each saved .npy into its pool slot by name.
     std::vector<char> host_stage;

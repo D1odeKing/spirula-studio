@@ -193,7 +193,7 @@ bool compose_frame(const FrameLook& look, int folder, std::vector<nn::Image>& im
             std::vector<uint8_t> lens;
             packed_lens_crop(img[0].data.data(), img[0].width, img[0].height,
                              img[0].channels, look.packed_lenses, folder, lens,
-                             img[0].width);
+                             img[0].width, img[0].height);
             img[0].data.swap(lens);
         }
         out = std::move(img[0]);
@@ -245,6 +245,10 @@ bool decode_lockstep_vulkan(const FrameExtractJob& o, const FrameExtractSinks& s
     };
     std::deque<Buffered> window;
     const int keep = o.keep;
+    PickRule rule{o.blur_reject, o.blur_neighbour, o.similar_bits};
+    const bool judge = rule.on() || (bool)sinks.judged;
+    std::unique_ptr<EdgeMeter> meter;
+    if (rule.max_blur > 0.0f) meter = std::make_unique<EdgeMeter>();
     SelectClock clock{o.keep, o.skip, plan, 0};
     clock.span = clip_frames(o, pipe[0]->track().fps > 1.0 ? pipe[0]->track().fps : 30.0);
     int written = 0;
@@ -315,6 +319,24 @@ bool decode_lockstep_vulkan(const FrameExtractJob& o, const FrameExtractSinks& s
             for (size_t k = 0; k < n && ok; k++)
                 ok = pipe[k]->toImage(chosen.h[k], conv, imgs[k], err);
             t.convert += nn::now_ms() - t0;
+            if (ok && judge) {
+                FramePick p;
+                p.index = chosen.index;
+                if (imgs[0].channels == 3) {
+                    const double t1 = nn::now_ms();
+                    // A packed rig is cut apart later: the whole picture is measured.
+                    measure_pick(p, imgs[0].data.data(), imgs[0].width, imgs[0].height,
+                                 meter.get(), pipe[0]->rgbDevice());
+                    t.sharpness += nn::now_ms() - t1;
+                }
+                rule.judge(p);
+                if (sinks.judged) sinks.judged(p, imgs[0]);
+                if (p.verdict != PickVerdict::Kept) {
+                    ++(p.verdict == PickVerdict::Blurry ? t.blurry : t.similar);
+                    drain();
+                    return;
+                }
+            }
             if (ok) ok = on_frame(imgs, chosen.index, err);
             if (!ok) {
                 log_line(sinks, "frame " + std::to_string(chosen.index) + ": " + err);

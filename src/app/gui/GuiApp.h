@@ -23,6 +23,8 @@
 #include "app/gui/RoiEditor.h"
 #include "app/gui/ImageCompare.h"
 #include "app/gui/MatchMatrix.h"
+#include "app/gui/PickSheet.h"
+#include "app/gui/PickSheetView.h"
 #include "app/gui/PairPreview.h"
 #include "app/SfmProgress.h"
 #include "app/gui/Layout.h"
@@ -464,6 +466,8 @@ private:
     // The step list and its bars, in place of the one stage line.
     void draw_dataset_steps();
     void draw_scan_view(float h);
+    void draw_sharpness_view(float h);
+    void continue_frame_review();
     // The form and the button that acts on it, `height` tall.
     void draw_dataset_form(float height, bool running);
     // The frames / match map / model area, and the poll that feeds it from what
@@ -870,6 +874,20 @@ private:
     FeatureWatcher _features;
     std::string _features_shown;   // the folder the reel was filled from
     MatchMatrix _matrix;
+    // Every frame a run chose and what the rule made of it (the Sharpness view).
+    PickSheet _picks;
+    PickSheetView _picks_view;
+    bool _picks_pictures = false;
+    std::string _picks_workspace;    // the output folder _picks was measured for
+    float _picks_size = 48.0f;       // a thumbnail's width, unscaled
+    bool _was_reviewing = false;     // SfmRunner::reviewing(), the frame before
+    // The Sharpness view's walk of the rule over _picks, and what it was for.
+    struct PickWalk {
+        std::string key;
+        std::vector<std::vector<Pick>> rows;
+        std::vector<float> blurs, steps;
+        bool differs = false;
+    } _pick_walk;
     // The two images behind whichever cell of the match map the cursor is on.
     PairPreview _pairs_view;
     // The model as the mapper builds it, drawn by the same GL preview the

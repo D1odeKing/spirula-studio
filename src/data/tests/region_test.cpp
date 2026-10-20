@@ -457,6 +457,18 @@ int main() {
         for (size_t v = 2; v < plane.xyz.size(); v += 3) flat = flat && std::fabs(plane.xyz[v]) < 0.25 / 64;
         check(flat, "unbounded half-space: only the plane, open at the box");
 
+        // A cylinder standing taller than the scene is drawn whole, caps and all.
+        CylinderRegion tall;
+        tall.half[2] = 6.0;
+        const Aabb tb = region_mesh_box(tall, box);
+        const RegionMesh tm = region_boundary_mesh(tall, tb, 48);
+        float top = -1e30f;
+        for (size_t v = 2; v < tm.xyz.size(); v += 3) top = std::max(top, tm.xyz[v]);
+        check(tb.lo[2] < -6.0 && tb.hi[2] > 6.0 && std::fabs(top - 6.0f) < 0.3f,
+              "mesh box: a bounded region past the scene is meshed whole");
+        const Aabb hb = region_mesh_box(hs, box);
+        check(hb.lo[2] == box.lo[2] && hb.hi[2] == box.hi[2], "mesh box: an unbounded region stops at the scene");
+
         const float seeds[6] = {-1, 0, 0, 1, 0, 0};
         const int32_t labels[2] = {0, 1};
         const LabelField two = LabelField::build(seeds, labels, nullptr, 2);

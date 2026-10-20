@@ -140,7 +140,7 @@ void _engine_step_image_stages(TorchTensorView cam_indices) {
 // and as the inner of the single-batch path. Returns the loss_dict from
 // engine_compute_loss_backward; callers aggregate across sub-batches.
 static std::map<std::string, float> _engine_step_fwd_bwd_only(
-    int step,
+    int step, int max_steps,
     std::string primitive,
     int sh_degree,
     bool packed,
@@ -159,6 +159,7 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
         !cfg.optim.use_fused_proj_bwd_optim && (cfg.optim.quantization_level != 0);
 
     _set_cur_cam_indices(bilagrid_cam_indices);
+    engine_max_weight_begin_step(step, max_steps, cfg.densify);
 
     // Pick the distortion channel set from the per-channel weights, restricted
     // to the channels this primitive renders (normal is honored only once a
@@ -215,6 +216,8 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
         engine().fwd.tile_active = DeviceVector<int32_t>();
     }
     _engine_arm_step_forward(cfg, dist_type, /*image_stages=*/true);
+    engine().fwd.score_pending = cfg.loss.learned_score;
+    engine().learned_score.power = cfg.loss.loss_map_power * cfg.densify.score_power;
 
     {
         SplatStageTimer stage_timer;
@@ -223,7 +226,7 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
     _engine_step_image_stages(bilagrid_cam_indices);
 
     auto losses = engine_compute_loss_backward(
-        step, cfg.loss.weights, cfg.loss.w_ssim,
+        step, cfg.loss.weights, cfg.loss.w_ssim, cfg.loss.perceptual_loss,
         cfg.loss.num_loss_scales, cfg.loss.loss_scale_min_pixels,
         cfg.loss.compute_loss_map,
         cfg.loss.loss_map_mode,
@@ -345,7 +348,7 @@ std::map<std::string, float> _engine_train_step_after_setup(
     }
 
     auto loss_dict = _engine_step_fwd_bwd_only(
-        step, std::move(primitive), sh_degree, packed,
+        step, max_steps, std::move(primitive), sh_degree, packed,
         bilagrid_cam_indices, cfg);
 
     _engine_step_optim_and_densify(step, max_steps, cfg, loss_dict);
@@ -493,7 +496,7 @@ static std::map<std::string, float> _engine_train_step_split_one_per_camera(
         engine_viewer_capture_thumbnails(bgi_k);
 
         auto ld = _engine_step_fwd_bwd_only(
-            step, primitive, sh_degree, packed, bgi_k, cfg_sub);
+            step, max_steps, primitive, sh_degree, packed, bgi_k, cfg_sub);
 
         // Accumulate per-sub-batch accum_weight (per-splat densification
         // score from raster_bwd). engine().fwd.accum_weight points at the
@@ -630,7 +633,7 @@ std::map<std::string, float> engine_train_step_hetero(
             engine_viewer_capture_thumbnails(bgi_c);
 
             auto ld = _engine_step_fwd_bwd_only(
-                step, primitive, sh_degree, packed, bgi_c, cfg_sub);
+                step, max_steps, primitive, sh_degree, packed, bgi_c, cfg_sub);
 
             if (engine().fwd.accum_weight.data_ptr() != nullptr) {
                 _fold_accum_weight(accum_weight_sum, N_splats);
@@ -851,7 +854,7 @@ static std::map<std::string, float> _engine_train_step_split_warped(
             // Reported as they come: the pass weights average to 1, so the
             // mean below is the weighted total the loss actually is.
             auto ld = _engine_step_fwd_bwd_only(
-                step, primitive, sh_degree, packed, bgi_k, cfg_pass);
+                step, max_steps, primitive, sh_degree, packed, bgi_k, cfg_pass);
 
             if (engine().fwd.accum_weight.data_ptr() != nullptr) {
                 _fold_accum_weight(accum_weight_sum, N_splats);

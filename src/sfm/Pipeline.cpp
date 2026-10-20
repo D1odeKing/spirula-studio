@@ -265,7 +265,7 @@ SensorCaptures loadSensorCaptures(const SfmConfig& cfg, bool verbose) {
         lc->cap.time_offset = in.time_offset;
         lc->cap.readout = t.frame_readout;
         lc->cap.timeline = &lc->timeline;
-        lc->carrier = t.carrier;
+        lc->cap.carrier = t.carrier;
         L::out(Tag::Orient, M::sensor_file,
                {in.path, t.camera.empty() ? "?" : t.camera, L::num(c.gyro.rate_hz, 0),
                 L::num(c.accel.rate_hz, 0), L::num(c.orientation.rate_hz, 0),
@@ -453,7 +453,7 @@ MetricGpsEvidence metricGpsEvidence(const SfmConfig& cfg, const SensorCaptures& 
     for (const auto& lc : sensors.loaded) {
         if (!lc->timeline.hasGps()) continue;
         e.telemetry_gps++;
-        e.telemetry_dji += lc->carrier == TelemetryCarrier::DjiDvtm;
+        e.telemetry_dji += lc->cap.carrier == TelemetryCarrier::DjiDvtm;
     }
     if (imagedir.empty() || e.positions_file || e.telemetry_gps) return e;
     std::error_code walk, ec;
@@ -687,6 +687,7 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
                                  : r.scale_from_imu                   ? "imu"
                                                                      : "gps";
                 gauge[i].scale_sigma = r.scale_sigma;
+                if (r.place_from_gps) gauge[i].origin = r.origin;
             }
         }
     }
@@ -750,6 +751,7 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
         applySim3(models[i], Sim3{s, mat3Scale(f.A, 1.0 / s), f.t});
         gauge[i].metric = true;
         gauge[i].scale = "gps";
+        gauge[i].origin = mapped->origin();
         gauge[i].oriented = !guessed;
         gauge[i].up = f.up == GpsUp::Imu        ? "sensors"
                       : f.up == GpsUp::Declared ? "level"
@@ -795,6 +797,7 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
         gauge[i].metric = true;
         gauge[i].scale = file ? "positions" : "gps";
         gauge[i].scale_sigma = fit.scale_unc;
+        gauge[i].origin = ref.origin;
         // Horizontal fits scale, heading and place only, so which way is up is
         // still whatever `pre` left it as: the sensors, or the cameras.
         if (!flat) {
@@ -869,6 +872,7 @@ bool fixGauge(std::vector<Reconstruction>& models, const SfmConfig& cfg,
             const GroundFit g = groundTransform(models[i], false);
             if (!g.found) continue;
             applySim3(models[i], g.T);
+            gauge[i].origin.at.alt_m -= g.T.t.z;   // z = 0 is the ground now
             L::out(Tag::Orient, M::orient_ground_height,
                    {(long long)i, (long long)std::lround(g.share * 100.0)});
         }
@@ -993,9 +997,9 @@ void splitCamerasBySize(std::vector<Reconstruction>& models,
     }
 }
 
-// gauge.txt beside the model: whether +Z is up and whether a unit is a metre.
-// Plain text and not hidden, because it is as much for the user reading the
-// folder as for the viewer that stops guessing an up axis when it is there.
+// gauge.txt beside the model: whether +Z is up, whether a unit is a metre, and
+// where on Earth (0,0,0) is. Plain text and not hidden, because it is as much
+// for the user reading the folder as for the viewer that stops guessing an up axis.
 void writeGauge(const fs::path& dir, const ModelGauge& g) {
     std::ofstream f(dir / "gauge.txt", std::ios::trunc);
     if (!f) return;
@@ -1005,6 +1009,15 @@ void writeGauge(const fs::path& dir, const ModelGauge& g) {
     f << "up " << g.up << "\n";
     f << "scale " << g.scale << "\n";
     if (g.scale_sigma > 0) f << "scale_sigma " << g.scale_sigma << "\n";
+    if (!g.origin.ok) return;
+    // 1e-9 degrees is 0.1 mm.
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "origin_lat %.9f\norigin_lon %.9f\n", g.origin.at.lat_deg,
+                  g.origin.at.lon_deg);
+    f << "# x east, y north of this WGS-84 point, in metres\n" << buf;
+    if (g.origin.alt.empty()) return;
+    std::snprintf(buf, sizeof buf, "origin_alt %.3f\n", g.origin.at.alt_m);
+    f << buf << "alt_source " << g.origin.alt << "\n";
 }
 
 // rigs.txt beside a model that used one: each member's cam_from_rig as the

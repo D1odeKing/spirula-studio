@@ -122,15 +122,29 @@ void pano360_canvas(const Pano360Layout& l, const uint8_t* track0,
 // Whether the canvas needs the second track decoded at all.
 inline bool pano360_needs_track1(const Pano360Layout& l) { return !l.sphere(); }
 
-// A 360 camera's one-image formats (an Insta360 .insp photo, its .lrv / .prx proxy
-// video) hold both fisheye circles side by side at 2:1, or one lens at 1:1.
-// Any other shape takes the nearer of the two, with `exact` false.
+// A 360 camera's one-image formats hold both fisheye circles side by side at 2:1
+// (an Insta360 .insp, .lrv, .prx) or stacked at 1:2 (a QooCam .mp4), or one lens
+// at 1:1. Any other shape takes the nearer of 2:1 and 1:1, with `exact` false.
 int packed_lens_count(int width, int height, bool& exact);
 
-// Lens `lens` of `lenses` side by side, as its own tightly packed image.
+// The size of each of `lenses` lenses cut along the frame's longer side.
+void packed_lens_size(int width, int height, int lenses, int& out_width,
+                      int& out_height);
+
+// Lens `lens` of `lenses` along the frame's longer side, as its own tightly
+// packed image.
 void packed_lens_crop(const uint8_t* px, int width, int height, int channels,
                       int lenses, int lens, std::vector<uint8_t>& out,
-                      int& out_width);
+                      int& out_width, int& out_height);
+
+// A Kandao camera's recording, known by the `kfix` or `kvar` box its MP4 ends
+// with, where the extension is a plain .mp4.
+bool kandao_recording(const std::string& path);
+
+// Whether such a recording of `width` x `height` frames left the lenses apart:
+// always at 1:2, since stitching makes 2:1, else when kfix lists two lenses or
+// says STITCHED=0; never where it says STITCHED=1 (Kandao Studio's) or STEREO=1.
+bool kandao_unstitched(const std::string& path, int width, int height);
 
 // Decodes what the canvas needs and cuts it to size, leaving the result on
 // `pano360_canvas_pad`. `pre` ("fps=6") runs on the canvas, so ffmpeg never

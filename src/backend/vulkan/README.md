@@ -40,14 +40,27 @@ for A/B testing):
   blob uses a CAS-loop emulation (Intel ANV), and a
   `.atomicadd`-suffixed blob uses native `OpAtomicFAddEXT`; the pipeline
   layer picks per device at module load (no in-shader branch). Unlike
-  VkSplat, both variants are always built. The CAS loop has a second shape
-  behind the spec constant `kCasUniformExit` (ID 1000, clear of every
-  kernel's own 0..n-1), where no lane leaves the loop until every lane in
-  its wave has succeeded: the pipeline layer sets it only for
-  `backend::DeviceIssue::AmdWindowsFloatAtomics`, the AMD Windows driver
-  whose float sums come out thousands of times too large (issue #23), with
-  the per-lane loop exit as the suspect. Untested on that driver.
-  `SS_VK_CAS_UNIFORM_EXIT=0/1` forces it either way.
+  VkSplat, both variants are always built. In Windows builds the CAS-loop
+  blob has a second shape behind the spec constant `kXchgFloatAdd` (ID 1000,
+  clear of every kernel's own 0..n-1): an add built from two float atomic
+  exchanges. Its float atomics are in the module whether the constant takes
+  them or not, so every device loading a CAS-loop blob there enables
+  `shaderBufferFloat32Atomics` where it has it; elsewhere the path is not
+  compiled, since SPIRV-Cross emits it as `atomic_float`, which MSL lacks
+  before 3.0. The pipeline layer sets the constant only on AMD's Windows
+  driver without native fp32 add (`amd_windows_emulated_fadd`,
+  `VulkanContext.cpp`); such a device without the exchange either is what
+  still reports `backend::DeviceIssue::AmdWindowsFloatAtomics`. That driver drops the
+  index of an indexed float pointer once it is reinterpreted as `uint*`
+  (OpBitcast and OpConvertPtrToU alike; the SPIR-V validates), so every CAS
+  of an array element hit the array's base and float sums came out
+  thousands of times too large (issue #23). Seen in the ISA of an
+  RX 6800 XT, Adrenalin 26.8.1 (driverVersion 2.0.353), via
+  VK_KHR_pipeline_executable_properties. `SS_VK_XCHG_FLOAT_ADD=0/1` forces
+  it either way. The same device also gets the word-packed int8 blobs: 13 of
+  the 148 ".int8" ones (ppl_fwd, ppl_bwd, fused_adam_qq, ...) crash its
+  compiler in amdvlk64.dll, and the gindex_t loads index before they cast,
+  the shape the float CAS was miscompiled in.
 - `shaderInt64` — 64-bit sort keys, morton codes, large-buffer indexing.
   Entries in an int64_compat-including source get a `.noint64` variant
   compiled with `-DSS_EMULATE_INT64` (`backend/vulkan/shaders/int64_compat.slang`),
@@ -794,7 +807,14 @@ the engine level.
     flat 256-wide workgroups (~30 KB, same buffer1/buffer2 overlay reuse).
     Every per-pixel output is a pure function of the zero-padded input, so
     tile size does not change the map or dL/dimg1 (tight); only the
-    display-only scalar's accumulation grouping differs (loose).
+    display-only scalar's accumulation grouping differs (loose). Its
+    `scielab_*` entries port the S-CIELAB loss with the CUDA kernel's own
+    16x16 tile and 28 KB overlay, under the floor on every device; its
+    `flip_*` entries port FLIP the same way at 31.4 KB, keeping each lane's
+    window centres in registers across the passes, as the CUDA kernel does.
+    The `ssim_bt_*` entries are blur-tolerant SSIM: a blur pass, the fused
+    kernel on SSIM's tile (30 KB at 16, 47.7 KB at 24), and the blur's
+    adjoint (`docs/notes/ssim-blur-tolerance.md`).
   - `canny.slang` (canny rgb/scalar + BT.601 residual luma + Tukey
     biweight) with globally-clamped loads -> per-pixel deterministic, so
     even the RobustEdgeAware densification map compares tight.

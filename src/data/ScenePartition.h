@@ -143,13 +143,14 @@ struct PartitionApplied {
 bool apply_partition(ParsedDataset& ds, const ScenePartition& p, int part,
                      PartitionApplied& out);
 
-// Per frame of `ds`, a quarter-size PNG under `dir` keeping the pixels whose
-// nearest of the `n` points (`xyz`, ds's frame) is inside, plus a margin, ANDed
-// with the frame's own mask. `masked_share` gets the share of pixels left out.
+// Per frame of `ds`, a quarter-size PNG under `dir`: pixels whose nearest of
+// the `n` points (`xyz`, ds's frame) is inside or none and whose ray meets
+// `region` (`to_region` into its frame), plus a margin, ANDed with its mask.
 std::vector<std::string> write_region_masks(const ParsedDataset& ds, const double* xyz, int64_t n,
                                             const uint8_t* point_inside,
                                             const std::string& dir, bool flip_existing,
-                                            double* masked_share = nullptr);
+                                            double* masked_share = nullptr,
+                                            const Region* region = nullptr, const Sim3& to_region = {});
 
 // A distinct colour per part for displays, 0..1 RGB, stable across runs.
 void part_color(int part, float rgb[3]);
