@@ -200,14 +200,14 @@ inline bool train_choices_free_form(const char* choices) {
     X(std::string, primitive, "3dgs", "splats", "basic", "3dgs|mip|3dgut")   \
     X(int, sh_degree, 3, "splats", "basic", "")                              \
     X(int, sb_lobes, 0, "splats", "basic", "")                               \
-    X(int, sh_degree_warmup_every, 1000, "splats", "expert", "")             \
+    X(int, sh_degree_warmup_every, 0, "splats", "expert", "")             \
     X(std::string, background_mode, "color", "splats", "basic", "color|noise|pseudorandom|random|sh") \
     X(TrainVec3f, background_color, train_v3f(0.0f, 0.0f, 0.0f), "splats", "basic", "") \
     X(int, background_sh_degree, 4, "splats", "basic", "")                   \
     X(int, background_noise_warmup, 2000, "splats", "expert", "")            \
     X(float, background_noise_pre_warmup, 0.25f, "splats", "expert", "")     \
     X(bool, background_match_luminance, false, "splats", "advanced", "")     \
-    X(std::optional<float>, scale_init, std::nullopt, "splats", "advanced", "") \
+    X(std::optional<float>, scale_init, 0.35f, "splats", "advanced", "") \
     X(std::optional<float>, opacity_init, std::nullopt, "splats", "advanced", "") \
     X(bool, suppress_initial_scales, false, "splats", "expert", "")          \
     X(std::string, random_init, "auto", "splats", "advanced", "never|auto|always") \
@@ -222,7 +222,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(std::string, quality, "medium", "detail", "basic", "low|medium|high|ultra") \
     X(int, cap_max, 1000000, "detail", "basic", "")                          \
     X(std::string, distraction_robustness, "off", "detail", "basic", "off|mild|strong") \
-    X(float, min_init_fraction, 0.0f, "detail", "basic", "")                 \
+    X(float, min_init_fraction, 0.1f, "detail", "basic", "")                 \
     X(float, growth_factor, 1.05f, "detail", "advanced", "")                 \
     X(float, min_opacity, 0.005f, "detail", "advanced", "")                  \
     X(std::string, dead_criterion, "either", "detail", "advanced", "opacity|max_weight|either") \
@@ -230,8 +230,8 @@ inline bool train_choices_free_form(const char* choices) {
     X(int, refine_start_iter, 500, "detail", "expert", "")                   \
     X(int, refine_stop_num_iter, 2500, "detail", "advanced", "")             \
     X(int, refine_stop_iter, 14000, "detail", "advanced", "")                \
-    X(float, noise_lr, 80.0f, "detail", "expert", "")                        \
-    X(float, noise_lr_final, 0.8f, "detail", "expert", "")                   \
+    X(float, noise_lr, 160.0f, "detail", "expert", "")                        \
+    X(float, noise_lr_final, 1.6f, "detail", "expert", "")                   \
     X(bool, use_revised_densification, true, "detail", "expert", "")         \
     X(std::string, densify_score_mode, "mean", "detail", "basic", "mean|max|median|geom") \
     X(float, densify_score_blend_world_grad, 0.0f, "detail", "advanced", "") \
@@ -240,16 +240,16 @@ inline bool train_choices_free_form(const char* choices) {
     X(float, densify_nms_falloff, 0.5f, "detail", "advanced", "")            \
     X(bool, densify_loss_map_normalize, false, "detail", "advanced", "")     \
     X(float, densify_loss_map_clip_quantile, 1.0f, "detail", "advanced", "") \
-    X(float, densify_loss_map_power, 4.0f, "detail", "advanced", "")         \
-    X(std::string, densify_accum_mode, "avg", "detail", "basic", "max|sum|avg") \
-    X(float, densify_score_power, 0.4f, "detail", "advanced", "")            \
+    X(float, densify_loss_map_power, 2.0f, "detail", "advanced", "")         \
+    X(std::string, densify_accum_mode, "sum", "detail", "basic", "max|sum|avg") \
+    X(float, densify_score_power, 0.2f, "detail", "advanced", "")            \
     X(float, densify_score_clip_quantile, 1.0f, "detail", "advanced", "")    \
     X(float, densify_final_score_power, 1.0f, "detail", "advanced", "")      \
     X(bool, densify_learned_score, false, "detail", "advanced", "")          \
     X(float, densify_oversize_split_fraction, 0.15f, "detail", "advanced", "") \
     X(float, densify_oversize_score_blend, 1.0f, "detail", "advanced", "")   \
     X(bool, use_long_axis_split, true, "detail", "expert", "")               \
-    X(TrainVec3f, long_axis_split_opacity_k, train_v3f(0.5f, 0.6f, 15000.0f), "detail", "basic", "") \
+    X(TrainVec3f, long_axis_split_opacity_k, train_v3f(0.5f, 0.55f, 15000.0f), "detail", "basic", "") \
     X(float, max_split_fraction, 0.1f, "detail", "advanced", "")             \
     X(bool, split_weight_by_renders, false, "detail", "advanced", "")        \
     X(float, dead_after_epochs, 2.0f, "detail", "advanced", "")              \
@@ -299,7 +299,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(int, median_warmup, 6000, "geometry", "expert", "")                    \
                                                                              \
     /* ==== shape -- keeping individual splats compact and well behaved ==== */ \
-    X(float, opacity_reg, 0.005f, "shape", "basic", "")                      \
+    X(float, opacity_reg, 0.01f, "shape", "basic", "")                      \
     X(bool, reg_rendered_only, true, "shape", "advanced", "")                \
     X(float, scale_reg, 0.01f, "shape", "basic", "")                         \
     X(float, opacity_reg_decay_power, 1.0f, "shape", "expert", "")           \
@@ -383,8 +383,8 @@ inline bool train_choices_free_form(const char* choices) {
     X(bool, use_bvh, false, "perf", "stub", "")                              \
                                                                              \
     /* ==== rates -- how fast each splat parameter is allowed to change ==== */ \
-    X(float, means_lr, 0.000128f, "rates", "basic", "")                      \
-    X(std::optional<float>, means_lr_final, 1.6e-06f, "rates", "basic", "")  \
+    X(float, means_lr, 0.000256f, "rates", "basic", "")                      \
+    X(std::optional<float>, means_lr_final, 3.2e-06f, "rates", "basic", "")  \
     X(float, scales_lr, 0.02f, "rates", "basic", "")                         \
     X(std::optional<float>, scales_lr_final, 0.005f, "rates", "basic", "")   \
     X(float, quats_lr, 0.0015f, "rates", "basic", "")                        \
@@ -470,7 +470,7 @@ inline bool train_apply_preset(TrainConfig& c, const std::string& name) {
         c.mask_boundary_offset = -0.005f;
         // c.primitive = "mip";
         c.erank_reg = 0.01f;
-        c.long_axis_split_opacity_k = {0.5f, 0.6f, 15000.0f};
+        c.long_axis_split_opacity_k = {0.5f, 0.55f, 15000.0f};
         return true;
     }
     if (name == "in-the-wild") {
@@ -482,12 +482,12 @@ inline bool train_apply_preset(TrainConfig& c, const std::string& name) {
         // c.floater_suppression= "strong";
         // c.distraction_robustness = "strong";
         c.sh_degree_warmup_every = 0;
-        c.long_axis_split_opacity_k = {0.5f, 0.6f, 30000.0f};
-        c.noise_lr = 10.0f;
-        c.noise_lr_final = 0.1f;
+        c.long_axis_split_opacity_k = {0.5f, 0.55f, 30000.0f};
+        c.noise_lr = 20.0f;
+        c.noise_lr_final = 0.2f;
         c.erank_reg = 0.1f;
-        c.means_lr = 5e-05f;
-        c.means_lr_final = 1e-07f;
+        c.means_lr = 1e-4f;
+        c.means_lr_final = 2e-07f;
         return true;
     }
     if (name == "centered-object") {
@@ -522,11 +522,11 @@ inline bool train_apply_preset(TrainConfig& c, const std::string& name) {
         return true;
     }
     if (name == "synthetic") {
-        c.min_init_fraction = 0.02f;
+        // c.min_init_fraction = 0.02f;
         c.use_bilateral_grid = false;
         c.use_ppisp = false;
         c.use_bilateral_grid_for_geometry = false;
-        c.long_axis_split_opacity_k = {0.5f, 0.6f, 25000.0f};
+        c.long_axis_split_opacity_k = {0.5f, 0.55f, 25000.0f};
         return true;
     }
     if (name == "meshing") {
