@@ -242,6 +242,7 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
     const size_t tail = errors_.size() > kTailAttempts ? errors_.size() - kTailAttempts : 0;
     std::vector<std::string> names(loose_.images.size());
     for (size_t i = 0; i < names.size(); i++) names[i] = loose_.images[i].name;
+    const FileOrder order = fileOrder(names);
     // Where each image's current rows live: a kept pass moves its targets to
     // that pass's folder, and a later pass reloads them from there.
     std::vector<fs::path> source(names.size(), workspace_ / "features");
@@ -347,7 +348,7 @@ void ProgressiveAligner::featurePasses(std::vector<Reconstruction>& models, Asse
                 feats_[i] = readFeatures((source[i] / (names[i] + ".bin")).string(), true, true);
             PairSelectionOptions popt = cfg_.prefilter;
             popt.num_neighbors *= 2;
-            const auto chosen = prefilterPairsFor(feats_, popt, tg, partners);
+            const auto chosen = prefilterPairsFor(feats_, popt, tg, partners, &order);
             pairs.insert(pairs.end(), chosen.begin(), chosen.end());
             for (const auto& q : sequentialPairs((uint32_t)names.size(), 2 * cfg_.overlap, false,
                                                  folderRuns(names)))

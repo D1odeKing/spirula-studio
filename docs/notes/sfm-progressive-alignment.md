@@ -1,10 +1,10 @@
 # Progressive alignment — plan
 
-Status on `sfm-progressive-alignment`: the error ladder with a final
+Status on `sfm-progressive-alignment`: the file-order weight (§7,
+`--order-weight`, off by default), the error ladder with a final
 retriangulation (§2–3, `--progressive`), the feature passes (§4–5), their GUI
 (§8.2), `progressive.txt`, the time limit and `Stage::Progressive` are in. Not
-yet: the file-order weight (§7), `spirula sfm progressive WORKSPACE` on a
-finished run, resume per
+yet: `spirula sfm progressive WORKSPACE` on a finished run, resume per
 attempt, and keeping the putative matches so the tighter attempts re-verify
 from them rather than from the loose inliers.
 
@@ -137,8 +137,9 @@ derived from it stay correct per image (D46/D47).
 
 Matching for the targets:
 
-- **Partners**: the images of `sparse/0` most likely to see a target, picked
-  by pair selection restricted to target × registered, with a
+- **Partners**: the images of `sparse/0` most likely to see a target. They are
+  ranked by file order first, measured from the component's boundary frames
+  (§7.3). Then comes pair selection restricted to target × registered, with a
   wider neighbour count than the run's; this brings back a small
   `prefilterPairsFor`, which went out with #138. GPS proximity is added when
   there is GPS.
@@ -262,8 +263,6 @@ matches early. The fold detector runs at every merge already, and a feature
 pass is undone when it reports a new fold (§5). Test 3 below is the check.
 
 ## 7. File order as a weight on which pairs are matched
-
-Not part of this branch: a plan for a separate change.
 
 ### 7.1 What the code does with file order today (`dev` at `0856b86d`)
 
