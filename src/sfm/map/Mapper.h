@@ -228,6 +228,12 @@ struct MapperOptions {
     // such sets. Speed comes from convergence-adaptive iterations + the
     // persistent solver instead (D38).
     double ba_growth_ratio = 1.1;      // COLMAP ba_global_images_ratio
+    // Local BA after a registration that triggers no global one: the image and
+    // its most co-visible neighbours move, intrinsics and the rest are held
+    // (COLMAP's local_ba_num_images, same default).
+    bool local_ba = false;
+    int local_ba_images = 6;
+    std::string local_ba_real = "cpu";
     int ba_max_refinements = 5;        // final pass; growth passes use 2
     // LM cap of a final pass holding absolute centre factors: COLMAP's
     // ba_global_max_num_iterations. At 25, both final solves of a canopy drone capture under
@@ -2989,6 +2995,7 @@ private:
             if (!registered && rerank) continue;
             if (!registered) break;  // nothing in the ranking can be registered
             const bool due = rec_.numRegistered() >= next_ba;
+            if (opt_.local_ba && !due && !ba_requested_) localRefine(recent_regs_.back());
             if (due || ba_requested_) {
                 // Under stop_at_ba the requested BA is the caller's joint solve.
                 if (ba_requested_) {
@@ -4105,6 +4112,21 @@ private:
         }
     }
 
+    // attachObservation's inverse, for an observation filtered between rebuilds.
+    void detachObservation(uint32_t img, uint32_t f) {
+        for (const Correspondence& c : graph_.at(img, f)) {
+            uint16_t& s = support_[c.image_id][c.feature_idx];
+            if (s && --s == 0) {
+                score_cache_[c.image_id]--;
+                pyramidUnset(c.image_id, c.feature_idx);
+            }
+            if (seq_ && nearby(img, c.image_id)) {
+                uint16_t& n = near_support_[c.image_id][c.feature_idx];
+                if (n && --n == 0) near_score_[c.image_id]--;
+            }
+        }
+    }
+
     // ---- sequences (D79) --------------------------------------------------
     // A duplicate verifies against the wrong copy of itself; correspondences to
     // sequence neighbours cannot, so they come first (README, "Sequences").
@@ -4155,6 +4177,27 @@ private:
             cy >>= 1;
         }
         pyramid_score_[img] += score;
+    }
+
+    void pyramidUnset(uint32_t img, uint32_t f) {
+        const FeatureSet& fs = feats_[img];
+        if (fs.width <= 0 || fs.height <= 0) return;
+        const Keypoint& k = fs.keypoints[f];
+        int cx = (int)(kPyrDim * (double)k.x / fs.width);
+        int cy = (int)(kPyrDim * (double)k.y / fs.height);
+        cx = std::min(std::max(cx, 0), kPyrDim - 1);
+        cy = std::min(std::max(cy, 0), kPyrDim - 1);
+        uint16_t* level = pyramid_[img].data() + kPyrCells;
+        uint32_t score = 0;
+        for (int i = kPyrLevels - 1; i >= 0; i--) {
+            const int dim = 2 << i;
+            level -= (size_t)dim * dim;
+            uint16_t& cell = level[(size_t)cy * dim + cx];
+            if (cell && --cell == 0) score += (uint32_t)dim * dim;
+            cx >>= 1;
+            cy >>= 1;
+        }
+        pyramid_score_[img] -= std::min(score, pyramid_score_[img]);
     }
 
     // Candidates for the next registration, best first: unregistered, still
@@ -5356,6 +5399,7 @@ private:
                         bo.metres_per_unit = std::sqrt(A[0] * A[0] + A[3] * A[3] + A[6] * A[6]);
                 }
             }
+            bo.prof_label = tight ? "final" : "growth";
             double cost = runGlobalBA(rec_, bo);
             if (rigs_ && !final_.no_rig) snapRigFrames();
             ProfTimer pt(g_map_prof.filter);
@@ -5391,6 +5435,119 @@ private:
                        "[map] de-registered %d image(s) (few points or bogus camera), "
                        "%u remain", dropped, rec_.numRegistered());
         if (rigs_ && !final_.no_rig) completeRigFrames();
+    }
+
+    // COLMAP's local refinement: solve the window around `img`, filter its
+    // points, triangulate what the moved poses explain. No snapshot: the next
+    // checkedRefine undoes a registration that bends the model.
+    void localRefine(uint32_t img) {
+        std::unordered_map<uint32_t, uint32_t> covis;
+        for (uint64_t id : rec_.images.at(img).point3D_ids) {
+            if (id == kInvalidPoint3D) continue;
+            auto it = rec_.points3D.find(id);
+            if (it == rec_.points3D.end()) continue;
+            for (const TrackElement& e : it->second.track)
+                if (e.image_id != img) covis[e.image_id]++;
+        }
+        std::vector<std::pair<uint32_t, uint32_t>> ranked(covis.begin(), covis.end());
+        std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+            return a.second != b.second ? a.second > b.second : a.first < b.first;
+        });
+        std::set<uint32_t> variable{img};
+        for (size_t i = 0; i < ranked.size() && (int)i < opt_.local_ba_images; i++)
+            variable.insert(ranked[i].first);
+
+        std::set<uint64_t> pts;
+        for (uint32_t v : variable)
+            for (uint64_t id : rec_.images.at(v).point3D_ids)
+                if (id != kInvalidPoint3D) pts.insert(id);
+        // A frame is held when any of its images is, so a moving image's
+        // rig-mates must not be listed.
+        const RigTable* rigs = opt_.use_rigs ? rigs_ : nullptr;
+        std::set<bundle_detail::FrameKey> moving;
+        if (rigs)
+            for (uint32_t v : variable) {
+                const auto key = bundle_detail::frameKeyOf(rec_, rigs, true, v);
+                if (key.rig != kNoRig) moving.insert(key);
+            }
+        // A track longer than COLMAP's local-BA limit is held, seen from the
+        // window only: on a 2585-frame video its other views made each solve
+        // 0.5 s of Jacobians over hundreds of held cameras.
+        constexpr size_t kLocalFullTrack = 15;
+        std::set<uint32_t> fixed;
+        std::set<uint64_t> held_pts;
+        for (uint64_t id : pts) {
+            auto it = rec_.points3D.find(id);
+            if (it == rec_.points3D.end()) continue;
+            if (it->second.track.size() > kLocalFullTrack) {
+                held_pts.insert(id);
+                continue;
+            }
+            for (const TrackElement& e : it->second.track)
+                if (!variable.count(e.image_id) &&
+                    (moving.empty() || !moving.count(bundle_detail::frameKeyOf(rec_, rigs, true, e.image_id))))
+                    fixed.insert(e.image_id);
+        }
+        // Nothing held means the window is the model, and a global BA is near.
+        if (fixed.empty() && held_pts.empty()) return;
+
+        BundleOptions bo;
+        bo.real = realCfgFromName(opt_.local_ba_real);
+        bo.device = opt_.device;
+        bo.device_selector = opt_.device_selector;
+        bo.threads = opt_.threads;
+        bo.verbose = false;
+        bo.loss = opt_.ba_loss;
+        bo.loss_param = (float)(opt_.ba_loss_param * medianPixelScale());
+        bo.refine_intrinsics = false;
+        bo.refine_rigs = false;
+        bo.rigs = rigs_;
+        bo.use_rigs = opt_.use_rigs;
+        // The next global BA re-solves the window, so one step under the
+        // growth tolerance ends it: patience 5 cost 9.5 iterations a solve.
+        if (opt_.ba_growth_rtol > 0) {
+            bo.rtol = opt_.ba_growth_rtol;
+            bo.patience = 1;
+        }
+        bo.solver = opt_.ba_solver;
+        if (bo.real != RealCfg::CPU) {
+            if (bo.real == baReal(true)) bo.shared_ctx = &baContext(true);
+            else if (bo.real == baReal(false)) bo.shared_ctx = &baContext(false);
+        }
+        PosePriors pf;
+        if (priors_) {
+            pf = priorFactors(rec_);
+            if (gps_latched_) pf.dropAbsoluteCentres();
+            bo.priors = &pf;
+        }
+        bo.fixed_images = &fixed;
+        bo.fixed_points = &held_pts;
+        bo.only_points = &pts;
+        bo.window_images = &variable;
+        bo.window_track = kLocalFullTrack;
+        bo.prof_label = "local";
+        runGlobalBA(rec_, bo);
+
+        ModelIndex mi = indexModel();
+        {
+            ProfTimer pt(g_map_prof.filter);
+            std::vector<Vec3> centers(db_.images.size());
+            for (uint32_t i = 0; i < db_.images.size(); i++)
+                if (mi.img[i] && mi.img[i]->registered) centers[i] = cameraCenter(mi.img[i]->pose);
+            const double min_ang = opt_.min_tri_angle_deg * M_PI / 180.0;
+            int removed = 0;
+            std::vector<TrackElement> gone;
+            for (uint64_t id : pts) {
+                auto it = rec_.points3D.find(id);
+                if (it == rec_.points3D.end()) continue;
+                if (filterTrack(mi, centers, min_ang, it->second, removed, &gone))
+                    rec_.points3D.erase(it);
+            }
+            for (const TrackElement& e : gone) detachObservation(e.image_id, e.point2D_idx);
+            g_map_prof.n_local_filtered += removed;
+        }
+        ProfTimer pt(g_map_prof.tri);
+        for (uint32_t v : variable) triangulateForImageAt(mi, v, 1.0);
     }
 
     // Fuse two 3D points that a correspondence says are the same feature
@@ -5648,10 +5805,43 @@ private:
         return n;
     }
 
-    // Drop observations that reproject badly and points whose track lost its
-    // parallax: a track whose best view pair subtends less than min_tri_angle
-    // sits on a near-degenerate cone and feeds PnP unstable geometry (COLMAP
-    // filters on both criteria; the old code only checked reprojection).
+    // Drops a point's badly reprojecting observations, then the point if under two
+    // views or min_tri_angle remain: a near-degenerate cone feeds PnP unstable
+    // geometry (COLMAP filters both). True if gone; detached ones go to `gone`.
+    bool filterTrack(const ModelIndex& mi, const std::vector<Vec3>& centers, double min_ang,
+                     Point3D& pt, int& removed, std::vector<TrackElement>* gone) const {
+        size_t keep = 0;  // compact in place; surviving order unchanged
+        for (size_t r = 0; r < pt.track.size(); r++) {
+            const TrackElement el = pt.track[r];
+            if (reprojErrAt(mi, el.image_id, el.point2D_idx, pt.xyz) <=
+                opt_.max_reproj_error * mi.pixel_scale[el.image_id]) {
+                pt.track[keep++] = el;
+            } else {
+                mi.img[el.image_id]->point3D_ids[el.point2D_idx] = kInvalidPoint3D;
+                removed++;
+                if (gone) gone->push_back(el);
+            }
+        }
+        pt.track.resize(keep);
+        bool degenerate = pt.track.size() < 2;
+        if (!degenerate) {
+            double best = 0;
+            for (size_t i = 0; i + 1 < pt.track.size() && best < min_ang; i++)
+                for (size_t j = i + 1; j < pt.track.size() && best < min_ang; j++)
+                    best = std::max(best, triangulationAngle(pt.xyz, centers[pt.track[i].image_id],
+                                                             centers[pt.track[j].image_id]));
+            degenerate = best < min_ang;
+        }
+        if (degenerate) {
+            for (const TrackElement& el : pt.track) {
+                mi.img[el.image_id]->point3D_ids[el.point2D_idx] = kInvalidPoint3D;
+                removed++;
+                if (gone) gone->push_back(el);
+            }
+        }
+        return degenerate;
+    }
+
     void filterPoints(int& removedObs, int& removedPts,
                       const std::unordered_set<uint64_t>* spare = nullptr) {
         // This pass touches every observation in the model on every global
@@ -5693,37 +5883,8 @@ private:
                 const size_t e = std::min(b + kBlock, pts.size());
                 for (size_t pi = b; pi < e; pi++) {
                     if (spare && spare->count(pts[pi].first)) continue;
-                    Point3D& pt = *pts[pi].second;
-                    size_t keep = 0;  // compact in place; surviving order unchanged
-                    for (size_t r = 0; r < pt.track.size(); r++) {
-                        const TrackElement el = pt.track[r];
-                        if (reprojErrAt(mi, el.image_id, el.point2D_idx, pt.xyz) <=
-                            opt_.max_reproj_error * mi.pixel_scale[el.image_id]) {
-                            pt.track[keep++] = el;
-                        } else {
-                            mi.img[el.image_id]->point3D_ids[el.point2D_idx] = kInvalidPoint3D;
-                            local_removed++;
-                        }
-                    }
-                    pt.track.resize(keep);
-                    bool degenerate = pt.track.size() < 2;
-                    if (!degenerate) {
-                        double best = 0;
-                        for (size_t i = 0; i + 1 < pt.track.size() && best < min_ang; i++)
-                            for (size_t j = i + 1; j < pt.track.size() && best < min_ang; j++)
-                                best = std::max(best,
-                                                triangulationAngle(pt.xyz,
-                                                                   centers[pt.track[i].image_id],
-                                                                   centers[pt.track[j].image_id]));
-                        degenerate = best < min_ang;
-                    }
-                    if (degenerate) {
-                        for (const TrackElement& el : pt.track) {
-                            mi.img[el.image_id]->point3D_ids[el.point2D_idx] = kInvalidPoint3D;
-                            local_removed++;
-                        }
+                    if (filterTrack(mi, centers, min_ang, *pts[pi].second, local_removed, nullptr))
                         local_drop.push_back(pts[pi].first);
-                    }
                 }
             }
             removed_obs_atomic += local_removed;

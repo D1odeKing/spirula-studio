@@ -1178,6 +1178,8 @@ PASS/FAIL and returns 0/1 — the same convention as `src/backend/tests/`.
 | `sfm_map_test` | synthetic reconstruction end to end, incl. assembly/audit/split | yes |
 | `sfm_rig_test` | rig bundle adjustment, GPU against host; a synthetic two-lens rig through the mapper and the merger | yes |
 | `sfm_ba_cpu_test` | host bundle adjustment against the written-out normal equations, rigs included | no |
+| `sfm_fixed_frames_test` | held frames and points on every solver path, rig frames held by one image, priors on a held frame, device against host | yes |
+| `sfm_local_ba_test` | a local window (held images, clipped long tracks) on every solver path, a whole-model window against global BA, `--local-ba` through the mapper with the score cache cross-checked | yes |
 | `sfm_cholesky_test` | dense GPU Cholesky vs a CPU reference | yes |
 | `sfm_geometry_test` | F, H, E, P3P, triangulation, RANSAC, SVD/eigen kernels | no |
 | `sfm_merge_test` | Sim(3) algebra, model alignment, track splicing, fold detection | no |
@@ -1215,24 +1217,64 @@ port. Ordered by what blocks the most.
 
 **Scale, past roughly 500-1000 images**
 
-1. **Local BA.** Only global BA runs today. The measurement that decides its
-   shape — host dense LM versus a persistent-kernel GPU BA on a 10-30 camera
-   problem — was never taken. Take it first. Note what a 1000-image profile
-   actually says before assuming this is the win: the mapper's bundle
-   adjustments are *mostly small already*, because the model grows from two
-   images, and its cost sits in the last few full-size ones. Those are the ones
-   local BA does not replace. What made the difference at that size was the
-   linear solver's dense/CG crossover (`--ba-solver`) and bounding track length
-   (`kMergeMaxTrack`), both of which act on exactly those passes — and, once
-   the CG path stopped requiring per-image intrinsics groups, the crossover
-   started applying to ordinary captures at all (`ba/README.md`).
+1. **Local BA** — built, off by default (`--local-ba`, `--local-ba-images`,
+   `--local-ba-real`; `Mapper::localRefine`). After a registration that
+   triggers no global BA, the new image and its six most co-visible neighbours
+   move; every other image a short track reaches is held, a track over 15 views
+   is held and seen from the window only, and intrinsics and rigs are held. On
+   TUM fr3 long_office_household (2585 frames, scored against its 259-frame
+   reference) it never pays for itself:
+
+   | run | mapping | global BA | local BA | AUC@5/10/30 |
+   |---|---|---|---|---|
+   | global, `--ba-growth 1.1` (default) | 259 s | 196 s | — | 81.3 / 90.7 / 96.9 |
+   | global, `--ba-growth 1.4` | 145 s | 100 s | — | 82.3 / 91.2 / 97.0 |
+   | global, `--ba-growth 2.0` | 98 s | 65 s | — | 83.2 / 91.6 / 97.2 |
+   | local (host), growth 1.1 | 354 s | 124 s | 138 s | 82.2 / 91.1 / 97.0 |
+   | local (host), growth 2.0 | 306 s | 78 s | 141 s | 81.5 / 90.7 / 96.9 |
+   | local (device fp64), growth 1.4 | 301 s | 97 s | 88 s | 82.0 / 91.0 / 97.0 |
+
+   ~2550 window solves cost 35-55 ms each, more than the growth-phase global
+   BAs they let the mapper skip, and the global-only runs are as accurate.
+   ZipNeRF *Berlin* (1511 photos at half resolution, unordered, scored against
+   its shipped model) says the same, and says the growth ratio is no general
+   win either:
+
+   | run | mapping | global BA | local BA | AUC@5/10/30 |
+   |---|---|---|---|---|
+   | global, `--ba-growth 1.1` (default) | 83 s | 58 s | — | 91.70 / 95.79 / 98.51 |
+   | global, `--ba-growth 2.0` | 71 s | 49 s | — | 91.53 / 95.63 / 98.37 |
+   | local (host), growth 1.1 | 268 s | 83 s | 114 s | 91.72 / 95.80 / 98.51 |
+   | local (device fp64), growth 1.1 | 176 s | 51 s | 53 s | 91.69 / 95.78 / 98.50 |
+
+   On Mip-NeRF 360 *garden* (185 images) it is neutral: 38.7 against 37.6 s,
+   AUC@5 96.66 against 96.63. A video's thousands of near-duplicate frames make
+   growth-phase BAs the cost, which a larger `--ba-growth` removes; an
+   unordered capture's BA cost is already small.
+
+   Where local BA does earn its time is a misregistration. On a drone capture
+   (803 frames from ten DJI clips, no reference model) global-only mapping folds
+   the 794-image model on every run — one section placed over another — and the
+   finishing pass cuts it to 740 (92% registered). Local BA keeps it whole:
+
+   | run | mapping | registered | AUC@5/10/30 against the baseline's poses |
+   |---|---|---|---|
+   | global, growth 1.1 (default) | 175 s | 92%, fold cut | — |
+   | global, growth 2.0 | 85 s | 98%, split 785 + 18 | 90.2 / 93.7 / 96.1 |
+   | local (host) | 202 s | 99%, one model | 96.2 / 98.1 / 99.3 |
+   | local (device fp64) | 143 s | 99%, one model | 97.2 / 98.6 / 99.5 |
+
+   One capture of four is not a default, so `--local-ba` stays opt-in; it is
+   the flag to try when a model comes back folded or split.
 2. **Shared GPU primitives**: radix sort, prefix scan, segmented reduction, a
    descriptor-set cache, record-once/replay command buffers. The solver
    re-records a command buffer per LM iteration, which is fine at global-BA
    scale and fatal at local-BA scale. Also the clean fix for the SIFT
    extractor leaking buffers when they grow between images.
-3. **Gauge fixing and constant-parameter masks**, per-observation weights, and
-   mid-solve outlier down-weighting. LM damping regularizes the gauge today.
+3. **Gauge fixing**, per-observation weights, and mid-solve outlier
+   down-weighting. LM damping regularizes the gauge today. Constant-parameter
+   masks are done (`BAProblem::fixed_frames` / `fixed_points`, after upstream
+   #166; `ba/README.md`).
 4. **Vocabulary tree / global-descriptor index** past ~3k images. Less urgent
    than it was: pair selection is now two-stage (a symmetric mini-vs-mini
    shortlist over every pair, then the reliable asymmetric score on the

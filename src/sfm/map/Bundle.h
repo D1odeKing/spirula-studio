@@ -73,6 +73,8 @@ struct BundleOptions {
     // sharing intrinsic parameters between multiple images". Hence the
     // qualifier below -- sharing is what makes it observable (D51).
     bool refine_principal_point = false;
+    // Off holds every intrinsics group (local BA, which COLMAP runs the same way).
+    bool refine_intrinsics = true;
     // Refine the distortion coefficients, or hold them at the setup's value.
     // COLMAP's refine_extra_params, true there and here; holding them pins the
     // principal point too, since the free set is a prefix (D72).
@@ -112,6 +114,21 @@ struct BundleOptions {
     // Pose priors on the reconstruction's image ids (sfm/ba/Priors.h);
     // factors naming an image the problem lacks are dropped.
     const PosePriors* priors = nullptr;
+    // Held constant: a frame holding any listed image, and the listed points.
+    // A held frame also holds its rig member and, when no free frame shares
+    // it, its intrinsics group.
+    const std::set<uint64_t>* fixed_points = nullptr;
+    const std::set<uint32_t>* fixed_images = nullptr;
+    // A window (local BA): only these points, and only the registered images
+    // observing them. Null packs the whole model.
+    const std::set<uint64_t>* only_points = nullptr;
+    // ... where a point of more than `window_track` views keeps only its
+    // observations in `window_images` (0 keeps every observation).
+    const std::set<uint32_t>* window_images = nullptr;
+    size_t window_track = 0;
+    SolverStats* stats = nullptr;
+    // Names the solve in the SS_SFM_MAP_PROF line.
+    const char* prof_label = "";
 };
 
 // The problem built from a reconstruction, plus what writing the solution back
@@ -183,9 +200,24 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
     // block (the host solver relies on it; sfm/ba/Problem.h).
     using bundle_detail::FrameKey;
     const RigTable* rigs = bopt.use_rigs ? bopt.rigs : nullptr;
+    auto clipped = [&](const Point3D& pt) {
+        return bopt.window_images && bopt.window_track && pt.track.size() > bopt.window_track;
+    };
+    std::vector<uint8_t> in_window;
+    if (bopt.only_points) {
+        in_window.assign(max_img_id + 1, 0);
+        for (uint64_t id : *bopt.only_points) {
+            auto it = rec.points3D.find(id);
+            if (it == rec.points3D.end() || it->second.track.size() < 2) continue;
+            const bool clip = clipped(it->second);
+            for (const TrackElement& e : it->second.track)
+                if (e.image_id <= max_img_id && (!clip || bopt.window_images->count(e.image_id)))
+                    in_window[e.image_id] = 1;
+        }
+    }
     std::vector<std::pair<FrameKey, uint32_t>> order;
     for (auto& kv : rec.images)
-        if (kv.second.registered)
+        if (kv.second.registered && (in_window.empty() || in_window[kv.first]))
             order.push_back({bundle_detail::frameKeyOf(rec, rigs, true, kv.first), kv.first});
     std::stable_sort(order.begin(), order.end(),
                      [](const std::pair<FrameKey, uint32_t>& a,
@@ -197,10 +229,18 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
     }
     std::vector<uint64_t> ptIds;
     std::vector<Point3D*>& ptOf = L.ptOf;  // by BA index
-    for (auto& kv : rec.points3D) {
-        if (kv.second.track.size() < 2) continue;
-        ptIds.push_back(kv.first);
-        ptOf.push_back(&kv.second);
+    auto addPoint = [&](uint64_t id, Point3D& pt) {
+        if (pt.track.size() < 2) return;
+        ptIds.push_back(id);
+        ptOf.push_back(&pt);
+    };
+    if (bopt.only_points) {
+        for (uint64_t id : *bopt.only_points) {
+            auto it = rec.points3D.find(id);
+            if (it != rec.points3D.end()) addPoint(id, it->second);
+        }
+    } else {
+        for (auto& kv : rec.points3D) addPoint(kv.first, kv.second);
     }
     if (imgIds.size() < 2 || ptIds.empty()) return BundleLayout{};
 
@@ -228,10 +268,12 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
     P.obs_ranges.assign(P.num_points + 1, 0);
     for (uint32_t p = 0; p < P.num_points; p++) {
         const size_t start = obs.size();
+        const bool clip = clipped(*ptOf[p]);
         for (const TrackElement& e : ptOf[p]->track) {
             if (e.image_id > max_img_id) continue;
             const uint32_t bi = imgBA[e.image_id];
             if (bi == UINT32_MAX) continue;
+            if (clip && !bopt.window_images->count(e.image_id)) continue;
             const Vec2& xy = imgOf[bi]->points2D[e.point2D_idx];
             obs.push_back({bi, p, xy.x, xy.y});
         }
@@ -274,6 +316,11 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
         P.image_member[i] = it->second;
     }
     P.num_frames = (uint32_t)frameImgs.size();
+    if (bopt.fixed_images && !bopt.fixed_images->empty()) {
+        P.fixed_frames.assign(P.num_frames, 0);
+        for (uint32_t i = 0; i < P.num_images; ++i)
+            if (bopt.fixed_images->count(imgIds[i])) P.fixed_frames[P.image_frame[i]] = 1;
+    }
     for (const std::vector<uint32_t>& fi : frameImgs)
         if (fi.size() > 1)
             for (uint32_t i : fi) memberCo[P.image_member[i]]++;
@@ -295,10 +342,14 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
     // enough frames tie the member to its rig, and when it sees enough: a known
     // member is established before it has observed anything (a lens on the sky).
     std::vector<uint32_t> memberObs(L.memberOf.size(), 0);
+    std::vector<bool> memberHeld(L.memberOf.size(), false);
     for (uint32_t o = 0; o < P.num_obs; o++) {
         const uint32_t m = P.image_member[P.obs_image[o]];
         if (m != kNoMember) memberObs[m]++;
     }
+    for (uint32_t i = 0; i < P.num_images; i++)
+        if (P.image_member[i] != kNoMember && P.frameFixed(P.image_frame[i]))
+            memberHeld[P.image_member[i]] = true;
     P.members.resize(L.memberOf.size());
     P.exts.resize(6 * L.memberOf.size());
     P.ext_dim = 0;
@@ -307,7 +358,7 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
         const uint32_t member = L.memberOf[m].second;
         bundle_detail::packPose(c.cam_from_rig[member], &P.exts[6 * m]);
         const uint32_t mask = rigs->rigs[L.memberOf[m].first].members[member].dof;
-        const bool held = !bopt.refine_rigs || (int)member == c.ref ||
+        const bool held = memberHeld[m] || !bopt.refine_rigs || (int)member == c.ref ||
                           (member < c.fixed.size() && c.fixed[member]) || mask == 0 ||
                           (int)memberCo[m] < bopt.rig_min_frames ||
                           (int)memberObs[m] < bopt.rig_min_obs;
@@ -329,10 +380,12 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
     // solver's intr_update walks the group table rather than assuming they
     // coincide.
     std::vector<size_t> group_images(camIds.size(), 0);
+    std::vector<bool> group_active(camIds.size(), false);
     std::vector<uint32_t> img_group(P.num_images);
     for (uint32_t i = 0; i < P.num_images; i++) {
         img_group[i] = camGroup[imgOf[i]->camera_id];
         group_images[img_group[i]]++;
+        if (!P.frameFixed(P.image_frame[i])) group_active[img_group[i]] = true;
     }
     P.groups.resize(camIds.size());
     P.intr.clear();
@@ -340,7 +393,8 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
         const Camera& c = rec.cameras[camIds[g]];
         const bool pp = bopt.refine_principal_point && bopt.refine_extra_params &&
                         group_images[g] >= bopt.pp_min_images;
-        uint32_t nf = (uint32_t)camNumFreeParams(c.model, pp, bopt.refine_extra_params);
+        uint32_t nf = bopt.refine_intrinsics && group_active[g]
+            ? (uint32_t)camNumFreeParams(c.model, pp, bopt.refine_extra_params) : 0;
         uint32_t off = (uint32_t)P.intr.size();
         uint32_t ni = (uint32_t)camNumParams(c.model);
         double ps[12];
@@ -353,7 +407,9 @@ inline BundleLayout buildBundle(Reconstruction& rec, const BundleOptions& bopt) 
 
     // Points.
     P.points.resize(3 * P.num_points);
+    if (bopt.fixed_points) P.fixed_points.assign(P.num_points, 0);
     for (uint32_t i = 0; i < P.num_points; i++) {
+        if (bopt.fixed_points) P.fixed_points[i] = uint32_t(bopt.fixed_points->count(ptIds[i]) != 0);
         const Vec3& X = ptOf[i]->xyz;
         P.points[3 * i] = X.x; P.points[3 * i + 1] = X.y; P.points[3 * i + 2] = X.z;
     }
@@ -421,11 +477,13 @@ inline SolverOptions bundleSolverOptions(const BundleOptions& bopt) {
 // solver, which `spirula-sfm ba` does.
 inline void writeBundle(Reconstruction& rec, const BundleLayout& L, const BAProblem& P) {
     for (uint32_t m = 0; m < P.members.size(); m++) {
+        if (P.members[m].n_free == 0) continue;
         const auto& rm = L.memberOf[m];
         rec.rigs[rm.first].cam_from_rig[rm.second] = bundle_detail::unpackPose(&P.exts[6 * m]);
     }
     for (uint32_t i = 0; i < P.num_images; i++) {
         Image& im = *L.imgOf[i];
+        if (P.frameFixed(P.image_frame[i])) continue;
         const Pose fp = bundle_detail::unpackPose(&P.poses[6 * P.image_frame[i]]);
         const uint32_t m = P.image_member[i];
         im.pose = m == kNoMember ? fp
@@ -436,7 +494,8 @@ inline void writeBundle(Reconstruction& rec, const BundleLayout& L, const BAProb
         unpackIntrinsics(c, &P.intr[P.groups[g].intr_offset]);
     }
     for (uint32_t i = 0; i < P.num_points; i++)
-        L.ptOf[i]->xyz = {P.points[3 * i], P.points[3 * i + 1], P.points[3 * i + 2]};
+        if (P.fixed_points.empty() || !P.fixed_points[i])
+            L.ptOf[i]->xyz = {P.points[3 * i], P.points[3 * i + 1], P.points[3 * i + 2]};
 }
 
 // ---- host fallback after a device failure ---------------------------------
@@ -536,11 +595,18 @@ inline double runGlobalBA(Reconstruction& rec, const BundleOptions& bopt) {
     const BundleRun run = solveBundle(P, bundleSolverOptions(bopt), bopt.shared_ctx,
                                       [&] { return buildBundle(rec, bopt).P; });
     const SolverStats& stats = run.stats;
+    if (bopt.stats) *bopt.stats = stats;
     const double t_init = run.t_init, t_solve = run.t_solve;
     prof_lap();
     writeBundle(rec, L, P);
 
     double t_write = prof_lap();
+    if (bopt.only_points) {
+        g_map_prof.local_ba += t_build + t_init + t_solve + t_write;
+        g_map_prof.n_local_ba++;
+        g_map_prof.n_local_ba_iters += stats.iterations;
+        return stats.final_cost;
+    }
     g_map_prof.ba_build += t_build;
     g_map_prof.ba_init += t_init;
     g_map_prof.ba_solve += t_solve;
@@ -553,10 +619,11 @@ inline double runGlobalBA(Reconstruction& rec, const BundleOptions& bopt) {
                       stats.gradient_stop ? " (stop)" : "");
     if (MapProf::enabled())
         slog::diag(slog::Tag::Map,
-                   "[prof] BA #%ld: %u img %u pt %u obs | build %.3f init %.3f solve %.3f "
+                   "[prof] BA #%ld%s%s: %u img %u pt %u obs | build %.3f init %.3f solve %.3f "
                    "write %.3f s | %d LM iters, %s%s%s | prior %.3f -> %.3f, %d prior-driven, "
                    "final damping %.1e, cost %.6e -> %.6e%s",
-                   (long)g_map_prof.n_ba, P.num_images, P.num_points, P.num_obs, t_build, t_init,
+                   (long)g_map_prof.n_ba, *bopt.prof_label ? " " : "", bopt.prof_label,
+                   P.num_images, P.num_points, P.num_obs, t_build, t_init,
                    t_solve, t_write, stats.iterations, stats.solver, stats.jac32 ? " fp32-J" : "",
                    stats.cg_solves ? (" " + std::to_string((int)std::lround(
                                                  stats.cg_iters_total / stats.cg_solves)) +

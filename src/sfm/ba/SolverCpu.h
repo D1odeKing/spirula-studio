@@ -690,12 +690,14 @@ private:
                             for (int row = 0; row < 2; row++) {
                                 const double* src = jcf + row * DOF;
                                 double* dst = jc + row * dofw;
-                                for (uint32_t a = 0; a < 6; a++) dst[a] = src[a] * sw;
+                                for (uint32_t a = 0; a < 6; a++)
+                                    dst[a] = P_.frameFixed(P_.image_frame[img]) ? 0 : src[a] * sw;
                                 for (uint32_t i = 0, k = 6; i < 6; i++)
                                     if ((emask >> i) & 1u) dst[k++] = src[6 + i] * sw;
                                 for (uint32_t i = 0; i < gz; i++)
                                     dst[6 + ne + i] = src[6 + NE + i] * sw;
-                                for (int j = 0; j < 3; j++) jp[row * 3 + j] = jpf[row * 3 + j] * sw;
+                                for (int j = 0; j < 3; j++) jp[row * 3 + j] =
+                                    !P_.fixed_points.empty() && P_.fixed_points[p] ? 0 : jpf[row * 3 + j] * sw;
                             }
                             r[0] *= sw;
                             r[1] *= sw;
@@ -733,6 +735,9 @@ private:
             taskRange(nPts_, nt, t, lo, hi);
             for (int64_t p = lo; p < hi; p++) {
                 double m[9];
+                if (!P_.fixed_points.empty() && P_.fixed_points[p]) {
+                    std::fill_n(&W_[9 * (size_t)p], 9, 0.0); continue;
+                }
                 memcpy(m, &App_[9 * (size_t)p], sizeof m);
                 m[0] *= d;
                 m[4] *= d;
@@ -1505,7 +1510,7 @@ private:
 
     void camUpdate() {
         for (uint32_t i = 0; i < poseDim_; i++)
-            if (std::isfinite(g_[i])) P_.poses[i] -= g_[i];
+            if (!P_.frameFixed(i / 6) && std::isfinite(g_[i])) P_.poses[i] -= g_[i];
         for (const BAProblem::Member& m : P_.members)
             for (uint32_t i = 0, j = 0; m.n_free && i < 6; i++) {
                 if (!((m.mask >> i) & 1u)) continue;

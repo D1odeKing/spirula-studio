@@ -51,9 +51,11 @@ struct MapProf {
     ProfAcc ba_init;     // BundleSolver ctor + init (device + pipelines + upload)
     ProfAcc ba_solve;    // solver.solve()
     ProfAcc ba_write;    // download + writeback
+    ProfAcc local_ba;    // local BA solves, build to writeback (not in the above)
     std::atomic<long> n_ba{0}, n_ba_iters{0}, n_choose{0}, n_reg_try{0}, n_reg_ok{0};
     std::atomic<long> n_seed_geom{0};  // two-view RANSACs run (cache misses)
     std::atomic<long> n_merged{0};  // observations absorbed by track merging
+    std::atomic<long> n_local_ba{0}, n_local_ba_iters{0}, n_local_filtered{0};
 
     static bool enabled() {
         static bool e = spirula::env("SFM_MAP_PROF") != nullptr;
@@ -77,8 +79,12 @@ struct MapProf {
         const long n_ba = this->n_ba, n_ba_iters = this->n_ba_iters, n_choose = this->n_choose;
         const long n_reg_try = this->n_reg_try, n_reg_ok = this->n_reg_ok;
         const long n_merged = this->n_merged;
+        const double local_ba = this->local_ba.get();
+        const long n_local_ba = this->n_local_ba, n_local_ba_iters = this->n_local_ba_iters;
+        const long n_local_filtered = this->n_local_filtered;
         double ba = ba_build + ba_init + ba_solve + ba_write;
-        double accounted = init_seed + choose + reg + tri + retri + filter + snapshot + ba;
+        double accounted = init_seed + choose + reg + tri + retri + filter + snapshot + ba +
+                           local_ba;
         slog::diag(slog::Tag::Map, "[prof] %s total %.2f s, accounted %.2f s (%.0f%%)\n"
                    "[prof]   seed search   %8.2f s  (two-view %.2f s over %ld pair(s), "
                    "focal bootstrap %.2f s)\n"
@@ -90,12 +96,14 @@ struct MapProf {
                    "[prof]   snapshot      %8.2f s\n"
                    "[prof]   audit         %8.2f s  (check %.2f + repair and refine %.2f)\n"
                    "[prof]   BA            %8.2f s  (%ld calls, %ld LM iters): "
-                   "build %.2f + init %.2f + solve %.2f + write %.2f",
+                   "build %.2f + init %.2f + solve %.2f + write %.2f\n"
+                   "[prof]   local BA      %8.2f s  (%ld calls, %ld LM iters, %ld obs filtered)",
                    what, total_s, accounted, total_s > 0 ? 100.0 * accounted / total_s : 0.0,
                    init_seed, seed_geom, n_seed_geom, bootstrap, choose, n_choose, reg, n_reg_try,
                    n_reg_ok, tri, retri, merge,
                    n_merged, filter, snapshot, audit_check + audit_fix, audit_check, audit_fix,
-                   ba, n_ba, n_ba_iters, ba_build, ba_init, ba_solve, ba_write);
+                   ba, n_ba, n_ba_iters, ba_build, ba_init, ba_solve, ba_write, local_ba,
+                   n_local_ba, n_local_ba_iters, n_local_filtered);
     }
 };
 

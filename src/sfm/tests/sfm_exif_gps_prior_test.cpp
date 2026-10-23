@@ -106,7 +106,12 @@ struct Loop {
 static Loop makeLoop(double fold, bool level = false, double tilt_amp = 0.03) {
     const int n = 40;
     std::mt19937 rng(11);
-    std::normal_distribution<double> N(0, 0.5);
+    // Box-Muller on the engine's raw output: std::normal_distribution is
+    // implementation-defined, and MSVC's draw put one fix past the gate.
+    auto N = [](std::mt19937& g) {
+        const double u1 = (g() + 1.0) / 4294967297.0, u2 = g() / 4294967296.0;
+        return 0.5 * std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * M_PI * u2);
+    };
     Loop L;
     L.Rm = angleAxisToRotation({0.4, -0.7, 1.9});
     const Vec3 tm{1, 2, 3};
@@ -114,7 +119,10 @@ static Loop makeLoop(double fold, bool level = false, double tilt_amp = 0.03) {
     for (int k = 0; k < n; k++) {
         const double t = 2.0 * M_PI * 0.8 * k / n;
         const Vec3 enu{30.0 * std::cos(t), 20.0 * std::sin(t), 6.0 * std::sin(3.0 * t)};
-        if (k != 7) L.fixes[(size_t)k] = fixAt(enu.x + N(rng), enu.y + N(rng), kAlt0 + enu.z + N(rng));
+        if (k != 7) {
+            const double ne = N(rng), nn = N(rng), nu = N(rng);  // argument order is unspecified
+            L.fixes[(size_t)k] = fixAt(enu.x + ne, enu.y + nn, kAlt0 + enu.z + nu);
+        }
         const Vec3 tangent = Vec3{-30.0 * std::sin(t), 20.0 * std::cos(t), 0.0}.normalized();
         const Vec3 placed = k >= 20 && k <= 25 ? enu + tangent * fold : enu;
         PosedImage p;
@@ -963,6 +971,7 @@ static void testKeptFrame() {
         std::string k, v;
         if (in >> k >> v) keys[k] = v;
     }
+    gf.close();  // Windows refuses remove_all on an open file
     auto number = [&](const char* k) { return keys.count(k) ? std::atof(keys[k].c_str()) : 1e9; };
     check(std::fabs(number("origin_lat") - gauge[1].origin.at.lat_deg) < 1e-9 &&
               std::fabs(number("origin_lon") - gauge[1].origin.at.lon_deg) < 1e-9 &&

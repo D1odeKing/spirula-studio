@@ -43,6 +43,7 @@ int cmdMapSelftest(int argc, char** argv) {
         std::string a = argv[i];
         if (a == "--device" && i + 1 < argc) opt.device = std::stoi(argv[++i]);
         else if (a == "--verbose") opt.verbose = true;
+        else if (a == "--local-ba") opt.local_ba = true;
     }
     // Two of the checks below are convergence assertions on deliberately
     // ill-conditioned geometry -- a rotation-degenerate capture's focal, and a
@@ -575,6 +576,7 @@ int cmdMapSelftest(int argc, char** argv) {
         MapperOptions od;
         od.verbose = opt.verbose;
         od.device = opt.device;
+        od.local_ba = opt.local_ba;
         od.camera_model = CamModel::OpenCV;
         od.focal = 0;  // the 1.2*max_dim guess: 1536 against a truth of 900
 
@@ -876,6 +878,7 @@ int cmdMapSelftest(int argc, char** argv) {
         MapperOptions oe;
         oe.verbose = opt.verbose;
         oe.device = opt.device;
+        oe.local_ba = opt.local_ba;
         oe.camera_model = CamModel::Equirect;
         oe.focal = 0;
 

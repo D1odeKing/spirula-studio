@@ -102,6 +102,10 @@ struct BAProblem {
     std::vector<double> exts;    // 6 per member (cam_from_rig)
     std::vector<double> intr;    // flat
     std::vector<double> points;  // 3 per point
+    // Held constant when non-empty: 1 per point / per frame (0 or 1).
+    std::vector<uint32_t> fixed_points;
+    std::vector<uint32_t> fixed_frames;
+    bool frameFixed(uint32_t frame) const { return !fixed_frames.empty() && fixed_frames.at(frame) != 0; }
 
     // per-(model, rig) observation lists (concatenated) for specialized dispatches
     struct ModelRange { uint32_t model, offset, count; bool rig; };
@@ -317,7 +321,12 @@ inline uint32_t imageColumns(const BAProblem& P, uint32_t img, uint32_t* cols) {
 
 // Build per-model obs lists and A_cp offsets from obs/image/group tables.
 inline void finalizeTables(BAProblem& P) {
+    if (!P.fixed_points.empty() && P.fixed_points.size() != P.num_points)
+        throw std::runtime_error("BA fixed-point mask size mismatch");
     if (P.image_frame.size() != P.num_images) P.identityFrames();
+    if (!P.fixed_frames.empty() && (P.fixed_frames.size() != P.num_frames ||
+        std::any_of(P.fixed_frames.begin(), P.fixed_frames.end(), [](uint32_t v) { return v > 1; })))
+        throw std::runtime_error("BA fixed-frame mask invalid");
     if (P.image_member.size() != P.num_images) P.image_member.assign(P.num_images, kNoMember);
     for (uint32_t i = 1; i < P.num_images; i++)
         if (P.image_frame[i] < P.image_frame[i - 1])

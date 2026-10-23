@@ -90,6 +90,27 @@ the host every LM iteration at the accepted parameters: `prior_add_s` /
 the priors at the trial poses the iteration reads back. `BAProblem::priors`
 null leaves everything as it was.
 
+### Constant parameters
+
+`BAProblem::fixed_frames` and `fixed_points` (one 0/1 per frame or point,
+empty = none) hold parameters at their input values without changing the
+column layout. A held frame's pose Jacobian is written as zero, so its block of
+`S` and its gradient are zero and its step comes out exactly 0 (the factor's
+pivot floor is 1e-30); `cam_update` skips it as well, so nothing accumulates
+from rounding. A held point gets `Jp = 0` and `W = 0`, which removes it from
+the Schur complement while its observations still constrain the cameras. Pose
+priors on a held frame contribute neither gradient nor Hessian. Through
+`sfm/map/Bundle.h`, a frame is held when any of its images is listed
+(`BundleOptions::fixed_images`), which also holds its rig member and, when no
+free frame shares it, its intrinsics group. The fp64 device and host paths
+agree on the masked normal equations to 1e-7 relative
+(`sfm_fixed_frames_test`).
+
+This is what local BA (`--local-ba`, `../README.md`) builds on. A held frame
+still owns its six columns, which for a local window means the reduced system
+is sized by every camera the window's short tracks reach, not by the seven that
+move.
+
 ### Parameterization & camera groups
 
 Each *frame* has a 6-DOF pose (angle-axis + translation); an image is a frame

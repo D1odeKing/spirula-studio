@@ -2643,6 +2643,72 @@ SS_MSG(ba_growth_patience_help,
     RU("Сколько принятых шагов ниже этого допуска до остановки"),
     TR("Durmadan önce o toleransın altında kabul edilen adım sayısı"));
 
+SS_MSG(local_ba_help,
+    EN("After each registration, refine the new image and its closest neighbours "
+       "with the rest of the model held"),
+    JA("登録のたびに、モデルの残りを固定したまま新しい画像とその近傍だけを調整します"),
+    ZH_HANS("每次注册后，固定模型其余部分，只优化新图像及其最近的邻居"),
+    ZH_HANT("每次註冊後，固定模型其餘部分，只最佳化新影像及其最近的鄰居"),
+    KO("등록할 때마다 모델의 나머지는 고정하고 새 이미지와 가까운 이웃만 조정합니다"),
+    DE("Nach jeder Registrierung das neue Bild und seine nächsten Nachbarn "
+       "verfeinern, der Rest des Modells bleibt fest"),
+    FR("Après chaque enregistrement, affiner la nouvelle image et ses voisines "
+       "les plus proches, le reste du modèle restant fixe"),
+    ES("Tras cada registro, refinar la imagen nueva y sus vecinas más cercanas "
+       "con el resto del modelo fijo"),
+    PT("Após cada registo, refinar a nova imagem e as vizinhas mais próximas com "
+       "o resto do modelo fixo"),
+    IT("Dopo ogni registrazione, affinare la nuova immagine e le vicine più "
+       "prossime tenendo fisso il resto del modello"),
+    NL("Na elke registratie het nieuwe beeld en zijn naaste buren verfijnen, de "
+       "rest van het model blijft vast"),
+    RU("После каждой регистрации уточнять новое изображение и его ближайших "
+       "соседей, не трогая остальную модель"),
+    TR("Her kayıttan sonra modelin geri kalanını sabit tutarak yeni görüntüyü ve "
+       "en yakın komşularını iyileştir"));
+
+SS_MSG(local_ba_images_help,
+    EN("Registered images that move with the new one in a local BA"),
+    JA("局所バンドル調整で新しい画像と一緒に動かす登録済み画像の数"),
+    ZH_HANS("局部平差中与新图像一起优化的已注册图像数"),
+    ZH_HANT("局部平差中與新影像一起最佳化的已註冊影像數"),
+    KO("국소 번들 조정에서 새 이미지와 함께 움직이는 등록된 이미지 수"),
+    DE("Registrierte Bilder, die sich in einem lokalen BA mit dem neuen bewegen"),
+    FR("Images enregistrées qui bougent avec la nouvelle dans un ajustement local"),
+    ES("Imágenes registradas que se mueven con la nueva en un ajuste local"),
+    PT("Imagens registadas que se movem com a nova num ajuste local"),
+    IT("Immagini registrate che si muovono con la nuova in un BA locale"),
+    NL("Geregistreerde beelden die in een lokale BA met het nieuwe meebewegen"),
+    RU("Зарегистрированные изображения, которые уточняются вместе с новым в "
+       "локальном уравнивании"),
+    TR("Yerel dengelemede yenisiyle birlikte hareket eden kayıtlı görüntüler"));
+
+SS_MSG(local_ba_real_help,
+    EN("Scalar a local BA computes in; cpu solves it on the host, which suits "
+       "problems this small"),
+    JA("局所バンドル調整が計算に使うスカラー型。cpu はホストで解き、"
+       "この程度の小さな問題に向きます"),
+    ZH_HANS("局部平差所用的标量类型；cpu 在主机上求解，适合这么小的问题"),
+    ZH_HANT("局部平差所用的純量型別；cpu 在主機上求解，適合這麼小的問題"),
+    KO("국소 번들 조정이 계산에 쓰는 스칼라 형. cpu 는 호스트에서 풀며 이렇게 "
+       "작은 문제에 맞습니다"),
+    DE("Skalar, in dem ein lokaler BA rechnet; cpu löst ihn auf dem Host, was zu "
+       "so kleinen Problemen passt"),
+    FR("Scalaire dans lequel calcule un ajustement local ; cpu le résout sur "
+       "l'hôte, ce qui convient à des problèmes aussi petits"),
+    ES("Escalar en el que calcula un ajuste local; cpu lo resuelve en el host, "
+       "lo que conviene a problemas tan pequeños"),
+    PT("Escalar em que calcula um ajuste local; cpu resolve-o no anfitrião, o "
+       "que convém a problemas tão pequenos"),
+    IT("Scalare in cui calcola un BA locale; cpu lo risolve sull'host, adatto a "
+       "problemi così piccoli"),
+    NL("Scalair waarin een lokale BA rekent; cpu lost hem op de host op, wat bij "
+       "zulke kleine problemen past"),
+    RU("Скалярный тип локального уравнивания; cpu решает его на хосте, что "
+       "подходит для таких малых задач"),
+    TR("Yerel dengelemenin hesapladığı skaler; cpu onu ana makinede çözer, bu "
+       "kadar küçük problemlere uyar"));
+
 SS_MSG(max_models_help,
     EN("Reconstructions a fragmented capture may produce; 1 for a single model"),
     JA("断片化した撮影が生み出してよい再構成の数。1 なら単一モデル"),
