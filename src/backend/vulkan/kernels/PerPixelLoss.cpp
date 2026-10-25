@@ -395,7 +395,7 @@ void launch_fused_ssim_inplace(
         // Coverage is what turns the dropped window sums into means over the
         // observed pixels; with nothing dropped the kernel skips the divide.
         const size_t n = (size_t)B * H * W;
-        float* cov = DevicePool::global().acquire<float>(PoolSlot::SsimMaskWeight, n);
+        float* cov = DevicePool::global().acquire_reused<float>(PoolSlot::SsimMaskWeight, n);
         SsimCovParams cp{};
         cp.masks = p.masks;
         cp.img1 = p.img1;
@@ -433,9 +433,9 @@ void launch_fused_ssim_inplace(
         for (int d = 0; d <= q.r; ++d) q.w[d] /= sum;
         auto& pool = DevicePool::global();
         const size_t n = (size_t)B * H * W;
-        q.blurred = (uint64_t)pool.acquire<float>(PoolSlot::SsimBlurred, 3 * n);
-        q.norm = (uint64_t)pool.acquire<float>(PoolSlot::SsimBlurNorm, n);
-        q.g_blur = _has(dL_dimg1) ? (uint64_t)pool.acquire<float>(PoolSlot::SsimBlurGrad, 3 * n)
+        q.blurred = (uint64_t)pool.acquire_reused<float>(PoolSlot::SsimBlurred, 3 * n);
+        q.norm = (uint64_t)pool.acquire_reused<float>(PoolSlot::SsimBlurNorm, n);
+        q.g_blur = _has(dL_dimg1) ? (uint64_t)pool.acquire_reused<float>(PoolSlot::SsimBlurGrad, 3 * n)
                                   : vkk::or_fallback(nullptr);
         const uint32_t gx = (uint32_t)((W + 15) / 16), gy = (uint32_t)((H + 15) / 16);
         vkk::dispatch_budgeted("fused_ssim.ssim_bt_blur", {16u, fmts}, gx, gy,
@@ -537,7 +537,7 @@ ScielabParams colour_loss_params(
     p.sat = saturation_threshold;
     if (_has(mask) || saturation_threshold > 0.0f) {
         const size_t n = (size_t)B * H * W * cov_words;
-        float* cov = DevicePool::global().acquire<float>(cov_slot, n);
+        float* cov = DevicePool::global().acquire_reused<float>(cov_slot, n);
         SsimCovParams cp{};
         cp.masks = p.masks;
         cp.img1 = p.img1;

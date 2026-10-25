@@ -244,6 +244,8 @@ void relocate_splats_mcmc_tensor(
     DeviceVector<float> draw_weight   // [N] or empty: scales each live splat's draw
 ) {
     int32_t* bias_correction_steps_ptr = bias_correction_steps.data_ptr();
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify, DevicePool::arena_span({n4, n4, n4, n4}));
     float* sample_probs = DevicePool::global().acquire<float>(
         PoolSlot::DensifyMcmcSampleProbs, cur_num_splats);
     mcmc_compute_relocation_probabilities_kernel<<<_LAUNCH_ARGS_1D(cur_num_splats, 256)>>>(
@@ -480,6 +482,9 @@ void add_splats_mcmc_tensor(
     if (num_add == 0)
         return;
     int32_t* bias_correction_steps_ptr = bias_correction_steps.data_ptr();
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, n4, 4 * (size_t)num_add, n4}));
 
     float* sample_probs = DevicePool::global().acquire<float>(
         PoolSlot::DensifyMcmcAddSampleProbs, cur_num_splats);

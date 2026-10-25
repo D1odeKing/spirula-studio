@@ -16,6 +16,9 @@
 #include "core/GpuStall.h"
 #include "core/VulkanDeviceSelection.h"
 #include "core/VulkanMemoryBudget.h"
+#ifdef _WIN32
+#include "core/HostMemory.h"
+#endif
 
 namespace backend {
 
@@ -31,6 +34,7 @@ std::string g_error;
 // Live device_malloc byte total, defined in VulkanRuntime.cpp; read below by
 // backend::memory_usage() for the process VRAM figure.
 extern std::atomic<uint64_t> g_device_bytes;
+extern std::atomic<uint64_t> g_device_peak_bytes;
 
 void set_error(const char* what, VkResult result) {
     std::lock_guard<std::mutex> lock(g_error_mutex);
@@ -875,7 +879,12 @@ MemoryUsage memory_usage() {
         m.has_total = true;
     }
     m.process_bytes = vk::g_device_bytes.load(std::memory_order_relaxed);
+    m.process_peak_bytes = vk::g_device_peak_bytes.load(std::memory_order_relaxed);
     m.has_process = true;
+#ifdef _WIN32
+    m.commit_free_bytes = (uint64_t)spirula::availableCommitBytes();
+    m.has_commit = m.commit_free_bytes > 0;
+#endif
 
     // heapBudget discounts other applications; querying must not create a device.
     if (vk::g_context_created.load() && vk::Context::get().ok() &&
@@ -887,6 +896,11 @@ MemoryUsage memory_usage() {
         }
     }
     return m;
+}
+
+void memory_peak_reset() {
+    vk::g_device_peak_bytes.store(vk::g_device_bytes.load(std::memory_order_relaxed),
+                                  std::memory_order_relaxed);
 }
 
 }  // namespace backend

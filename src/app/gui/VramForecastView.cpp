@@ -140,8 +140,10 @@ void chart(const VramForecast& v, int total_steps) {
     }
     if (!v.history.empty())
         dl->AddLine(ImVec2(X(last_step), r0.y), ImVec2(X(last_step), r1.y), grid);
-    if (v.total_bytes > 0.0)
-        dl->AddLine(ImVec2(r0.x, Y(v.total_bytes)), ImVec2(r1.x, Y(v.total_bytes)),
+    // Windows charges VRAM to commit: with little left, that is the ceiling.
+    const double cap = v.commit_limited ? v.others_bytes + v.limit_bytes : v.total_bytes;
+    if (cap > 0.0)
+        dl->AddLine(ImVec2(r0.x, Y(cap)), ImVec2(r1.x, Y(cap)),
                     ImGui::GetColorU32(kErr), px(1.5f));
     dl->AddRect(r0, r1, grid);
 
@@ -243,8 +245,7 @@ void vram_forecast_card(const VramForecast& v, int total_steps) {
         std::snprintf(pct, sizeof pct, "%.0f", v.p_oom * 100.0);
         ui::TextColoredWrapped(oom_risk_color(v.risk), msg::vram_chart_peak,
                                {gib(v.peak_mean), gib(v.peak_sigma),
-                                gib(0.99 * v.total_bytes - v.others_bytes),
-                                std::string(pct)});
+                                gib(v.limit_bytes), std::string(pct)});
         if (v.provisional) ui::TextDisabledWrapped(msg::vram_chart_provisional);
     } else if (!v.valid) {
         ui::TextDisabledWrapped(msg::vram_chart_waiting);

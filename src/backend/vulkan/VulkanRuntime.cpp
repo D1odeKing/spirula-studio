@@ -36,6 +36,7 @@ extern std::string g_error;
 // by backend::memory_usage() in VulkanContext.cpp. Host-pinned allocations
 // are excluded — they are not device-local VRAM.
 std::atomic<uint64_t> g_device_bytes{0};
+std::atomic<uint64_t> g_device_peak_bytes{0};
 
 namespace {
 
@@ -493,7 +494,11 @@ void* device_malloc(size_t bytes) {
         std::lock_guard<std::mutex> lock(vk::g_alloc_mutex);
         vk::g_device_allocs[a.base] = a;
     }
-    vk::g_device_bytes.fetch_add(a.size, std::memory_order_relaxed);
+    const uint64_t now =
+        vk::g_device_bytes.fetch_add(a.size, std::memory_order_relaxed) + a.size;
+    uint64_t peak = vk::g_device_peak_bytes.load(std::memory_order_relaxed);
+    while (now > peak && !vk::g_device_peak_bytes.compare_exchange_weak(
+                             peak, now, std::memory_order_relaxed)) {}
     return (void*)a.base;
 }
 

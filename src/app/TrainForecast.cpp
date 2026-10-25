@@ -100,10 +100,11 @@ void robust_mean(const std::vector<double>& v, double& mean, double& var) {
     var = std::max(0.0, sq / k - mean * mean) / k;
 }
 
-// Live-splat scratch the first densify step allocates for cap_max, as a
-// share of the Splat category before it: 14.9% on bonsai (revised, SH 3).
-constexpr double kFirstDensifySplatShare = 0.15;
-constexpr double kFirstDensifySplatSigma = 0.08;
+// Live-splat scratch the first densify step allocates for cap_max, as a share
+// of the Splat category before it: the oversize draw's weights, 2.3% on bicycle
+// (revised, SH 3); a sample score or a region weight adds 2.5% / 1.2% more.
+constexpr double kFirstDensifySplatShare = 0.03;
+constexpr double kFirstDensifySplatSigma = 0.025;
 
 // Pipeline creation and first-touch allocation: bonsai's first 100 steps ran
 // 17% slower than the next 500 at the same splat count.
@@ -351,14 +352,16 @@ void TrainForecast::add_memory(const MemorySample& m) {
         _mw.log_ratio += lr;
         _mw.log_ratio_sq += lr * lr;
     }
-    // What grows is measured off the process high-water, not the pool: a step
-    // that overflows the alias arena holds private buffers beside it for a
-    // while, and that transient -- not the steady cap -- is the real peak.
+    // What grows is measured off the process high-water, not the pool: a
+    // transient inside the step -- an arena overflow, a phase growing -- is
+    // the real peak, and only the backend's peak counter sees it.
     double pool = (double)m.scratch;
     for (size_t c : m.pool_cap) pool += (double)c;
     const double ours = m.has_process ? (double)m.process_bytes : pool;
     const double steady = (double)m.pool_cap[sxi] + (double)m.scratch;
-    _ours_hw = std::max(_ours_hw, ours);
+    _ours_hw = std::max(_ours_hw, m.has_process
+                                      ? std::max(ours, (double)m.process_peak_bytes)
+                                      : ours);
     _grow_hw = std::max(steady, _ours_hw - (ours - steady));
     if (++_mw.steps >= _window_len) close_mem_window(m);
     refresh_vram(m);
@@ -494,9 +497,14 @@ void TrainForecast::refresh_vram(const MemorySample& m) {
     v.peak_sigma = v.projection.back().sigma;
     if (v.total_bytes > 0.0) {
         // Allocator fragmentation keeps the last percent out of reach.
-        const double limit = 0.99 * v.total_bytes - v.others_bytes;
-        const double sd = std::sqrt(v.peak_sigma * v.peak_sigma +
-                                    v.others_sigma * v.others_sigma);
+        const double vram_limit = 0.99 * v.total_bytes - v.others_bytes;
+        const double commit_limit =
+            m.has_commit ? ours + (double)m.commit_free_bytes : vram_limit;
+        v.commit_limited = commit_limit < vram_limit;
+        const double limit = std::min(vram_limit, commit_limit);
+        v.limit_bytes = limit;
+        const double others_sd = v.commit_limited ? 0.0 : v.others_sigma;
+        const double sd = std::sqrt(v.peak_sigma * v.peak_sigma + others_sd * others_sd);
         v.p_oom = sd > 0.0 ? 1.0 - norm_cdf((limit - v.peak_mean) / sd)
                            : (v.peak_mean > limit ? 1.0 : 0.0);
         v.risk = v.p_oom < 0.1 ? OomRisk::Low

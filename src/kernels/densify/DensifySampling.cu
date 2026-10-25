@@ -422,6 +422,9 @@ void weighted_sample_without_replacement_tensor(
 ) {
     if (numel == -1)
         numel = weights.size();
+    const size_t n4 = 4 * (size_t)numel;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, 4 * (size_t)num_sample, n4, n4, n4}));
 
     int32_t* result = weighted_sample_without_replacement_internal(
         numel,

@@ -68,7 +68,11 @@ struct VramForecast {
 
     double peak_mean = 0.0;            // ours at the last step
     double peak_sigma = 0.0;
-    double p_oom = 0.0;                // chance ours + others exceeds the device
+    double p_oom = 0.0;                // chance ours passes limit_bytes
+    // What ours may reach: the device less others, or on Windows ours plus
+    // the commit still free when that is lower (commit_limited).
+    double limit_bytes = 0.0;
+    bool commit_limited = false;
     OomRisk risk = OomRisk::Unknown;
 
     // Ours now, split by pool category, plus scratch and what the pool does
@@ -95,8 +99,10 @@ struct MemorySample {
     std::array<size_t, (int)VramCategory::Count> pool_used{};
     std::array<size_t, (int)VramCategory::Count> pool_cap{};
     size_t scratch = 0;
-    bool has_process = false, has_used = false, has_total = false;
+    bool has_process = false, has_used = false, has_total = false, has_commit = false;
     uint64_t process_bytes = 0, used_bytes = 0, total_bytes = 0;
+    uint64_t process_peak_bytes = 0;   // since the previous sample
+    uint64_t commit_free_bytes = 0;
 };
 
 class TrainForecast {

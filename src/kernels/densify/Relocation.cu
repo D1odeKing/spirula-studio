@@ -268,6 +268,13 @@ int64_t relocate_splats_with_long_axis_split_tensor(
     int64_t* num_dead_out
 ) {
     int32_t* bias_correction_steps_ptr = bias_correction_steps.data_ptr();
+    // The mask and the dst list, then the draw's keys, indices and output.
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    const int64_t draw = max_relocate > 0 ? std::min(max_relocate, cur_num_splats)
+                                          : cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({(size_t)cur_num_splats, n4, n4,
+                                             4 * (size_t)draw, n4, n4, n4}));
     bool* mask = DevicePool::global().acquire<bool>(
         PoolSlot::DensifyRelocMask, cur_num_splats);
     int32_t* num_relocate_ptr = DevicePool::global().acquire<int32_t>(
@@ -378,6 +385,9 @@ void add_splats_with_long_axis_split_tensor(
     if (num_new_splats == 0)
         return;
     int32_t* bias_correction_steps_ptr = bias_correction_steps.data_ptr();
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, 4 * (size_t)num_new_splats, n4, n4, n4}));
 
     DeviceVector<float2> weights = sample_weights.data_ptr()
         ? sample_weights : densify_accum_buffer;
