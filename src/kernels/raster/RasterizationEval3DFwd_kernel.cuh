@@ -213,7 +213,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
             splat_batch[tid].load(splat_wbuffer, splat_sbuffer, wi, g);
             const typename SplatPrimitive::FragmentFwd& sp = splat_batch[tid];
             if (sp.opac > ALPHA_THRESHOLD) {
-                float kk = 0.5f / __logf(sp.opac / ALPHA_THRESHOLD);
+                float kk = 0.5f / kernel_reach(sp.opac, kernel_cut);
                 float3 inv_cov = { sp.conic.x * kk, sp.conic.y * kk, sp.conic.z * kk };
                 hit = ellipse_box_overlap_test(inv_cov,
                     mt_bx0 - sp.xy.x, mt_bx0 + TILE_SIZE_X - sp.xy.x,

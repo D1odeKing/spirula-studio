@@ -276,7 +276,6 @@ struct Frag2d_ {
     float3 rgb;
 };
 
-// dvis = -d vis / d sigma, which the cut kernel's renormalization scales
 [ForceInline]
 float _rb2_alpha(Frag2d_ s, float2 delta, float cut, out float sigma, out float vis,
                  out float dvis) {
@@ -284,13 +283,7 @@ float _rb2_alpha(Frag2d_ s, float2 delta, float cut, out float sigma, out float 
         0.5f * (s.conic.x * delta.x * delta.x +
                 s.conic.z * delta.y * delta.y) +
         s.conic.y * delta.x * delta.y;
-    vis = exp(-sigma);
-    dvis = vis;
-    if (cut > 0.0f) {
-        float inv = 1.0f / (1.0f - exp(-cut));
-        dvis = sigma < cut ? vis * inv : 0.0f;
-        vis = sigma < cut ? (vis - exp(-cut)) * inv : 0.0f;
-    }
+    vis = kernel_vis(sigma, cut, dvis);
     float alpha = min(0.999f, s.opac * vis);
     return sigma < 0.f ? 0.f : alpha;
 }
@@ -424,7 +417,7 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                 c_conic = scr2_conic(c_row);
                 c_xy = scr2_xy(c_row);
                 if (c_opac > ALPHA_THRESHOLD) {
-                    float kk = 0.5f / log(c_opac / ALPHA_THRESHOLD);
+                    float kk = 0.5f / kernel_reach(c_opac, p.kernel_cut);
                     ok = ellipse_box_overlap_test(
                         c_conic * kk, cull_bx0 - c_xy.x,
                         cull_bx0 + TILE_SIZE_DX - c_xy.x, cull_by0 - c_xy.y,

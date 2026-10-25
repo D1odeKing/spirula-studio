@@ -57,8 +57,9 @@ and backward) with PlayCanvas's kernel, the rest with the full gaussian. The
 choice is `LossConfig::raster_kernel_cut` (4, i.e. sigma^2/2 < 4, or 0), held
 in the engine's forward state for the step and reset after it, so evaluation,
 preview and export renders are always the full gaussian. The kernel itself is
-`Primitive3DGS::kernel_vis` on CUDA and `rasterize_fwd` / `rasterize_bwd` on
-Vulkan; `raster_bwd_parity` covers the cut.
+`Primitive3DGS::kernel_vis` on CUDA and `kernel_vis` in `raster_common.slang` on
+Vulkan, which both Vulkan passes call so that they agree on alpha to the bit;
+`raster_bwd_parity` covers the cut.
 
 Tiling follows the cut: `ProjEllipseView::max_sigma` caps the intersector's
 ellipse at `min(ln(255 o), 4)`, so a cut step bins no tile past the kernel's
@@ -66,6 +67,14 @@ support. Only splats with opacity above e^4 / 255 = 0.21 change (the others
 already fall under alpha 1/255 inside the cut); their tile footprint shrinks to
 `4 / ln(255 o)` of its area, 0.72 at full opacity. The uncut steps still size
 the intersection buffers, so peak VRAM drops only at a share of 1.
+
+The rasterizers' own per-micro-tile culls -- the forward's hit test and the
+backward's survivor compaction, which matter once a binning tile is larger than
+the 8 px micro tile -- use the cut kernel's exact reach, `kernel_reach`: the
+sigma at which `o` times the kernel falls to 1/255,
+`-ln(e^-4 + (1 - e^-4) / (255 o))`, 3.81 at full opacity against the uncut
+5.54. Both passes compute it identically, so the backward still undoes exactly
+the splats the forward blended.
 
 `raster_bench <splats> <iters> <macro_log2> <cut>` times it on fixed state
 (2M synthetic splats, 1237x822, RTX 5090, ms per call, median of three):
@@ -82,6 +91,24 @@ An uncut step pays almost nothing for the branch; a cut step bins 11% fewer
 intersections and is 12% faster across the three kernels on Vulkan. A whole
 training step does not notice: rasterization is a minority of it, and trained
 models have fewer splats above 0.21 than this synthetic set (79%).
+
+With the culls following the cut (1M synthetic splats, RTX 3070 Laptop, Vulkan,
+the training variant with the peak-weight output, ms per call, interleaved
+runs, mean of three):
+
+| binning tile | | raster fwd | raster bwd |
+|---|---|---|---|
+| 16 px | cut 0, before / after | 0.86 / 0.89 | 2.89 / 2.70 |
+| 16 px | cut 4, before / after | 0.89 / 0.79 | 2.97 / 2.52 |
+| 64 px | cut 0, before / after | 1.14 / 1.12 | 3.07 / 3.03 |
+| 64 px | cut 4, before / after | 1.22 / 1.08 | 3.24 / 2.75 |
+
+The cut stays a push constant, not a specialization constant. Folded into the
+pipeline it took a further 4% off the forward on cut steps only, while the
+backward's cut-0 pipeline ran 7% slower -- a codegen difference on this GPU;
+the shader from before the cut existed ran the same -- and at cut 4 the
+backward matched the push-constant one. Folding also lets the driver round
+`exp(-4)` its own way, which the forward and backward must not disagree on.
 
 Six scenes (lego 50k, sedan, train, drjohnson, kitchen, struktur28_auto; score
 = -100 ln(value / defaults), mean of the five renderers x two metrics; noise

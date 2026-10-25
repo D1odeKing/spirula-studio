@@ -355,7 +355,7 @@ __global__ void rasterize_to_pixels_bwd_kernel(
             float c_ex = c_xy.x, c_ey = c_xy.y;
         #endif
             if (c_opac > ALPHA_THRESHOLD) {
-                float kk = 0.5f / __logf(c_opac / ALPHA_THRESHOLD);
+                float kk = 0.5f / kernel_reach(c_opac, IS_EVAL3D ? 0.f : kernel_cut);
                 float3 inv_cov = { c_conic.x*kk, c_conic.y*kk, c_conic.z*kk };
                 ok = ellipse_box_overlap_test(inv_cov,
                     cull_bx0 - c_ex, cull_bx0 + TILE_SIZE_DX - c_ex,
