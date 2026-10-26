@@ -96,6 +96,8 @@ struct RasterFwd2dParams {
     uint32_t tile_height;
     uint32_t macro_log2;
     uint32_t out_depth_on;  // 0: nothing reads the depth, out_depth unbound
+    float kernel_cut;  // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 gaussian
+    uint32_t _pad0;
 };
 
 [shader("compute")]
@@ -182,7 +184,7 @@ void rasterize_fwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             f.rgb = scr2_rgb(r);
             _batch_2d[tid] = f;
             if (f.opac > ALPHA_THRESHOLD) {
-                float kk = 0.5f / log(f.opac / ALPHA_THRESHOLD);
+                float kk = 0.5f / kernel_reach(f.opac, p.kernel_cut);
                 float3 inv_cov = f.conic * kk;
                 hit = ellipse_box_overlap_test(
                     inv_cov, mt_bx0 - f.xy.x,
@@ -215,7 +217,7 @@ void rasterize_fwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
             float sigma = 0.5f * (f.conic.x * delta.x * delta.x +
                                   f.conic.z * delta.y * delta.y) +
                           f.conic.y * delta.x * delta.y;
-            float vis0 = exp(-sigma);
+            float vis0 = kernel_vis(sigma, p.kernel_cut);
             float alpha = min(0.999f, f.opac * vis0);
             if (sigma < 0.f)
                 alpha = 0.f;

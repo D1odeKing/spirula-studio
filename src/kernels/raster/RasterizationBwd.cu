@@ -45,7 +45,8 @@ void rasterize_to_pixels_bwd_kernel_wrapper(
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template <typename SplatPrimitive, DistortionType dist_type, DensifyAccumMode accum_mode, bool output_median>
@@ -81,7 +82,8 @@ inline void launch_rasterize_to_pixels_bwd_kernel(
     float* o_accum_weight,
     float* o_accum_weight_den,
     float* o_max_weight,
-    float max_weight_scale
+    float max_weight_scale,
+    float kernel_cut
 ) {
     // Use the runtime cur_num_splats for the non-packed stride. The forward
     // splat buffers (splat_wbuffer) are pre-allocated to max_num_splats, but
@@ -113,7 +115,7 @@ inline void launch_rasterize_to_pixels_bwd_kernel(
         v_dist_rgb_per_depth,
         v_splat_wbuffer, v_splat_sbuffer,
         o_accum_weight, o_accum_weight_den,
-        o_max_weight, max_weight_scale
+        o_max_weight, max_weight_scale, kernel_cut
     );
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
@@ -145,6 +147,7 @@ inline std::tuple<
     DeviceTensor3D<float> accum_weight_map,  // [I, H, W]
     DeviceVector<float> max_weight,
     float max_weight_scale,
+    float kernel_cut,
     // gradients of outputs
     RenderOutput::TensorTuple v_render_outputs,
     const DeviceTensor3D<float> v_render_Ts,
@@ -156,7 +159,8 @@ inline std::tuple<
 ) {
     // Opens the raster-backward phase: the screen-gradient buffer below shares
     // the tile intersector's arena (POOL_ALIAS_TABLE, core/PoolSlots.h).
-    pool_begin_phase(PoolPhase::RasterBwd);
+    pool_begin_phase(PoolPhase::RasterBwd,
+                     v_splats_s.has_value() ? 0 : pool_arena_span_like(splats_s));
     if (!v_splats_w.has_value())
         v_splats_w = SplatPrimitive::WorldBuffer::zeros_pool(splats_w, PoolSlot::RasterBwdVWorld);
     if (!v_splats_s.has_value())
@@ -193,7 +197,7 @@ inline std::tuple<
         v_distortion_outputs, v_dist_rgb_per_depth,
         v_splats_w.value(), v_splats_s.value(),
         aw, aw_den,
-        max_weight.data_ptr(), max_weight_scale
+        max_weight.data_ptr(), max_weight_scale, kernel_cut
     );
 
     return std::make_tuple(
@@ -230,6 +234,8 @@ inline std::tuple<
     // max_weight_scale; empty to skip.
     DeviceVector<float> max_weight,
     float max_weight_scale,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut,
     // gradients of outputs
     RenderOutput::TensorTuple v_render_outputs,
     const DeviceTensor3D<float> v_render_Ts,
@@ -263,7 +269,7 @@ inline std::tuple<
         image_width, image_height, tile_offsets, flatten_ids,
         macro_log2,
         render_Ts, last_ids, render_outputs_tuple, distortion_fwd_outputs,
-        DeviceTensor3D<float>(), accum_weight_map, max_weight, max_weight_scale,
+        DeviceTensor3D<float>(), accum_weight_map, max_weight, max_weight_scale, kernel_cut,
         v_render_outputs, v_render_Ts, v_median, v_distortion_outputs,
         v_dist_rgb_per_depth, v_splats_w, v_splats_s
     );
@@ -305,6 +311,8 @@ std::tuple<
     // max_weight_scale; empty to skip.
     DeviceVector<float> max_weight,
     float max_weight_scale,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut,
     // gradients of outputs
     RenderOutput::TensorTuple v_render_outputs,
     const DeviceTensor3D<float> v_render_Ts,
@@ -319,7 +327,7 @@ std::tuple<
         image_width, image_height, tile_offsets, flatten_ids,
         macro_log2,
         render_Ts, last_ids, render_outputs_tuple, distortion_fwd_outputs,
-        dist_type, accum_weight_map, accum_mode, max_weight, max_weight_scale,
+        dist_type, accum_weight_map, accum_mode, max_weight, max_weight_scale, kernel_cut,
         v_render_outputs, v_render_Ts,
         v_median, v_distortion_outputs, v_dist_rgb_per_depth, v_splats_w, v_splats_s
     );

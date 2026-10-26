@@ -560,6 +560,10 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     // ---- loss ----------------------------------------------------------
     cfg.loss.weights = build_loss_weights(c, step);
     cfg.loss.w_ssim = c.ssim_lambda;
+    // A hash of the step picks the steps rendered with PlayCanvas's kernel: cut at sigma = 4
+    // (2 sqrt(2) standard deviations), the tail renormalized to reach zero there.
+    cfg.loss.raster_kernel_cut =
+        (float)((uint32_t)step * 2654435761u) < c.viewer_kernel_fraction * 4294967296.0f ? 4.0f : 0.0f;
     cfg.loss.perceptual_loss = perceptual_loss_int(c.perceptual_loss);
     cfg.loss.num_loss_scales = c.num_loss_scales + 1;
     cfg.loss.loss_scale_min_pixels = c.loss_scale_min_pixels;
@@ -650,6 +654,7 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.densify.max_world_size                = c.max_world_size * alpha;
     cfg.densify.noise_lr                      = c.noise_lr * noise_lr_scalar;
     cfg.densify.noise_lr_final                = c.noise_lr_final * noise_lr_scalar;
+    cfg.densify.noise_gate_peak_weight        = c.noise_gate_peak_weight;
     cfg.densify.use_revised_densification     = c.use_revised_densification;
     cfg.densify.score_mode = c.densify_score_mode == "mean" ? 0
         : c.densify_score_mode == "max" ? 1
@@ -1716,6 +1721,10 @@ void TrainerSession::observe_memory(int step, int64_t splats_ran) {
     m.process_bytes = mu.process_bytes;
     m.used_bytes = mu.used_bytes;
     m.total_bytes = mu.total_bytes;
+    m.process_peak_bytes = mu.process_peak_bytes;
+    m.has_commit = mu.has_commit;
+    m.commit_free_bytes = mu.commit_free_bytes;
+    backend::memory_peak_reset();
     _forecast.add_memory(m);
 
     // Once per level, so a run that stays at risk says it once.
@@ -1730,8 +1739,8 @@ void TrainerSession::observe_memory(int step, int64_t splats_ran) {
     char pct[16];
     std::snprintf(pct, sizeof pct, "%.0f", v.p_oom * 100.0);
     log(lfmt(lmsg::vram_forecast_warn,
-             {gib(v.peak_mean), gib(v.peak_sigma),
-              gib(0.99 * v.total_bytes - v.others_bytes), std::string(pct)}));
+             {gib(v.peak_mean), gib(v.peak_sigma), gib(v.limit_bytes),
+              std::string(pct)}));
 }
 
 void TrainerSession::train(const TrainerCallbacks& cb) {
@@ -1754,6 +1763,7 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
         _forecast.reset(fs);
         _live_splats = engine_get_cur_num_splats();
         _warned_risk = OomRisk::Low;
+        backend::memory_peak_reset();  // setup's transients are not the run's
     }
 
     _perf.open(out_dir, _perf_dir);
@@ -1846,11 +1856,13 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             const double gib = 1024.0 * 1024.0 * 1024.0;
             std::fprintf(stderr,
                 "[forecast] step %d  eta %.1f +- %.1f s  ours %.3f GiB  peak %.3f +- %.3f GiB"
-                "  others %.3f  total %.3f  p_oom %.3f%s\n",
+                "  others %.3f  total %.3f  limit %.3f%s  p_oom %.3f%s\n",
                 step + 1, e.seconds, e.sigma,
                 v.ours_bytes / gib,
                 v.peak_mean / gib, v.peak_sigma / gib, v.others_bytes / gib,
-                v.total_bytes / gib, v.p_oom, v.provisional ? "  provisional" : "");
+                v.total_bytes / gib, v.limit_bytes / gib,
+                v.commit_limited ? " (commit)" : "", v.p_oom,
+                v.provisional ? "  provisional" : "");
         }
 
         if (cb.on_step) {

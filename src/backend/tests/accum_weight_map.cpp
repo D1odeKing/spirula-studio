@@ -159,7 +159,7 @@ void run_mode(bool packed, DensifyAccumMode accum_mode) {
                                              W, H, tile_offsets, flatten_ids,
                                              macro_log2,
                                              DistortionType::None, false, true,
-                                             SplatScoreRender{});
+                                             SplatScoreRender{}, 0.0f);
     backend::device_synchronize();
     auto& renders = std::get<0>(rout);
     auto& render_Ts = std::get<1>(rout);
@@ -196,7 +196,7 @@ void run_mode(bool packed, DensifyAccumMode accum_mode) {
             N, in_splats, splats_s, gauss_ids, W, H, tile_offsets, flatten_ids,
             macro_log2,
             render_Ts, last_ids, renders, std::nullopt, DistortionType::None,
-            t3f1(d_awmap), accum_mode, max_weight, mw_scale, v_renders, t3f1(d_v_T),
+            t3f1(d_awmap), accum_mode, max_weight, mw_scale, 0.0f, v_renders, t3f1(d_v_T),
             DeviceTensor3D<float>{}, std::nullopt, 0.0f, std::nullopt, std::nullopt);
         backend::device_synchronize();
         // Avg lands as [numerator, denominator] planar; the engine divides it

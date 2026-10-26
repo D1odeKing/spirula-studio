@@ -55,6 +55,7 @@ void rasterize_to_pixels_eval3d_bwd_kernel_wrapper(
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
     const float max_weight_scale,
+    const float kernel_cut,
     float *__restrict__ v_viewmats // [B, C, 4, 4]
 );
 
@@ -135,7 +136,7 @@ inline void launch_rasterize_to_pixels_eval3d_bwd_kernel(
             v_dist_rgb_per_depth, \
             v_splat_wbuffer, v_splat_sbuffer, \
             o_accum_weight, o_accum_weight_den, \
-            o_max_weight, max_weight_scale, \
+            o_max_weight, max_weight_scale, 0.0f, \
             v_viewmats.data_ptr() \
         )
 
@@ -204,7 +205,8 @@ inline std::tuple<
 ) {
     // Opens the raster-backward phase: the screen-gradient buffer below shares
     // the tile intersector's arena (POOL_ALIAS_TABLE, core/PoolSlots.h).
-    pool_begin_phase(PoolPhase::RasterBwd);
+    pool_begin_phase(PoolPhase::RasterBwd,
+                     v_splats_s.has_value() ? 0 : pool_arena_span_like(splats_s));
     if (!v_splats_w.has_value())
         v_splats_w = SplatPrimitive::WorldBuffer::zeros_pool(splats_w, PoolSlot::RasterBwdVWorld);
     if (!v_splats_s.has_value())

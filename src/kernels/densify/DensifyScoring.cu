@@ -621,6 +621,7 @@ void densify_clip_score_tensor(
     float* cutoff = nullptr;
     if (do_clip) {
         // The selector wants a contiguous row, and .x is strided; gather first.
+        pool_begin_phase(PoolPhase::Densify, DevicePool::arena_span({4 * (size_t)num_splats}));
         float* gathered = DevicePool::global().acquire<float>(
             PoolSlot::DensifyScoreGather, (size_t)num_splats);
         cutoff = DevicePool::global().acquire<float>(

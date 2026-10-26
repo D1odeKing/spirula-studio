@@ -65,12 +65,13 @@ static_assert(sizeof(DensifyClipScaleParams) == 3 * 8 + 8 * 4,
 
 // Mirrors DensifyNoiseParams.
 struct DensifyNoiseParams {
-    uint64_t means, log_scales, quats, logit_opacs, radii;
+    uint64_t means, log_scales, quats, logit_opacs, radii, peak_weight;
     float scaler;
     uint32_t num_splats, wgs_per_row;
-    uint32_t _pad0;
+    float peak_weight_scale;
+    uint32_t has_peak_weight, _pad0;
 };
-static_assert(sizeof(DensifyNoiseParams) == 5 * 8 + 4 * 4,
+static_assert(sizeof(DensifyNoiseParams) == 6 * 8 + 6 * 4,
               "params layout must match the slang struct");
 
 // Mirrors EfraimidisParams.
@@ -688,7 +689,9 @@ void revised_add_noise_tensor(
     DeviceVector<float3> means,
     DeviceVector<float3> log_scales,
     DeviceVector<float4> quats,
-    DeviceVector<float> opacs
+    DeviceVector<float> opacs,
+    DeviceVector<float> peak_weight,
+    float peak_weight_scale
 ) {
     if (num_splats <= 0) return;
     DensifyNoiseParams p{};
@@ -697,6 +700,9 @@ void revised_add_noise_tensor(
     p.quats = (uint64_t)quats.data_ptr();
     p.logit_opacs = (uint64_t)opacs.data_ptr();
     p.radii = (uint64_t)radii.data_ptr();
+    p.peak_weight = vkk::or_fallback(peak_weight.data_ptr());
+    p.has_peak_weight = peak_weight.data_ptr() ? 1u : 0u;
+    p.peak_weight_scale = peak_weight_scale;
     p.scaler = scaler;
     p.num_splats = (uint32_t)num_splats;
     vkk::dispatch_flat("densify.densify_revised_add_noise", {}, num_splats,
@@ -789,6 +795,12 @@ int64_t relocate_splats_with_long_axis_split_tensor(
     int64_t* num_dead_out
 ) {
     if (cur_num_splats <= 0) return 0;
+    // The mask and the dst list, then wswr_sample's keys, indices and draw.
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    const int64_t draw = max_relocate > 0 ? std::min(max_relocate, cur_num_splats)
+                                          : cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, n4, n4, n4, n4, n4, 4 * (size_t)draw}));
 
     // Relocation mask + atomic compaction of dst indices (Vulkan mask is an
     // int32 array; the CUDA bool layout is a launcher-internal detail).
@@ -878,6 +890,9 @@ void add_splats_with_long_axis_split_tensor(
     uint32_t seed
 ) {
     if (num_new_splats == 0 || cur_num_splats <= 0) return;
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, n4, n4, n4, 4 * (size_t)num_new_splats}));
 
     const int32_t* split_indices = wswr_sample(
         cur_num_splats,
@@ -923,6 +938,8 @@ void relocate_splats_mcmc_tensor(
     DeviceVector<float> draw_weight
 ) {
     if (cur_num_splats <= 0) return;
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify, DevicePool::arena_span({n4, n4, n4, n4}));
 
     DeviceVector<float> probs, cumsum;
     mcmc_probs_cumsum(cur_num_splats, min_opacity, opacs, scales, draw_weight,
@@ -1011,6 +1028,9 @@ void add_splats_mcmc_tensor(
     DeviceVector<float> draw_weight
 ) {
     if (num_add == 0 || cur_num_splats <= 0) return;
+    const size_t n4 = 4 * (size_t)cur_num_splats;
+    pool_begin_phase(PoolPhase::Densify,
+                     DevicePool::arena_span({n4, n4, 4 * (size_t)num_add, n4}));
 
     DeviceVector<float> probs, cumsum;
     mcmc_probs_cumsum(cur_num_splats, min_opacity, opacs, scales, draw_weight,
@@ -1250,6 +1270,7 @@ void densify_clip_score_tensor(int64_t num_splats,
     float* cutoff = nullptr;
     if (do_clip) {
         // The selector wants a contiguous row, and .x is strided; gather first.
+        pool_begin_phase(PoolPhase::Densify, DevicePool::arena_span({4 * (size_t)num_splats}));
         float* gathered = DevicePool::global().acquire<float>(
             PoolSlot::DensifyScoreGather, (size_t)num_splats);
         cutoff =

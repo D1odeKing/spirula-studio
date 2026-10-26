@@ -300,7 +300,7 @@ int main(int argc, char** argv) {
                 auto fn = cfg.prim == 0 ? rasterize_to_pixels_3dgs_fwd
                                         : rasterize_to_pixels_mip_fwd;
                 rout = fn(N, in_splats, splats_s, gauss_ids, W, H, tile_offsets,
-                          flatten_ids, macro_log2, cfg.dt, cfg.median, true, sr);
+                          flatten_ids, macro_log2, cfg.dt, cfg.median, true, sr, 0.0f);
             }
             backend::device_synchronize();
         };

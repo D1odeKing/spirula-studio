@@ -236,7 +236,7 @@ static float* _ssim_mask_coverage(
 ) {
     if (masks == nullptr && sat <= 0.0f) return nullptr;
     const size_t n = (size_t)B * H * W;
-    float* out = DevicePool::global().acquire<float>(PoolSlot::SsimMaskWeight, n);
+    float* out = DevicePool::global().acquire_reused<float>(PoolSlot::SsimMaskWeight, n);
     _ssim_mask_coverage_kernel<<<_LAUNCH_ARGS_3D(W, H, B, COV_T, COV_T, 1)>>>(
         B, H, W, img1, img2, sat, masks, B_mask, H_mask, W_mask, out);
     CHECK_DEVICE_ERROR(cudaGetLastError());
@@ -2241,9 +2241,9 @@ static void _launch_ssim_bt(
     for (int d = 0; d <= t.r; ++d) t.w[d] /= sum;
     const size_t n = (size_t)B * H * W * 3;
     auto& pool = DevicePool::global();
-    float* blurred = pool.acquire<float>(PoolSlot::SsimBlurred, n);
-    float* norm = pool.acquire<float>(PoolSlot::SsimBlurNorm, n / 3);
-    float* g_blur = dL_dimg1 != nullptr ? pool.acquire<float>(PoolSlot::SsimBlurGrad, n)
+    float* blurred = pool.acquire_reused<float>(PoolSlot::SsimBlurred, n);
+    float* norm = pool.acquire_reused<float>(PoolSlot::SsimBlurNorm, n / 3);
+    float* g_blur = dL_dimg1 != nullptr ? pool.acquire_reused<float>(PoolSlot::SsimBlurGrad, n)
                                         : nullptr;
     const dim3 grid((W + BT_T - 1) / BT_T, (H + BT_T - 1) / BT_T, B);
     auto with_f1 = [&](auto&& go) {
@@ -2449,8 +2449,8 @@ static inline void _launch_fused_scielab_inplace(
 
     float3* cov = nullptr;
     if (mask_ptr != nullptr || saturation_threshold > 0.0f) {
-        cov = DevicePool::global().acquire<float3>(PoolSlot::ScielabMaskWeight,
-                                                   (size_t)B * H * W);
+        cov = DevicePool::global().acquire_reused<float3>(PoolSlot::ScielabMaskWeight,
+                                                          (size_t)B * H * W);
         _scielab_mask_coverage_kernel<<<_LAUNCH_ARGS_3D(W, H, B, COV_T, COV_T, 1)>>>(
             B, H, W, p_img1, p_img2, saturation_threshold, mask_ptr,
             B_mask, H_mask, W_mask, cov);
@@ -2558,8 +2558,8 @@ static inline void _launch_fused_flip_inplace(
 
     uint4* cov = nullptr;
     if (mask_ptr != nullptr || saturation_threshold > 0.0f) {
-        cov = DevicePool::global().acquire<uint4>(PoolSlot::FlipMaskWeight,
-                                                  (size_t)B * H * W);
+        cov = DevicePool::global().acquire_reused<uint4>(PoolSlot::FlipMaskWeight,
+                                                         (size_t)B * H * W);
         _flip_mask_coverage_kernel<<<_LAUNCH_ARGS_3D(W, H, B, COV_T, COV_T, 1)>>>(
             B, H, W, p_img1, p_img2, saturation_threshold, mask_ptr,
             B_mask, H_mask, W_mask, cov);

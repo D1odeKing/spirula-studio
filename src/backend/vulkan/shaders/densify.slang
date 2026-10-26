@@ -201,15 +201,18 @@ void densify_clip_scale(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 // MCMC / revised noise (canonical device code from ../densify.slang)
 // ---------------------------------------------------------------------------
 
-struct DensifyNoiseParams {  // 48 bytes: pushed directly
+struct DensifyNoiseParams {  // 72 bytes: pushed directly
     float* means;       // [N, 3] updated in place
     float* log_scales;  // [N, 3]
     float* quats;       // [N, 4]
     float* logit_opacs; // [N]
     float* radii;       // [N] (revised only; fallback-backed for mcmc)
+    float* peak_weight; // [N] stored peak alpha * T (has_peak_weight)
     float scaler;
     uint num_splats;
     uint wgs_per_row;
+    float peak_weight_scale;  // stored -> current peak weight
+    uint has_peak_weight;
 };
 
 [shader("compute")]
@@ -245,7 +248,9 @@ void densify_revised_add_noise(uint3 wg: SV_GroupID,
     float4 quat = float4(p.quats[4 * idx], p.quats[4 * idx + 1],
                          p.quats[4 * idx + 2], p.quats[4 * idx + 3]);
     revised_add_noise_3dgs(p.scaler, p.radii[idx], mean, log_scale, quat,
-                           p.logit_opacs[idx]);
+                           p.logit_opacs[idx],
+                           p.has_peak_weight != 0
+                               ? p.peak_weight[idx] * p.peak_weight_scale : 1.0f);
     p.means[3 * idx] = mean.x;
     p.means[3 * idx + 1] = mean.y;
     p.means[3 * idx + 2] = mean.z;

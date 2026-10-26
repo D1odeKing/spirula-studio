@@ -214,8 +214,8 @@ within a module and the host passes `SpecList` by index, so a constant
 inserted mid-module silently renumbers every axis after it (the class of bug
 the densify copy kernel hit — see "Spec IDs follow declaration order" below).
 The resulting IDs: warp 0; background_sh / pixel_wise_{render,train} /
-meshing_raster / visualizer 1; rasterize_moments 3; rasterize_fwd 4;
-projection_fwd 6; rasterize_bwd 6; projection_bwd 7; projection_qgrad 9;
+meshing_raster / visualizer 1; rasterize_moments 3; rasterize_fwd 5;
+projection_fwd 6; rasterize_bwd 7; projection_bwd 7; projection_qgrad 9;
 fpbo 12 (13 axes, still under `SpecList::kMax` = 16).
 
 The one axis declared after `kDistortion` is warp's `kFromSource` (ID 1),

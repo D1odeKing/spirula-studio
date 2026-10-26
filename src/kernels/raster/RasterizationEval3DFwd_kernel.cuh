@@ -85,7 +85,8 @@ __global__ void rasterize_to_pixels_fwd_kernel(
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
     float * render_median, // [I, image_height, image_width, 1], optional
-    const SplatScoreRender score
+    const SplatScoreRender score,
+    const float kernel_cut  // Primitive3DGS::kernel_vis; the 2D path only
 ) {
     auto block = cg::this_thread_block();
     uint32_t tid = threadIdx.x;  // 0 .. TILE_AREA-1, one per pixel
@@ -212,7 +213,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
             splat_batch[tid].load(splat_wbuffer, splat_sbuffer, wi, g);
             const typename SplatPrimitive::FragmentFwd& sp = splat_batch[tid];
             if (sp.opac > ALPHA_THRESHOLD) {
-                float kk = 0.5f / __logf(sp.opac / ALPHA_THRESHOLD);
+                float kk = 0.5f / kernel_reach(sp.opac, kernel_cut);
                 float3 inv_cov = { sp.conic.x * kk, sp.conic.y * kk, sp.conic.z * kk };
                 hit = ellipse_box_overlap_test(inv_cov,
                     mt_bx0 - sp.xy.x, mt_bx0 + TILE_SIZE_X - sp.xy.x,
@@ -242,7 +243,7 @@ __global__ void rasterize_to_pixels_fwd_kernel(
         #if IS_EVAL3D
             float alpha = splat.evaluate_alpha(ray_o, ray_d);
         #else
-            float alpha = splat.evaluate_alpha(px, py);
+            float alpha = splat.evaluate_alpha(px, py, kernel_cut);
         #endif
             if (alpha <= ALPHA_THRESHOLD)
                 continue;
@@ -368,7 +369,8 @@ void rasterize_to_pixels_fwd_kernel_wrapper(
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
     float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
-    const SplatScoreRender score
+    const SplatScoreRender score,
+    const float kernel_cut  // Primitive3DGS::kernel_vis; the 2D path only
 ) {
     // One block per micro-tile. The macro tile spans 1 << macro_log2 micro
     // tiles per axis, so the grid is the macro-tile grid scaled up by that.
@@ -398,7 +400,7 @@ void rasterize_to_pixels_fwd_kernel_wrapper(
         render_colors, render_Ts, last_ids,
         render_distortions,
         render_median,
-        score
+        score, kernel_cut
     );
 }
 

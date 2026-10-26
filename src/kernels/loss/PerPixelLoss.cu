@@ -289,8 +289,9 @@ __global__ void per_pixel_losses_backward_kernel(
     int x_dst = (int)(pixel_idx % (size_t)W_render);
     int y_dst = (int)(pixel_idx / (size_t)W_render);
 
-    if (camera_indices != nullptr)
-        batch_idx = camera_indices[batch_idx];
+    // The camera's loss row; the GT taps below stay on the batch slot.
+    const size_t loss_row = camera_indices != nullptr
+        ? (size_t)camera_indices[batch_idx] : batch_idx;
     FixedArray<float, (uint)RawLossIndex::length> v_losses;
     for (uint i = 0; i < (uint)RawLossIndex::length; i++) {
         float temp_loss = 0.0f;
@@ -298,7 +299,7 @@ __global__ void per_pixel_losses_backward_kernel(
         if (which == 0 || which == 2)
             temp_loss += v_out_losses[i];
         if (which == 1 || which == 2)
-            temp_loss += v_out_losses[(batch_idx+1)*(size_t)RawLossIndex::length + i];
+            temp_loss += v_out_losses[(loss_row+1)*(size_t)RawLossIndex::length + i];
         v_losses[i] = temp_loss;
     }
 

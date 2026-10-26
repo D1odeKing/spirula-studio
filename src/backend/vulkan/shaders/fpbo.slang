@@ -174,6 +174,9 @@ void _fpbo_camera_loop<let cam : CameraModelType, D : ICameraDistortion>(
     row.base = qbase;
     row.bounds_stride = vstride;
     row.pair_pitch = vpitch;
+    // Two passes, projection then colour: the colour VJP's v_sh row is then
+    // still zero through the projection VJP's autodiff temporaries. One loop
+    // held both and spilled 1.5 KB per thread (fpbo_bench 10.4 -> 8.7 ms at 1M).
     for (int cid_t = cid_0; cid_t < cid_1; ++cid_t) {
         // Packed: the forward emits (gaussian, camera) order, so cid_t is
         // the out_idx that indexes aabb / camera_ids / vs_screen.
@@ -185,22 +188,25 @@ void _fpbo_camera_loop<let cam : CameraModelType, D : ICameraDistortion>(
                                           p.dist_coeffs, uint(cid));
         if (kEval3d != 0) {
             float* v_row = scrg_row(p.vs_screen, idx);
-            float3 v_ss = scrg_scale(v_row);
-            float v_so = scrg_opac(v_row);
-            float3 v_rgb = scrg_rgb(v_row);
-            pb_vjp_3dgut<cam, D>(s, c, p.width, p.height, v_ss, v_so, g);
-            pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
+            pb_vjp_3dgut<cam, D>(s, c, p.width, p.height, scrg_scale(v_row),
+                                 scrg_opac(v_row), g);
         } else {
             float* v_row = scr2_row(p.vs_screen, idx);
-            float2 v_xy = scr2_xy(v_row);
-            float v_depth = scr2_depth(v_row);
-            float3 v_conic = scr2_conic(v_row);
-            float v_opac = scr2_opac(v_row);
-            float3 v_rgb = scr2_rgb(v_row);
-            pb_vjp_2d<cam, D>(s, c, p.width, p.height, v_xy, v_depth, v_conic,
-                              v_opac, g);
-            pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
+            pb_vjp_2d<cam, D>(s, c, p.width, p.height, scr2_xy(v_row),
+                              scr2_depth(v_row), scr2_conic(v_row),
+                              scr2_opac(v_row), g);
         }
+    }
+    for (int cid_t = cid_0; cid_t < cid_1; ++cid_t) {
+        int idx = (kPacked != 0) ? cid_t : cid_t * int(p.N) + int(gid);
+        int cid = (kPacked != 0) ? p.camera_ids[idx] : cid_t;
+        if (aabb16_is_empty(p.aabb[idx]))
+            continue;
+        PbCamera<D> c = pb_load_camera<D>(p.viewmats, p.intrins,
+                                          p.dist_coeffs, uint(cid));
+        float3 v_rgb = kEval3d != 0 ? scrg_rgb(scrg_row(p.vs_screen, idx))
+                                    : scr2_rgb(scr2_row(p.vs_screen, idx));
+        pb_color_vjp<D>(s, c, row, int(p.sb_base), v_rgb, g);
     }
 }
 
@@ -560,8 +566,7 @@ void fpbo(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     const int sb_cells = 6 * kSbLobes;
     float lr_sh = p.lr_features_sh * ibc1;
     float lr_sb = p.lr_features_sb * ibc1;
-    const float reg_weight =
-        p.sh_reg_weight * (1.0f / max(float(num_sh), 1.0f));
+    const float reg_weight = p.sh_reg_weight;  // per coefficient, as fused_adam_step
 
     // Per-channel DC color + clip radius for the trust-region SH update.
     float3 c_dc = float3(0.0f);

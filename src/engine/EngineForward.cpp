@@ -375,6 +375,8 @@ void forward_3dgs(
     // ellipse-vs-tile test instead of the conservative AABB one.
     ProjEllipseView ellipse = proj_ellipse_view(
         engine().fwd.splats_s[0].data_ptr(), primitive == "3dgut");
+    if (primitive != "3dgut")  // the 3DGUT rasterizer draws the full gaussian
+        ellipse.max_sigma = engine().fwd.kernel_cut;
 
     auto& bin = bin_choice();
     engine().fwd.macro_log2 = engine_bin_macro_log2();
@@ -438,7 +440,7 @@ void forward_3dgs(
             in_splats, engine().fwd.splats_s, engine().fwd.gaussian_ids,
             (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
             tile_offsets, flatten_ids, engine().fwd.macro_log2,
-            dist_type, output_median, output_depth, score);
+            dist_type, output_median, output_depth, score, engine().fwd.kernel_cut);
         renders = r; render_Ts = rTs; last_ids = lids; render_median = med; distortions = dist;
     } else if (primitive == "mip") {
         auto [r, rTs, lids, dist, med] = rasterize_to_pixels_mip_fwd(
@@ -446,7 +448,7 @@ void forward_3dgs(
             in_splats, engine().fwd.splats_s, engine().fwd.gaussian_ids,
             (uint32_t)engine().camera.width, (uint32_t)engine().camera.height,
             tile_offsets, flatten_ids, engine().fwd.macro_log2,
-            dist_type, output_median, output_depth, score);
+            dist_type, output_median, output_depth, score, engine().fwd.kernel_cut);
         renders = r; render_Ts = rTs; last_ids = lids; render_median = med; distortions = dist;
     } else if (primitive == "3dgut") {
         auto [r, rTs, lids, dist, med] = rasterize_to_pixels_3dgut_fwd(

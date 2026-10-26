@@ -43,6 +43,8 @@ std::tuple<
     // max_weight_scale; empty to skip.
     DeviceVector<float> max_weight,
     float max_weight_scale,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut,
     // gradients of outputs
     RenderOutput::TensorTuple v_render_outputs,
     const DeviceTensor3D<float> v_render_Ts,

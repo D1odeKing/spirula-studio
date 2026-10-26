@@ -30,7 +30,7 @@ struct Raster2dBwdParams {
     float v_dist_rgb_per_depth;
     uint32_t state_flags;
     float max_weight_scale;
-    uint32_t _pad0;
+    float kernel_cut;
 };
 static_assert(sizeof(Raster2dBwdParams) == 21 * 8 + 12 * 4,
               "params layout must match the slang struct");
@@ -107,6 +107,7 @@ std::tuple<
     DensifyAccumMode accum_mode,
     DeviceVector<float> max_weight,
     float max_weight_scale,
+    float kernel_cut,
     RenderOutput::TensorTuple v_render_outputs,
     const DeviceTensor3D<float> v_render_Ts,
     const DeviceTensor3D<float> v_median,
@@ -125,7 +126,8 @@ std::tuple<
 
     // Opens the raster-backward phase: the screen-gradient buffer below shares
     // the tile intersector's arena (POOL_ALIAS_TABLE, core/PoolSlots.h).
-    pool_begin_phase(PoolPhase::RasterBwd);
+    pool_begin_phase(PoolPhase::RasterBwd,
+                     v_splats_s.has_value() ? 0 : pool_arena_span_like(splats_s));
     if (!v_splats_w.has_value())
         v_splats_w = Vanilla3DGS<0>::WorldBuffer::zeros_pool(
             splats_w, PoolSlot::RasterBwdVWorld);
@@ -191,6 +193,7 @@ std::tuple<
                 ? o_accum_weight.data_ptr() + num_splats : nullptr);
         p.o_max_weight = vkk::or_fallback(max_weight.data_ptr());
         p.max_weight_scale = max_weight_scale;
+        p.kernel_cut = kernel_cut;
         p.I = I;
         p.N = packed ? 0u : (uint32_t)num_splats;
         p.n_isects = n_isects;
@@ -271,7 +274,8 @@ std::tuple<
 
     // Opens the raster-backward phase: the screen-gradient buffer below shares
     // the tile intersector's arena (POOL_ALIAS_TABLE, core/PoolSlots.h).
-    pool_begin_phase(PoolPhase::RasterBwd);
+    pool_begin_phase(PoolPhase::RasterBwd,
+                     v_splats_s.has_value() ? 0 : pool_arena_span_like(splats_s));
     if (!v_splats_w.has_value())
         v_splats_w = Vanilla3DGUT<0>::WorldBuffer::zeros_pool(
             splats_w, PoolSlot::RasterBwdVWorld);

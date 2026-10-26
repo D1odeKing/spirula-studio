@@ -189,18 +189,21 @@ int main(int argc, char** argv) {
         DensifyAccumMode aw;
         bool vmg;  // 3dgut viewmat grad
         bool mw;   // peak-weight output
+        float cut; // 3dgs kernel_cut: Primitive3DGS::kernel_vis
     };
     // The 3dgs backward never sees the camera, so the tier sweep lives on the
     // 3dgut rows; the 3dgs rows carry it through the projection only.
     const Cfg cfgs[] = {
-        {0, false, 0, 0, DistortionType::None, false, DensifyAccumMode::None, false, true},
-        {0, false, 0, 1, DistortionType::RGB_D, true, DensifyAccumMode::Max, false, false},
-        {0, true, 1, 2, DistortionType::D, false, DensifyAccumMode::Sum, false, true},
-        {0, true, 1, 2, DistortionType::D, false, DensifyAccumMode::Avg, false, false},
-        {2, false, 0, 0, DistortionType::None, false, DensifyAccumMode::None, true, false},
-        {2, false, 1, 2, DistortionType::D, true, DensifyAccumMode::Max, false, true},
-        {2, false, 0, 1, DistortionType::RGB_D, false, DensifyAccumMode::Sum, false, false},
-        {2, true, 0, 2, DistortionType::D, false, DensifyAccumMode::Avg, false, true},
+        {0, false, 0, 0, DistortionType::None, false, DensifyAccumMode::None, false, true, 0.0f},
+        {0, false, 0, 1, DistortionType::RGB_D, true, DensifyAccumMode::Max, false, false, 0.0f},
+        {0, true, 1, 2, DistortionType::D, false, DensifyAccumMode::Sum, false, true, 0.0f},
+        {0, true, 1, 2, DistortionType::D, false, DensifyAccumMode::Avg, false, false, 0.0f},
+        {0, false, 0, 0, DistortionType::None, false, DensifyAccumMode::Sum, false, true, 4.0f},
+        {0, true, 1, 1, DistortionType::D, false, DensifyAccumMode::Avg, false, false, 4.0f},
+        {2, false, 0, 0, DistortionType::None, false, DensifyAccumMode::None, true, false, 0.0f},
+        {2, false, 1, 2, DistortionType::D, true, DensifyAccumMode::Max, false, true, 0.0f},
+        {2, false, 0, 1, DistortionType::RGB_D, false, DensifyAccumMode::Sum, false, false, 0.0f},
+        {2, true, 0, 2, DistortionType::D, false, DensifyAccumMode::Avg, false, true, 0.0f},
     };
     const char* cams[4] = {"PINHOLE", "FISHEYE", "EQUISOLID",
                            "EQUIRECTANGULAR"};
@@ -255,7 +258,7 @@ int main(int argc, char** argv) {
         int macro_log2 = kMacroLog2Default;
         auto [isect_ids, flatten_ids, tile_offsets] =
             do_intersect_tile_generic(aabb_2d, depths_nd,
-                                      ellipse_view(splats_s, cfg.prim == 2), C,
+                                      ellipse_view(splats_s, cfg.prim == 2, cfg.cut), C,
                                       ttv(d_intr, {(int64_t)C, 4}), W, H,
                                       image_ids_ptr, /*tile_active=*/nullptr,
                                       macro_log2);
@@ -281,7 +284,7 @@ int main(int argc, char** argv) {
                                                 flatten_ids,
                                                 macro_log2, cfg.dt,
                                                 cfg.median, true,
-                                                SplatScoreRender{});
+                                                SplatScoreRender{}, cfg.cut);
         }
         backend::device_synchronize();
         if (check_error()) return 1;
@@ -337,7 +340,7 @@ int main(int argc, char** argv) {
                 N, in_splats, splats_s, gauss_ids, W, H, tile_offsets,
                 flatten_ids, macro_log2, render_Ts, last_ids,
                 renders, dist_fwd_opt,
-                cfg.dt, awmap_t, cfg.aw, mw_t, kMwScale, v_renders,
+                cfg.dt, awmap_t, cfg.aw, mw_t, kMwScale, cfg.cut, v_renders,
                 t3f1(d_v_T), v_med_t, v_dist_opt, 0.0f,
                 std::nullopt, std::nullopt);
             backend::device_synchronize();
@@ -356,7 +359,7 @@ int main(int argc, char** argv) {
                         N, in_splats, splats_s, gauss_ids, W, H, tile_offsets,
                         flatten_ids, macro_log2, render_Ts, last_ids,
                         renders, dist_fwd_opt, cfg.dt, awmap_t, cfg.aw,
-                        DeviceVector<float>{}, 1.0f,
+                        DeviceVector<float>{}, 1.0f, cfg.cut,
                         v_renders, t3f1(d_v_T), v_med_t,
                         k == 0 ? v_dists_tied : v_dists_derived,
                         k == 0 ? 0.0f : kDistRatio, std::nullopt, std::nullopt);

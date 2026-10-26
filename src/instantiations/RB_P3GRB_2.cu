@@ -44,7 +44,8 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template void rasterize_to_pixels_bwd_kernel_wrapper<
@@ -87,7 +88,8 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template void rasterize_to_pixels_bwd_kernel_wrapper<
@@ -130,7 +132,8 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template void rasterize_to_pixels_bwd_kernel_wrapper<
@@ -173,7 +176,8 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template void rasterize_to_pixels_bwd_kernel_wrapper<
@@ -216,7 +220,8 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );
 
 template void rasterize_to_pixels_bwd_kernel_wrapper<
@@ -259,5 +264,6 @@ template void rasterize_to_pixels_bwd_kernel_wrapper<
     float *__restrict__ o_accum_weight,
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
-    const float max_weight_scale
+    const float max_weight_scale,
+    const float kernel_cut
 );

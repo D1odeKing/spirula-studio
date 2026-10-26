@@ -608,9 +608,15 @@ int engine_densify_step(int step, int max_steps, const DensifyConfig& cfg) {
     if (cfg.noise_lr > 0.0f && cfg.noise_lr_final > 0.0f) {
         float noise_scalar = cfg.noise_lr * powf(cfg.noise_lr_final / cfg.noise_lr, progress);
         if (use_revised) {
+            // Gated on min(opacity, peak alpha * T): an opaque splat that stays hidden behind
+            // others explores like a faint one.
+            const auto& mwn = engine().max_weight;
+            const bool gate = cfg.noise_gate_peak_weight && mwn.value.data_ptr() != nullptr;
             revised_add_noise_tensor(
                 cur_num_splats + num_added, noise_scalar,
-                dv_radii, dv_means, dv_scales, dv_quats, dv_opacs);
+                dv_radii, dv_means, dv_scales, dv_quats, dv_opacs,
+                gate ? mwn.value : DeviceVector<float>(),
+                gate ? std::exp2(-(float)(step - mwn.base_step) / mwn.half_life) : 1.0f);
         } else {
             mcmc_add_noise_tensor(
                 cur_num_splats + num_added, noise_scalar,

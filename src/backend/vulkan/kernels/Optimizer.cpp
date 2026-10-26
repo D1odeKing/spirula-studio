@@ -110,7 +110,7 @@ struct SbFields {
 
 SbFields sb_fields(const SbOptimCells& sb, int64_t num_splats, int64_t stride,
                    float l2_reg, float* decay) {
-    *decay = 2.0f * l2_reg / (float)(num_splats * stride);
+    *decay = 2.0f * l2_reg / (float)(num_splats * 3);  // per RGB coefficient, as fused_adam_step
     if (sb.first_cell < 0)
         return {0xffffffffu, 0.0f};
     const int64_t lobe_cells = stride - sb.first_cell;
@@ -119,8 +119,6 @@ SbFields sb_fields(const SbOptimCells& sb, int64_t num_splats, int64_t stride,
             "optimizer: spherical-beta cells " +
             std::to_string(sb.first_cell) + ".." + std::to_string(stride) +
             " are not whole lobes");
-    if (sb.first_cell > 0)
-        *decay = 2.0f * l2_reg / (float)(num_splats * sb.first_cell);
     return {(uint32_t)sb.first_cell, sb.lr};
 }
 

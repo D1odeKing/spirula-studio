@@ -3523,6 +3523,128 @@ SS_MSG(background_match_luminance_help,
        "sağlar. Karanlık sahnelerin parlak bir arka planı gizlemek için pusla "
        "dolmasını önler. Yalnızca `noise` / `pseudorandom` / `random` arka "
        "planlarıyla kullanılır."));
+SS_MSG(noise_gate_peak_weight,
+    EN("Hidden splats explore"), JA("隠れたスプラットも探索"),
+    ZH_HANS("被遮挡的泼溅也探索"), ZH_HANT("被遮擋的潑濺也探索"),
+    KO("가려진 스플랫도 탐색"), DE("Verdeckte Splats suchen weiter"),
+    FR("Les splats cachés explorent"), ES("Los splats ocultos exploran"),
+    PT("Splats ocultos exploram"), IT("Gli splat nascosti esplorano"),
+    NL("Verborgen splats zoeken verder"), RU("Скрытые сплаты тоже ищут место"),
+    TR("Gizli splat'lar da yer arar"));
+SS_MSG(noise_gate_peak_weight_help,
+    EN("Decide which splats get exploration noise by what they show at most "
+       "(their peak opacity times transmittance) rather than by their opacity "
+       "alone, so an opaque splat that stays hidden behind others moves like a "
+       "faint one."),
+    JA("探索ノイズを与えるスプラットを、不透明度だけでなく実際に見えている最大の"
+       "量（不透明度と透過率の積の最大値）で決めます。他のスプラットの後ろに隠れ"
+       "続ける不透明なスプラットも、薄いスプラットと同じように動きます。"),
+    ZH_HANS("按泼溅实际显示的最大程度（不透明度与透射率乘积的峰值），而不仅按不"
+            "透明度，决定哪些泼溅获得探索噪声。这样一直被遮挡的不透明泼溅也会像"
+            "淡的泼溅一样移动。"),
+    ZH_HANT("按潑濺實際顯示的最大程度（不透明度與穿透率乘積的峰值），而不僅按不"
+            "透明度，決定哪些潑濺獲得探索噪聲。這樣一直被遮擋的不透明潑濺也會像"
+            "淡的潑濺一樣移動。"),
+    KO("탐색 노이즈를 줄 스플랫을 불투명도만이 아니라 실제로 보이는 최대 정도"
+       "(불투명도와 투과율 곱의 최댓값)로 정합니다. 다른 스플랫 뒤에 계속 가려진 "
+       "불투명한 스플랫도 옅은 스플랫처럼 움직입니다."),
+    DE("Entscheidet nach dem, was ein Splat höchstens zeigt (seiner höchsten "
+       "Deckkraft mal Transmission), statt nur nach der Deckkraft, welche Splats "
+       "Suchrauschen bekommen. Ein deckender Splat, der hinter anderen verborgen "
+       "bleibt, bewegt sich dann wie ein schwacher."),
+    FR("Choisit les splats qui reçoivent le bruit d'exploration selon ce qu'ils "
+       "montrent au plus (leur opacité maximale fois la transmittance) plutôt que "
+       "selon leur seule opacité : un splat opaque qui reste caché derrière "
+       "d'autres bouge alors comme un splat pâle."),
+    ES("Decide qué splats reciben ruido de exploración por lo que muestran como "
+       "máximo (su opacidad máxima por la transmitancia) y no solo por su "
+       "opacidad, de modo que un splat opaco que queda oculto tras otros se mueve "
+       "como uno tenue."),
+    PT("Decide quais splats recebem ruído de exploração pelo que mostram no "
+       "máximo (sua opacidade máxima vezes a transmitância), e não só pela "
+       "opacidade, de modo que um splat opaco que fica escondido atrás de outros "
+       "se move como um fraco."),
+    IT("Sceglie gli splat che ricevono il rumore di esplorazione in base a quanto "
+       "mostrano al massimo (la loro opacità massima per la trasmittanza) e non "
+       "solo in base all'opacità: uno splat opaco che resta nascosto dietro altri "
+       "si muove così come uno tenue."),
+    NL("Bepaalt welke splats verkenningsruis krijgen op grond van wat ze "
+       "hoogstens laten zien (hun hoogste dekking maal transmissie) in plaats van "
+       "alleen hun dekking, zodat een dekkende splat die achter andere verborgen "
+       "blijft beweegt als een vage."),
+    RU("Решает, каким сплатам давать шум для поиска места, по тому, сколько они "
+       "максимально видны (пик произведения непрозрачности на пропускание), а не "
+       "только по непрозрачности: непрозрачный сплат, который остаётся скрытым за "
+       "другими, движется как бледный."),
+    TR("Hangi splat'ların arama gürültüsü alacağına yalnızca opaklıklarına göre "
+       "değil, en fazla ne kadar göründüklerine (opaklık ile geçirgenlik "
+       "çarpımının en yüksek değeri) göre karar verir; böylece başkalarının "
+       "arkasında gizli kalan opak bir splat soluk biri gibi hareket eder."));
+SS_MSG(viewer_kernel_fraction,
+    EN("Web viewer kernel share"), JA("Webビューアのカーネルの割合"),
+    ZH_HANS("网页查看器核函数比例"), ZH_HANT("網頁檢視器核函數比例"),
+    KO("웹 뷰어 커널 비율"), DE("Anteil des Web-Viewer-Kernels"),
+    FR("Part du noyau des visionneuses web"),
+    ES("Proporción del núcleo de visores web"),
+    PT("Proporção do núcleo de visualizadores web"),
+    IT("Quota del kernel dei visualizzatori web"),
+    NL("Aandeel van de webviewer-kernel"), RU("Доля ядра веб-просмотрщиков"),
+    TR("Web görüntüleyici çekirdeğinin payı"));
+SS_MSG(viewer_kernel_fraction_help,
+    EN("Share of training steps that draw splats the way web viewers such as "
+       "PlayCanvas and SuperSplat do: cut off at about 2.8 sigma, with the falloff "
+       "rescaled to reach zero there. The model then looks in those viewers the way "
+       "it looks while training. 0 trains with the full Gaussian only."),
+    JA("学習ステップのうち、PlayCanvas や SuperSplat などの Web ビューアと同じ方法で"
+       "スプラットを描く割合です。約 2.8 sigma で打ち切り、そこでゼロになるよう減衰を"
+       "調整します。これらのビューアでも学習時と同じ見た目になります。0 なら完全な"
+       "ガウス分布だけで学習します。"),
+    ZH_HANS("训练步骤中按 PlayCanvas、SuperSplat 等网页查看器的方式绘制泼溅的比例："
+            "在约 2.8 sigma 处截断，并调整衰减使其在该处降为零。这样模型在这些查看器"
+            "中与训练时看起来一致。0 表示只用完整的高斯分布训练。"),
+    ZH_HANT("訓練步驟中按 PlayCanvas、SuperSplat 等網頁檢視器的方式繪製潑濺的比例："
+            "在約 2.8 sigma 處截斷，並調整衰減使其在該處降為零。這樣模型在這些檢視器"
+            "中與訓練時看起來一致。0 表示只用完整的高斯分布訓練。"),
+    KO("학습 단계 중 PlayCanvas, SuperSplat 같은 웹 뷰어와 같은 방식으로 스플랫을 "
+       "그리는 비율입니다. 약 2.8 sigma에서 자르고 그 지점에서 0이 되도록 감쇠를 "
+       "조정합니다. 그러면 이런 뷰어에서도 학습 때와 같게 보입니다. 0이면 완전한 "
+       "가우시안으로만 학습합니다."),
+    DE("Anteil der Trainingsschritte, die Splats so zeichnen wie Web-Viewer wie "
+       "PlayCanvas und SuperSplat: bei etwa 2,8 Sigma abgeschnitten, mit einem Abfall, "
+       "der dort auf null skaliert ist. Das Modell sieht dann in diesen Viewern so aus "
+       "wie beim Training. 0 trainiert nur mit der vollen Gaußfunktion."),
+    FR("Part des étapes d'entraînement qui dessinent les splats comme les "
+       "visionneuses web telles que PlayCanvas et SuperSplat : coupés vers 2,8 sigma, "
+       "avec une décroissance remise à l'échelle pour s'annuler à cet endroit. Le "
+       "modèle garde alors dans ces visionneuses l'aspect qu'il a à l'entraînement. "
+       "0 n'entraîne qu'avec la gaussienne complète."),
+    ES("Proporción de pasos de entrenamiento que dibujan los splats como los visores "
+       "web, por ejemplo PlayCanvas y SuperSplat: recortados hacia 2,8 sigma, con la "
+       "caída reescalada para llegar a cero allí. Así el modelo se ve en esos visores "
+       "como durante el entrenamiento. 0 entrena solo con la gaussiana completa."),
+    PT("Proporção dos passos de treinamento que desenham os splats como os "
+       "visualizadores web, como PlayCanvas e SuperSplat: cortados por volta de 2,8 "
+       "sigma, com o decaimento reescalado para chegar a zero ali. Assim o modelo fica "
+       "nesses visualizadores como no treinamento. 0 treina apenas com a gaussiana "
+       "completa."),
+    IT("Quota dei passi di addestramento che disegnano gli splat come i "
+       "visualizzatori web, ad esempio PlayCanvas e SuperSplat: tagliati a circa 2,8 "
+       "sigma, con il decadimento riscalato perché lì arrivi a zero. Il modello appare "
+       "così in quei visualizzatori come durante l'addestramento. 0 addestra solo con "
+       "la gaussiana completa."),
+    NL("Aandeel van de trainingsstappen dat splats tekent zoals webviewers als "
+       "PlayCanvas en SuperSplat dat doen: afgekapt rond 2,8 sigma, met het verloop zo "
+       "geschaald dat het daar nul bereikt. Het model ziet er dan in die viewers uit "
+       "zoals tijdens de training. 0 traint alleen met de volledige gaussiaan."),
+    RU("Доля шагов обучения, в которых сплаты рисуются так же, как в "
+       "веб-просмотрщиках вроде PlayCanvas и SuperSplat: обрезаются около 2,8 сигмы, "
+       "а спад масштабируется так, чтобы там стать нулём. Тогда модель выглядит в этих "
+       "просмотрщиках так же, как при обучении. 0 — обучение только с полной "
+       "гауссианой."),
+    TR("Eğitim adımlarından, splat'ları PlayCanvas ve SuperSplat gibi web "
+       "görüntüleyicilerin yaptığı gibi çizenlerin payı: yaklaşık 2,8 sigmada kesilir "
+       "ve azalma orada sıfıra inecek şekilde ölçeklenir. Böylece model bu "
+       "görüntüleyicilerde eğitimdeki gibi görünür. 0 yalnızca tam Gauss ile eğitir."));
 SS_MSG(background_noise_pre_warmup,
     EN("Initial background noise"), JA("最初の背景ノイズの強さ"),
     ZH_HANS("初始背景噪声强度"), ZH_HANT("初始背景雜訊強度"),

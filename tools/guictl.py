@@ -26,14 +26,11 @@ import urllib.request
 
 
 def config_dir():
-    """Must match config_dir() in src/app/AppPaths.cpp."""
+    # Must match app::config_dir() in src/app/AppPaths.cpp.
     if os.name == "nt":
-        base = os.environ.get("APPDATA")
+        base = os.environ.get("APPDATA") or "."
     else:
-        base = os.environ.get("XDG_CONFIG_HOME")
-        if not base and os.environ.get("HOME"):
-            base = os.path.join(os.environ["HOME"], ".config")
-    base = base or "."
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     current = os.path.join(base, "spirula-studio")
     legacy = os.path.join(base, "spirulae-splat")
     if not os.path.isdir(current) and os.path.isdir(legacy):
@@ -93,7 +90,8 @@ def target(args):
 
 def cmd_launch(args):
     exe = args.exe or os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "build_cuda", "spirula")
+        os.path.dirname(os.path.abspath(__file__)), "..", "build_cuda",
+        "spirula.exe" if os.name == "nt" else "spirula")
     exe = os.path.abspath(exe)
     if not os.path.exists(exe):
         sys.exit("no such executable: %s" % exe)
@@ -314,8 +312,6 @@ def build_parser():
 
 
 def main(argv=None):
-    # Labels carry CJK ("文A English"); a cp1252 console or pipe cannot encode it.
-    sys.stdout.reconfigure(encoding="utf-8")
     args = build_parser().parse_args(argv)
     args.func(args)
 

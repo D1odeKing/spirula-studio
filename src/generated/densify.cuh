@@ -254,7 +254,7 @@ inline __device__ float3  sqrt_0(float3  x_8)
     return result_9;
 }
 
-inline __device__ void revised_add_noise_3dgs(float scaler_1, float radii_0, float3  * mean_1, float3  log_scale_2, float4  quat_1, float logit_opac_1)
+inline __device__ void revised_add_noise_3dgs(float scaler_1, float radii_0, float3  * mean_1, float3  log_scale_2, float4  quat_1, float logit_opac_1, float gate_opac_0)
 {
     if(radii_0 <= 0.0f)
     {
@@ -283,7 +283,7 @@ inline __device__ void revised_add_noise_3dgs(float scaler_1, float radii_0, flo
     float _S20 = 6.28318548202514648f * _S19.y;
     float2  _S21 = float2 {_S18.y, _S18.w};
     float _S22 = 6.28318548202514648f * _S21.y;
-    *mean_1 = *mean_1 + mul_1(mul_0(M_1, transpose_0(M_1)), make_float3 ((F32_min((0.05000000074505806f * scaler_1 * (F32_sqrt((2.0f * (F32_log(((F32_max((255.0f * opac_1), (1.0f))))))))) * (F32_pow((1.0f - opac_1), (150.0f)))), (1.0f)))) * make_float3 ((make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S19.x))))))) * make_float2 ((F32_cos((_S20))), (F32_sin((_S20))))).x, (make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S19.x))))))) * make_float2 ((F32_cos((_S20))), (F32_sin((_S20))))).y, (make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S21.x))))))) * make_float2 ((F32_cos((_S22))), (F32_sin((_S22))))).x));
+    *mean_1 = *mean_1 + mul_1(mul_0(M_1, transpose_0(M_1)), make_float3 ((F32_min((0.05000000074505806f * scaler_1 * (F32_sqrt((2.0f * (F32_log(((F32_max((255.0f * opac_1), (1.0f))))))))) * (F32_pow((1.0f - (F32_min((opac_1), (gate_opac_0)))), (150.0f)))), (1.0f)))) * make_float3 ((make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S19.x))))))) * make_float2 ((F32_cos((_S20))), (F32_sin((_S20))))).x, (make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S19.x))))))) * make_float2 ((F32_cos((_S20))), (F32_sin((_S20))))).y, (make_float2 ((F32_sqrt((-2.0f * (F32_log((1.0f - _S21.x))))))) * make_float2 ((F32_cos((_S22))), (F32_sin((_S22))))).x));
     return;
 }
 

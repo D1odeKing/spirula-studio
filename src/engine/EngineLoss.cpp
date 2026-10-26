@@ -244,6 +244,7 @@ static void _engine_raster_proj_backward(
             accum_mode,
             engine().max_weight.value,
             engine().max_weight.step_scale,
+            engine().fwd.kernel_cut,
             v_render_outputs,
             v_render_Ts,
             v_median,

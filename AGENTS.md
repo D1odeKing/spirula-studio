@@ -641,15 +641,23 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   `SS_POOL_ALIAS_POISON=1` fills the arena at every phase switch so a read
   that outlives its phase becomes NaNs a parity test catches, and
   `SS_POOL_ALIAS=0` turns the whole thing off. Read
-  `docs/notes/vram-splat-x-img.md` before adding a row. A buffer whose
-  length follows the LIVE splat count goes in `POOL_LIVE_SPLAT_TABLE`, so it
-  is sized for `cap_max` once: the trainer's VRAM forecast assumes only
-  `splat x img` grows during a run.
+  `docs/notes/vram-splat-x-img.md` before adding a row. A phase opener that
+  can compute its size passes it to `pool_begin_phase()`: an arena that grows
+  by overflowing holds the overflow beside the old arena, a transient no
+  end-of-step VRAM sample sees. A buffer whose length follows the LIVE splat
+  count and outlives a call goes in `POOL_LIVE_SPLAT_TABLE`, so it is sized
+  for `cap_max` once: the trainer's VRAM forecast assumes only `splat x img`
+  grows during a run.
 - **`SS_PROFILE=1`** enables the per-stage backend timing breakdown
   (H2D / D2H / D2D / memset / device / host), header-only, both backends, plus
   a per-category VRAM breakdown after any run that trained. What the biggest
   category costs per element, and what has already been tried against it, is
-  `docs/notes/vram-splat-x-img.md`.
+  `docs/notes/vram-splat-x-img.md`. `SS_VRAM_TRACE=<MiB>` prints every pool
+  allocation at least that large with the process total and peak it brings.
+- **On Windows, VRAM is also limited by commit charge.** WDDM charges every
+  device allocation to the system commit limit (RAM + page file), so a small
+  page file fails an allocation as out-of-memory with VRAM to spare; the
+  forecast and the OOM error both account for it (`docs/notes/train-forecast.md`).
 - **A kernel that fills the gaps between sorted keys is a scaling trap.** One
   thread per INPUT walking `[ids[i-1]+1, ids[i]]` is fine while the ids are
   dense and quadratic when they are not: `qgrad_camera_id_bounds` measured
