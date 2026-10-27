@@ -90,7 +90,7 @@ bool EditSession::frame_bounds(double centre[3], double& radius) {
 }
 
 bool EditSession::draws_world_grid() const {
-    return _doc && (_moved_ever || _xform.active() || !_doc->placement().is_identity());
+    return _doc && (_moved_ever || _xform.active() || _dist_scale.active() || !_doc->placement().is_identity());
 }
 
 bool EditSession::pointer_in_view(float& x, float& y) const {
@@ -196,7 +196,9 @@ bool EditSession::xform_frame(XformFrame& f) {
 void EditSession::push_placement() {
     if (!_panel || !_doc) return;
     float a[12];
-    _doc->placement().to_3x4(a);
+    const Sim3 n = _doc->view_frame();
+    const Sim3 preview = n * _dist_scale.preview_step() * n.inverse() * _doc->placement();
+    preview.to_3x4(a);
     _panel->set_edit_transform(a);
 }
 
