@@ -3556,6 +3556,7 @@ void GuiApp::draw_menu_bar() {
     if (ui::BeginMenu(msg::menu_help)) {
         if (ui::BeginMenu(msg::menu_about)) {
             ui::Text(spirula::i18n::msg::brand::product);
+            ui::Text(msg::about_version, {SS_VERSION});
             ui::TextDisabled(spirula::i18n::msg::brand::about_line);
             ui::TextDisabledRaw("github.com/harry7557558/spirulae-splat");
             ImGui::EndMenu();

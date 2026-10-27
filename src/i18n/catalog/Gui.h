@@ -57,6 +57,12 @@ SS_MSG(menu_about,
     PT("Sobre"),         IT("Informazioni"), NL("Over"),         RU("О программе"),
     TR("Hakkında"));
 
+SS_MSG(about_version,
+    EN("Version: {0}"), JA("バージョン: {0}"), ZH_HANS("版本：{0}"), ZH_HANT("版本：{0}"),
+    KO("버전: {0}"), DE("Version: {0}"), FR("Version : {0}"), ES("Versión: {0}"),
+    PT("Versão: {0}"), IT("Versione: {0}"), NL("Versie: {0}"), RU("Версия: {0}"),
+    TR("Sürüm: {0}"));
+
 SS_MSG(menu_quit,
     EN("Quit"),          JA("終了"),          ZH_HANS("退出"),     ZH_HANT("結束"),
     KO("종료"),           DE("Beenden"),      FR("Quitter"),      ES("Salir"),
