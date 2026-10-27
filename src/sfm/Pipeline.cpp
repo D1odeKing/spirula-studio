@@ -2088,8 +2088,31 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
         createFeatureMatcher(cfg.matcher, opt, cfg.lightglue, cfg.loma_match);
     if (verbose && cfg.matcher != "bruteforce")
         L::err(Tag::Match, M::match_matcher_name, {matcher->name()});
+    // Pairs the focal search already matched, by pairKey: with a camera per
+    // image its sample is every pair, which matching them again would double.
+    std::unordered_map<uint64_t, std::vector<FeatureMatch>> premat;
     auto matchFn = [&](size_t b, size_t e, std::vector<std::vector<FeatureMatch>>& mout) {
-        matcher->matchBatch(feats, todo, b, e, mout);
+        if (premat.empty()) {
+            matcher->matchBatch(feats, todo, b, e, mout);
+            return;
+        }
+        mout.assign(e - b, {});
+        std::vector<std::pair<uint32_t, uint32_t>> rest;
+        std::vector<size_t> rest_at;
+        for (size_t k = b; k < e; k++) {
+            const auto it = premat.find(resume::pairKey(todo[k].first, todo[k].second));
+            if (it == premat.end()) {
+                rest.push_back(todo[k]);
+                rest_at.push_back(k - b);
+                continue;
+            }
+            mout[k - b] = std::move(it->second);
+            premat.erase(it);
+        }
+        if (rest.empty()) return;
+        std::vector<std::vector<FeatureMatch>> got;
+        matcher->matchBatch(feats, rest, 0, rest.size(), got);
+        for (size_t k = 0; k < rest.size(); k++) mout[rest_at[k]] = std::move(got[k]);
     };
     // Rate-limiting the printed line lives in the CLI's event sink, which is
     // the only thing that prints it; verifyPairs emits the fraction either way.
@@ -2125,12 +2148,17 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
                 size_t stride = std::max<size_t>(1, pairs.size() / std::max<size_t>(1, want));
                 for (size_t p = 0; p < pairs.size() && sample.size() < want; p += stride)
                     sample.push_back(pairs[p]);
+                // With a camera per image the sample is every pair, which with a
+                // learned matcher is as long as matching itself.
                 std::vector<std::vector<FeatureMatch>> chunk;
+                events::stage_begin(Stage::Focal, (int64_t)sample.size());
                 for (size_t b = 0; b < sample.size(); b += 16) {
                     size_t e = std::min(b + 16, sample.size());
                     matcher->matchBatch(feats, sample, b, e, chunk);
                     for (size_t k = b; k < e; k++) sm.push_back(std::move(chunk[k - b]));
+                    events::progress(Stage::Focal, (int64_t)e, (int64_t)sample.size());
                 }
+                events::stage_end(Stage::Focal);
             }
             if (want_rect) {
                 double t_f = now();
@@ -2170,6 +2198,9 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
                             L::num(bc.bytes() / 1048576.0, 0), focals});
                 }
             }
+            for (size_t k = 0; k < sample.size() && k < sm.size(); k++)
+                premat.emplace(resume::pairKey(sample[k].first, sample[k].second),
+                               std::move(sm[k]));
         }
         // The gyro's word on every pair it covers: calibrated on a sample of
         // time-adjacent pairs first, since the rotation prior needs the
