@@ -14993,29 +14993,86 @@ SS_MSG(geom_model_moge_l,
 
 SS_MSG(geom_model_moge_l_blurb,
     EN("1.3 GB of download and 630 MB on the card, about 0.7 s an image, for "
-       "the sharpest maps of the three."),
-    JA("ダウンロード 1.3 GB、カード上は 630 MB、1 枚あたり約 0.7 秒。3 つの中で"
+       "the sharpest MoGe-2 maps."),
+    JA("ダウンロード 1.3 GB、カード上は 630 MB、1 枚あたり約 0.7 秒。MoGe-2 で"
        "最も鮮明なマップになります。"),
-    ZH_HANS("下载 1.3 GB，显存占 630 MB，每张约 0.7 秒，贴图是三者中最清晰的。"),
-    ZH_HANT("下載 1.3 GB，顯存佔 630 MB，每張約 0.7 秒，貼圖是三者中最清晰的。"),
-    KO("내려받기 1.3 GB, 카드에서 630 MB, 장당 약 0.7 초로 셋 중 가장 선명한 "
-       "맵을 냅니다."),
+    ZH_HANS("下载 1.3 GB，显存占 630 MB，每张约 0.7 秒，贴图是 MoGe-2 中最清晰的。"),
+    ZH_HANT("下載 1.3 GB，顯存佔 630 MB，每張約 0.7 秒，貼圖是 MoGe-2 中最清晰的。"),
+    KO("내려받기 1.3 GB, 카드에서 630 MB, 장당 약 0.7 초로 MoGe-2 중 가장 "
+       "선명한 맵을 냅니다."),
     DE("1,3 GB Download und 630 MB auf der Karte, etwa 0,7 s je Bild, für die "
-       "schärfsten Karten der drei."),
+       "schärfsten Karten von MoGe-2."),
     FR("1,3 Go à télécharger et 630 Mo sur la carte, environ 0,7 s par image, "
-       "pour les cartes les plus nettes des trois."),
+       "pour les cartes MoGe-2 les plus nettes."),
     ES("1,3 GB de descarga y 630 MB en la tarjeta, unos 0,7 s por imagen, para "
-       "los mapas más nítidos de los tres."),
+       "los mapas más nítidos de MoGe-2."),
     PT("1,3 GB de transferência e 630 MB na placa, cerca de 0,7 s por imagem, "
-       "para os mapas mais nítidos dos três."),
+       "para os mapas mais nítidos do MoGe-2."),
     IT("1,3 GB da scaricare e 630 MB sulla scheda, circa 0,7 s per immagine, "
-       "per le mappe più nitide dei tre."),
+       "per le mappe più nitide di MoGe-2."),
     NL("1,3 GB download en 630 MB op de kaart, ongeveer 0,7 s per beeld, voor "
-       "de scherpste kaarten van de drie."),
+       "de scherpste kaarten van MoGe-2."),
     RU("1,3 ГБ загрузки и 630 МБ на карте, около 0,7 с на изображение, ради "
-       "самых резких карт из трёх."),
-    TR("1,3 GB indirme ve kartta 630 MB, görüntü başına yaklaşık 0,7 s; üçünün "
-       "en keskin haritaları."));
+       "самых резких карт MoGe-2."),
+    TR("1,3 GB indirme ve kartta 630 MB, görüntü başına yaklaşık 0,7 s; "
+       "MoGe-2'nin en keskin haritaları."));
+
+SS_MSG(geom_model_moge3_l,
+    EN("MoGe-3 large"),
+    JA("MoGe-3 ラージ"), ZH_HANS("MoGe-3 大"), ZH_HANT("MoGe-3 大"),
+    KO("MoGe-3 라지"),   DE("MoGe-3 groß"),
+    FR("MoGe-3 grand"),  ES("MoGe-3 grande"),
+    PT("MoGe-3 grande"), IT("MoGe-3 grande"),
+    NL("MoGe-3 groot"),  RU("MoGe-3 большая"),
+    TR("MoGe-3 büyük"));
+
+SS_MSG(geom_model_moge3_l_blurb,
+    EN("1.5 GB of download and 760 MB on the card. Normal maps alone cost what "
+       "MoGe-2 large does; with depth maps on, it refines the depth in 3D for "
+       "sharper depth edges, at about twice the time and 1.2 GB more on the "
+       "card."),
+    JA("ダウンロード 1.5 GB、カード上は 760 MB。法線マップだけなら MoGe-2 ラージと"
+       "同じ負荷です。深度マップをオンにすると深度を 3D で仕上げて深度の境界を"
+       "鮮明にしますが、時間は約 2 倍、カード上でさらに 1.2 GB 使います。"),
+    ZH_HANS("下载 1.5 GB，显存占 760 MB。只写法线图时开销与 MoGe-2 大相同；开启深度图后"
+            "会在 3D 中细化深度，让深度边缘更清晰，但耗时约为两倍，显存多占 1.2 GB。"),
+    ZH_HANT("下載 1.5 GB，顯存佔 760 MB。只寫法線圖時開銷與 MoGe-2 大相同；開啟深度圖後"
+            "會在 3D 中細化深度，讓深度邊緣更清晰，但耗時約為兩倍，顯存多佔 1.2 GB。"),
+    KO("내려받기 1.5 GB, 카드에서 760 MB 입니다. 법선 맵만 쓰면 MoGe-2 라지와 같은 "
+       "비용이고, 깊이 맵을 켜면 깊이를 3D 로 다듬어 깊이 경계가 더 선명해지지만 "
+       "시간은 약 두 배, 카드에서 1.2 GB 를 더 씁니다."),
+    DE("1,5 GB Download und 760 MB auf der Karte. Nur Normalenkarten kosten so "
+       "viel wie MoGe-2 groß; mit Tiefenkarten verfeinert es die Tiefe in 3D für "
+       "schärfere Tiefenkanten, bei etwa doppelter Zeit und 1,2 GB mehr auf der "
+       "Karte."),
+    FR("1,5 Go à télécharger et 760 Mo sur la carte. Les cartes de normales "
+       "seules coûtent autant que MoGe-2 grand ; avec les cartes de profondeur, "
+       "il affine la profondeur en 3D pour des bords de profondeur plus nets, en "
+       "environ deux fois plus de temps et avec 1,2 Go de plus sur la carte."),
+    ES("1,5 GB de descarga y 760 MB en la tarjeta. Solo con mapas de normales "
+       "cuesta lo mismo que MoGe-2 grande; con mapas de profundidad, refina la "
+       "profundidad en 3D para bordes de profundidad más nítidos, en el doble de "
+       "tiempo aproximadamente y con 1,2 GB más en la tarjeta."),
+    PT("1,5 GB de transferência e 760 MB na placa. Só com mapas de normais custa "
+       "o mesmo que o MoGe-2 grande; com mapas de profundidade, refina a "
+       "profundidade em 3D para arestas de profundidade mais nítidas, em cerca do "
+       "dobro do tempo e com mais 1,2 GB na placa."),
+    IT("1,5 GB da scaricare e 760 MB sulla scheda. Con le sole mappe di normali "
+       "costa quanto MoGe-2 grande; con le mappe di profondità affina la "
+       "profondità in 3D per bordi di profondità più netti, in circa il doppio "
+       "del tempo e con 1,2 GB in più sulla scheda."),
+    NL("1,5 GB download en 760 MB op de kaart. Alleen normaalkaarten kosten "
+       "evenveel als MoGe-2 groot; met dieptekaarten verfijnt het de diepte in 3D "
+       "voor scherpere dieptegrenzen, in ongeveer twee keer de tijd en met 1,2 GB "
+       "meer op de kaart."),
+    RU("1,5 ГБ загрузки и 760 МБ на карте. Только карты нормалей обходятся как у "
+       "MoGe-2 большой; с картами глубины она уточняет глубину в 3D ради более "
+       "чётких границ глубины, но примерно вдвое дольше и с 1,2 ГБ больше на "
+       "карте."),
+    TR("1,5 GB indirme ve kartta 760 MB. Yalnızca normal haritaları MoGe-2 büyük "
+       "kadar tutar; derinlik haritaları açıkken derinliği 3B'de iyileştirerek "
+       "daha keskin derinlik kenarları verir, yaklaşık iki kat sürede ve kartta "
+       "1,2 GB fazlasıyla."));
 
 SS_MSG(geom_model_small,
     EN("Metric3D v2 small"),

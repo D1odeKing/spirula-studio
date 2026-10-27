@@ -110,39 +110,39 @@ SS_MSG(opt_image_dir,
 
 SS_MSG(opt_model,
     EN("Which checkpoint to run. A known id is fetched and cached; a path to "
-       "an .onnx file is used as it is. Larger is slower and only somewhat "
-       "better."),
-    JA("使うチェックポイントです。既知の ID は取得してキャッシュし、.onnx への"
-       "パスはそのまま使います。大きいほど遅く、精度の伸びはわずかです。"),
-    ZH_HANS("要运行的权重。已知 id 会自动下载并缓存；给出 .onnx 路径则直接使用。"
+       "an .onnx or .pt file is used as it is. Larger is slower and only "
+       "somewhat better."),
+    JA("使うチェックポイントです。既知の ID は取得してキャッシュし、.onnx や .pt "
+       "へのパスはそのまま使います。大きいほど遅く、精度の伸びはわずかです。"),
+    ZH_HANS("要运行的权重。已知 id 会自动下载并缓存；给出 .onnx 或 .pt 路径则直接使用。"
             "越大越慢，精度提升有限。"),
-    ZH_HANT("要執行的權重。已知 id 會自動下載並快取；給出 .onnx 路徑則直接使用。"
+    ZH_HANT("要執行的權重。已知 id 會自動下載並快取；給出 .onnx 或 .pt 路徑則直接使用。"
             "越大越慢，精度提升有限。"),
-    KO("실행할 체크포인트입니다. 알려진 id 는 받아서 캐시하고, .onnx 경로는 그대로 "
-       "씁니다. 클수록 느리고 정확도 향상은 크지 않습니다."),
+    KO("실행할 체크포인트입니다. 알려진 id 는 받아서 캐시하고, .onnx 나 .pt 경로는 "
+       "그대로 씁니다. 클수록 느리고 정확도 향상은 크지 않습니다."),
     DE("Welche Gewichte laufen sollen. Eine bekannte Kennung wird geholt und "
-       "zwischengespeichert, ein Pfad auf eine .onnx unverändert benutzt. "
+       "zwischengespeichert, ein Pfad auf eine .onnx oder .pt unverändert benutzt. "
        "Größer heißt langsamer und nur etwas besser."),
     FR("Quel jeu de poids exécuter. Un identifiant connu est téléchargé puis "
-       "mis en cache ; un chemin vers un .onnx est utilisé tel quel. Plus gros "
+       "mis en cache ; un chemin vers un .onnx ou un .pt est utilisé tel quel. Plus gros "
        "est plus lent et à peine meilleur."),
     ES("Qué pesos ejecutar. Un identificador conocido se descarga y se guarda "
-       "en caché; una ruta a un .onnx se usa tal cual. Más grande es más lento "
+       "en caché; una ruta a un .onnx o .pt se usa tal cual. Más grande es más lento "
        "y solo algo mejor."),
     PT("Que pesos executar. Um identificador conhecido é obtido e guardado em "
-       "cache; um caminho para um .onnx é usado tal como está. Maior é mais "
+       "cache; um caminho para um .onnx ou .pt é usado tal como está. Maior é mais "
        "lento e só um pouco melhor."),
     IT("Quali pesi eseguire. Un identificatore noto viene scaricato e messo in "
-       "cache; un percorso a un .onnx è usato così com'è. Più grande è più "
+       "cache; un percorso a un .onnx o .pt è usato così com'è. Più grande è più "
        "lento e solo un po' migliore."),
     NL("Welke gewichten draaien. Een bekende id wordt opgehaald en bewaard; "
-       "een pad naar een .onnx wordt gebruikt zoals het is. Groter is trager "
+       "een pad naar een .onnx of .pt wordt gebruikt zoals het is. Groter is trager "
        "en maar iets beter."),
     RU("Какие веса запускать. Известный идентификатор скачивается и "
-       "кэшируется, путь к .onnx берётся как есть. Крупнее — медленнее и лишь "
+       "кэшируется, путь к .onnx или .pt берётся как есть. Крупнее — медленнее и лишь "
        "немного точнее."),
     TR("Hangi ağırlıkların çalışacağı. Bilinen bir kimlik indirilip "
-       "önbelleğe alınır; bir .onnx yolu olduğu gibi kullanılır. Büyüğü daha "
+       "önbelleğe alınır; bir .onnx veya .pt yolu olduğu gibi kullanılır. Büyüğü daha "
        "yavaştır ve yalnızca biraz daha iyidir."));
 
 SS_MSG(opt_max_size,
@@ -224,6 +224,45 @@ SS_MSG(opt_num_tokens,
     TR("MoGe'nin dönüştürücüsünün işlediği yama sayısı; maliyeti görüntü "
        "boyutu değil bu belirler. Kendi aralığı 1200 ile 3600 arasıdır ve "
        "görüntünün içerdiğiyle sınırlanır. Metric3D bunu yok sayar."));
+
+SS_MSG(opt_refine_steps,
+    EN("MoGe-3's depth refinement passes, each sharpening depth edges a little "
+       "more. 3 is what it was trained with; 0 skips refinement. Other models "
+       "ignore this."),
+    JA("MoGe-3 の深度リファインの回数です。1 回ごとに深度の境界が少しずつ"
+       "鮮明になります。学習時の値は 3 で、0 でリファインを省きます。"
+       "他のモデルでは無視されます。"),
+    ZH_HANS("MoGe-3 深度细化的次数，每次都会让深度边缘更清晰一些。训练时用的是 3，"
+            "0 表示跳过细化。其他模型会忽略此项。"),
+    ZH_HANT("MoGe-3 深度細化的次數，每次都會讓深度邊緣更清晰一些。訓練時用的是 3，"
+            "0 表示略過細化。其他模型會忽略此項。"),
+    KO("MoGe-3 의 깊이 다듬기 횟수로, 한 번마다 깊이 경계가 조금씩 더 "
+       "선명해집니다. 학습 때 값은 3 이고 0 이면 다듬기를 건너뜁니다. 다른 "
+       "모델은 무시합니다."),
+    DE("Die Tiefenverfeinerungen von MoGe-3; jede schärft die Tiefenkanten ein "
+       "wenig mehr. Trainiert wurde mit 3, 0 überspringt die Verfeinerung. "
+       "Andere Modelle ignorieren dies."),
+    FR("Les passes d'affinage de profondeur de MoGe-3, chacune rendant les bords "
+       "de profondeur un peu plus nets. Il a été entraîné avec 3 ; 0 saute "
+       "l'affinage. Les autres modèles l'ignorent."),
+    ES("Las pasadas de refinado de profundidad de MoGe-3; cada una afina un "
+       "poco más los bordes de profundidad. Se entrenó con 3; 0 omite el "
+       "refinado. Los demás modelos lo ignoran."),
+    PT("As passagens de refinamento de profundidade do MoGe-3; cada uma torna "
+       "as arestas de profundidade um pouco mais nítidas. Foi treinado com 3; "
+       "0 salta o refinamento. Os outros modelos ignoram isto."),
+    IT("I passaggi di affinamento della profondità di MoGe-3, ognuno rende i "
+       "bordi di profondità un po' più netti. È stato addestrato con 3; 0 salta "
+       "l'affinamento. Gli altri modelli lo ignorano."),
+    NL("De diepteverfijningen van MoGe-3; elke maakt de dieptegrenzen iets "
+       "scherper. Getraind met 3; 0 slaat het verfijnen over. Andere modellen "
+       "negeren dit."),
+    RU("Число проходов уточнения глубины MoGe-3; каждый делает границы глубины "
+       "чуть чётче. Модель обучена с 3; 0 пропускает уточнение. Другие модели "
+       "это игнорируют."),
+    TR("MoGe-3'ün derinlik iyileştirme geçişleri; her biri derinlik kenarlarını "
+       "biraz daha keskinleştirir. 3 ile eğitildi; 0 iyileştirmeyi atlar. Diğer "
+       "modeller bunu yok sayar."));
 
 SS_MSG(opt_depth,
     EN("Also write depth maps. Off by default: the normals are what a "
