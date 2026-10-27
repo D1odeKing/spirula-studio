@@ -37,7 +37,9 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,            // false: nothing reads the depth, leave it out
-    SplatScoreRender score
+    SplatScoreRender score,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut
 );
 
 
@@ -63,5 +65,7 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,            // false: nothing reads the depth, leave it out
-    SplatScoreRender score
+    SplatScoreRender score,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut
 );

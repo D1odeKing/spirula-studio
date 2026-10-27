@@ -128,7 +128,6 @@ void Weights::stageOnnx(const std::string& onnx_path, std::vector<Staged>& stage
     // Streamed rather than collected: vit-large is 1.3 GB of fp32 initializers
     // and `read_onnx` would hold all of it at once on top of the staged copy.
     std::vector<float> image_mean, image_std;
-    int n_skipped = 0;
     nn::read_onnx_initializers(onnx_path, [&](OnnxTensor&& t) {
         if (t.name == "encoder.image_mean") { image_mean = std::move(t.data); return; }
         if (t.name == "encoder.image_std")  { image_std = std::move(t.data); return; }
@@ -151,7 +150,6 @@ void Weights::stageOnnx(const std::string& onnx_path, std::vector<Staged>& stage
                     return;
                 }
             }
-            ++n_skipped;
             return;
         }
 

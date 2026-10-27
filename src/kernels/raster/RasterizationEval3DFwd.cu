@@ -40,7 +40,8 @@ void rasterize_to_pixels_eval3d_fwd_kernel_wrapper(
     int32_t *__restrict__ last_ids, // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
     float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
-    const SplatScoreRender score
+    const SplatScoreRender score,
+    const float kernel_cut
 );
 
 
@@ -95,7 +96,7 @@ inline void launch_rasterize_to_pixels_eval3d_fwd_kernel(
             renders, transmittances.data_ptr(), last_ids.data_ptr(), \
             dist_any(dist_type) ? distortions.buffer() : RenderOutput::Buffer(), \
             output_median ? render_median.data_ptr() : nullptr, \
-            score \
+            score, 0.0f \
         )
 
     #define _DISPATCH(M, D) \

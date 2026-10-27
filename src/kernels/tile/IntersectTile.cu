@@ -191,7 +191,9 @@ __global__ void intersect_tile_kernel(
                  : float2{0.5f * (xmin + xmax), 0.5f * (ymin + ymax)};
         conic = float3{row[ellipse.conic], row[ellipse.conic + 1],
                        row[ellipse.conic + 2]};
-        conic = conic * (0.5f / __logf(row[ellipse.opac] / ALPHA_THRESHOLD));
+        float reach = __logf(row[ellipse.opac] / ALPHA_THRESHOLD);
+        if (ellipse.max_sigma > 0.0f) reach = fminf(reach, ellipse.max_sigma);
+        conic = conic * (0.5f / reach);
     }
 
     uint2 tile_min, tile_max;

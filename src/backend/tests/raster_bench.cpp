@@ -5,7 +5,7 @@
 // move by 70% run to run because the trajectory is not reproducible, so a
 // kernel change cannot be A/B'd there. Same source on both backends.
 //
-//   ./raster_bench [num_splats] [iters] [macro_log2]
+//   ./raster_bench [num_splats] [iters] [macro_log2] [kernel_cut]
 
 #include <backend/tests/DistortionFixture.h>
 #include <kernels/projection/ProjectionPackedFwd.cuh>
@@ -70,6 +70,7 @@ int main(int argc, char** argv) {
     const int64_t N = argc > 1 ? std::atoll(argv[1]) : 2000000;
     const int iters = argc > 2 ? std::atoi(argv[2]) : 20;
     int macro_log2 = argc > 3 ? std::atoi(argv[3]) : kMacroLog2Default;
+    const float cut = argc > 4 ? (float)std::atof(argv[4]) : 0.0f;
     const int64_t C = 1;
 
     std::mt19937 rng(20260903u);
@@ -130,15 +131,15 @@ int main(int argc, char** argv) {
     if (check_error("projection")) return 1;
 
     auto [isect_ids, flatten_ids, tile_offsets] = do_intersect_tile_generic(
-        aabb_2d, depths, ellipse_view(splats_s, false), (uint32_t)C,
+        aabb_2d, depths, ellipse_view(splats_s, false, cut), (uint32_t)C,
         ttv(d_intr, {C, 4}), W, H, &cam_ids, nullptr, macro_log2);
     const int64_t n_isects = flatten_ids.size();
     backend::device_synchronize();
     if (check_error("intersect")) return 1;
     std::printf("N %lld  visible %lld  intersections %lld  (%.1f per pixel, "
-                "macro_log2 %d)\n",
+                "macro_log2 %d, kernel cut %g)\n",
                 (long long)N, (long long)n_visible, (long long)n_isects,
-                (double)n_isects / (double)(W * H), macro_log2);
+                (double)n_isects / (double)(W * H), macro_log2, cut);
 
     const int64_t n_pix = (int64_t)C * H * W;
     std::vector<float> h(n_pix * 3);
@@ -171,7 +172,7 @@ int main(int argc, char** argv) {
         return rasterize_to_pixels_3dgs_fwd(N, splats, splats_s, gauss_ids, W,
                                             H, tile_offsets, flatten_ids,
                                             macro_log2, dt, false, true,
-                                            SplatScoreRender{});
+                                            SplatScoreRender{}, cut);
     };
     auto rout = fwd();
     backend::device_synchronize();
@@ -186,7 +187,7 @@ int main(int argc, char** argv) {
     const double isect_ms = time_ms(iters, [&] {
         int m = macro_log2;
         (void)do_intersect_tile_generic(aabb_2d, depths,
-                                        ellipse_view(splats_s, false),
+                                        ellipse_view(splats_s, false, cut),
                                         (uint32_t)C, ttv(d_intr, {C, 4}), W, H,
                                         &cam_ids, nullptr, m);
     });
@@ -200,7 +201,7 @@ int main(int argc, char** argv) {
             N, splats, splats_s, gauss_ids, W, H, tile_offsets, flatten_ids,
             macro_log2, std::get<1>(rout), std::get<2>(rout),
             std::get<0>(rout), std::nullopt, dt, t3f1(d_awmap), aw,
-            max_weight, 1.0f, v_renders,
+            max_weight, 1.0f, cut, v_renders,
             t3f1(d_v_T), DeviceTensor3D<float>{}, std::nullopt, 0.0f,
             std::nullopt, std::nullopt);
     };

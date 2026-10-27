@@ -335,7 +335,9 @@ void revised_add_noise_tensor(
     DeviceVector<float3> means,
     DeviceVector<float3> log_scales,
     DeviceVector<float4> quats,
-    DeviceVector<float> opacs
+    DeviceVector<float> opacs,
+    DeviceVector<float> peak_weight,
+    float peak_weight_scale
 );
 
 

@@ -665,7 +665,7 @@ __global__ void fused_projection_bwd_optimizer_3dgs_kernel
     [[maybe_unused]] float lr_sh = lr_features_sh * inv_bias_correction1;
     [[maybe_unused]] float* v_sh_ptr = v_splat_world.features_sh;
     float* sh_ptr = splats_world.features_sh(gid);
-    [[maybe_unused]] const float reg_weight = sh_reg_weight * (1.0f / fmaxf((float)num_sh, 1.0f));
+    [[maybe_unused]] const float reg_weight = sh_reg_weight;  // per coefficient, as fused_adam_step
 
     // SH stays in coefficient space. Linearizing the DC encode about the DC
     // colour needs |sh| << c_dc, which does not hold: measured |sh| p99 is

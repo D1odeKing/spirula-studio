@@ -247,6 +247,24 @@ A step is ~60 ms on the host and ~410 ms on the device, of which level 0
 (0.9 M voxels, 32 channels) is a quarter. Its convolutions are bound by the
 gathered loads, not arithmetic: on tensor cores they run 10% faster.
 
+The refiner moves depth only, so a normals-only run (the dataset screen's
+default) costs what `moge2-vitl` does and gains nothing from it. With depth on,
+188 frames of 1440x1440 at the defaults on an RTX 5070 took 99 s and 1.8 GB
+with `moge2-vitl`, 206 s and 3.0 GB with `moge3-vitl`.
+
+**Quality** against ETH3D courtyard's laser scan (38 DSLR frames, depth
+median-aligned per frame; boundary F1 over 10% log-depth steps, 2 px slack):
+
+| | AbsRel | boundary F1 | normals, planar median |
+|---|---|---|---|
+| `moge2-vitb` | 0.023 | 0.585 | 2.60 deg |
+| `moge2-vitl` | 0.019 | 0.606 | 2.74 deg |
+| `moge3-vitl`, 0 steps | 0.026 | 0.620 | 2.70 deg |
+| `moge3-vitl`, 3 steps | 0.026 | 0.627 | 2.70 deg |
+
+Sharper edges (F1 up on 30 of 38 frames against `moge2-vitl`) at a worse
+overall fit (AbsRel down on 1 of 38), which is why it is not the default.
+
 **Parity.** No PyTorch run is possible on Windows -- the official refiner needs
 FlexGEMM on Triton -- so `tools/moge/check_refiner.py` is an independent
 float64 NumPy refiner written from MoGe's and FlexGEMM's Python, fed our
@@ -269,6 +287,12 @@ up to 0.29:
 
 The shipping row's worst pixels are fp16 rounding tipping a pixel into the
 next depth bin, which changes its neighbours rather than the arithmetic.
+
+The network before the refiner matches MoGe's own `v2.MoGeModel` loaded from
+the same `.pt` (refiner keys dropped) to 1.9e-7 relative L2 on the points, with
+`onnx_compatible_mode` set. Without it MoGe resizes the input with antialiasing,
+which the ONNX graph we follow does not: 1.9e-3 on points, 1.6e-2 on normals
+at 640x640 and 1200 tokens.
 
 ## Testing
 

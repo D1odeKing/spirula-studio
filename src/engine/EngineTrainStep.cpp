@@ -219,6 +219,7 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
     engine().fwd.score_pending = cfg.loss.learned_score;
     engine().learned_score.power = cfg.loss.loss_map_power * cfg.densify.score_power;
 
+    engine().fwd.kernel_cut = cfg.loss.raster_kernel_cut;
     {
         SplatStageTimer stage_timer;
         forward_3dgs(primitive, sh_degree, packed, /*output_median=*/false, (int)dist_type);
@@ -240,6 +241,7 @@ static std::map<std::string, float> _engine_step_fwd_bwd_only(
         cfg.loss.overexposure_reg_weight,
         cfg.loss.color_shift_reg_weight,
         cfg.loss.color_shift_reg_beta);
+    engine().fwd.kernel_cut = 0.0f;
     engine_bin_tile_observe(std::chrono::duration<double>(
         std::chrono::steady_clock::now() - step_t0).count());
     _visit_accumulate_camera_stats(primitive);

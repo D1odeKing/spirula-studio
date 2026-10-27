@@ -560,6 +560,10 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     // ---- loss ----------------------------------------------------------
     cfg.loss.weights = build_loss_weights(c, step);
     cfg.loss.w_ssim = c.ssim_lambda;
+    // A hash of the step picks the steps rendered with PlayCanvas's kernel: cut at sigma = 4
+    // (2 sqrt(2) standard deviations), the tail renormalized to reach zero there.
+    cfg.loss.raster_kernel_cut =
+        (float)((uint32_t)step * 2654435761u) < c.viewer_kernel_fraction * 4294967296.0f ? 4.0f : 0.0f;
     cfg.loss.perceptual_loss = perceptual_loss_int(c.perceptual_loss);
     cfg.loss.num_loss_scales = c.num_loss_scales + 1;
     cfg.loss.loss_scale_min_pixels = c.loss_scale_min_pixels;
@@ -650,6 +654,7 @@ EngineStepConfig build_step_config(const TrainConfig& c, const RunState& st, int
     cfg.densify.max_world_size                = c.max_world_size * alpha;
     cfg.densify.noise_lr                      = c.noise_lr * noise_lr_scalar;
     cfg.densify.noise_lr_final                = c.noise_lr_final * noise_lr_scalar;
+    cfg.densify.noise_gate_peak_weight        = c.noise_gate_peak_weight;
     cfg.densify.use_revised_densification     = c.use_revised_densification;
     cfg.densify.score_mode = c.densify_score_mode == "mean" ? 0
         : c.densify_score_mode == "max" ? 1

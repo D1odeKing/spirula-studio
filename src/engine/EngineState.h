@@ -160,6 +160,9 @@ struct ForwardCache {
     // Armed by a training step none of whose terms reads the rendered depth,
     // and cleared by the forward it applies to.
     bool                              skip_depth_pending = false;
+    // LossConfig::raster_kernel_cut of the training step in flight, for its forward and
+    // backward; 0 outside one, so every other render is the full gaussian.
+    float                             kernel_cut = 0.0f;
     // Armed like the above by a step that fits the learned densification
     // score; the forward then renders render_score (else leaves it empty).
     bool                              score_pending = false;

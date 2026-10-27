@@ -21,6 +21,9 @@
 struct LossConfig {
     std::array<float, (int)LossWeightIndex::length> weights{};
     float w_ssim          = 0.0f;
+    // This step's kernel (Primitive3DGS::kernel_vis): > 0 cut at that sigma and renormalized,
+    // 0 the full gaussian. Training renders only.
+    float raster_kernel_cut = 0.0f;
     int   perceptual_loss = 0;   // PerceptualLoss: what w_ssim weights
     int   num_loss_scales = 1;
     // When positive, overrides num_loss_scales per train step based on the
@@ -230,6 +233,7 @@ struct DensifyConfig {
     float max_world_size                = 0.0f;
     float noise_lr                      = 0.0f;
     float noise_lr_final                = 0.0f;
+    bool  noise_gate_peak_weight        = false;
     bool use_revised_densification      = true;
     int  score_mode                     = 0;    // 0=mean, 1=max, 2=median, 3=geom
     // Blend weight `w` between the image-space accum_weight score and the

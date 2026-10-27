@@ -55,6 +55,7 @@ void rasterize_to_pixels_eval3d_bwd_kernel_wrapper(
     float *__restrict__ o_accum_weight_den,
     float *__restrict__ o_max_weight,
     const float max_weight_scale,
+    const float kernel_cut,
     float *__restrict__ v_viewmats // [B, C, 4, 4]
 );
 
@@ -135,7 +136,7 @@ inline void launch_rasterize_to_pixels_eval3d_bwd_kernel(
             v_dist_rgb_per_depth, \
             v_splat_wbuffer, v_splat_sbuffer, \
             o_accum_weight, o_accum_weight_den, \
-            o_max_weight, max_weight_scale, \
+            o_max_weight, max_weight_scale, 0.0f, \
             v_viewmats.data_ptr() \
         )
 

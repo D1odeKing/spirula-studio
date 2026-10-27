@@ -160,9 +160,24 @@ int main(int argc, char** argv) {
                                  dv<float3>(d_means2, N),
                                  dv<float3>(d_scales, N),
                                  dv<float4>(d_quats, N),
-                                 dv<float>(d_opacs, N));
+                                 dv<float>(d_opacs, N),
+                                 DeviceVector<float>(), 1.0f);
         backend::device_synchronize();
         readback_f(lacc, d_means2, 3 * N);
+
+        // gated on the peak weight: half the splats look hidden (peak far under opacity)
+        std::vector<float> peak(N);
+        for (int64_t i = 0; i < N; ++i) peak[i] = (i % 2) ? 0.5f : 2e-3f;
+        float* d_means3 = upload(means);
+        float* d_peak = upload(peak);
+        revised_add_noise_tensor(N, 5e-2f, dv<float>(d_radii, N),
+                                 dv<float3>(d_means3, N),
+                                 dv<float3>(d_scales, N),
+                                 dv<float4>(d_quats, N),
+                                 dv<float>(d_opacs, N),
+                                 dv<float>(d_peak, N), 0.5f);
+        backend::device_synchronize();
+        readback_f(lacc, d_means3, 3 * N);
     }
 
     // ---- long-axis-split relocate/add + MCMC relocate/add ----

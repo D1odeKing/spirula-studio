@@ -65,12 +65,13 @@ static_assert(sizeof(DensifyClipScaleParams) == 3 * 8 + 8 * 4,
 
 // Mirrors DensifyNoiseParams.
 struct DensifyNoiseParams {
-    uint64_t means, log_scales, quats, logit_opacs, radii;
+    uint64_t means, log_scales, quats, logit_opacs, radii, peak_weight;
     float scaler;
     uint32_t num_splats, wgs_per_row;
-    uint32_t _pad0;
+    float peak_weight_scale;
+    uint32_t has_peak_weight, _pad0;
 };
-static_assert(sizeof(DensifyNoiseParams) == 5 * 8 + 4 * 4,
+static_assert(sizeof(DensifyNoiseParams) == 6 * 8 + 6 * 4,
               "params layout must match the slang struct");
 
 // Mirrors EfraimidisParams.
@@ -688,7 +689,9 @@ void revised_add_noise_tensor(
     DeviceVector<float3> means,
     DeviceVector<float3> log_scales,
     DeviceVector<float4> quats,
-    DeviceVector<float> opacs
+    DeviceVector<float> opacs,
+    DeviceVector<float> peak_weight,
+    float peak_weight_scale
 ) {
     if (num_splats <= 0) return;
     DensifyNoiseParams p{};
@@ -697,6 +700,9 @@ void revised_add_noise_tensor(
     p.quats = (uint64_t)quats.data_ptr();
     p.logit_opacs = (uint64_t)opacs.data_ptr();
     p.radii = (uint64_t)radii.data_ptr();
+    p.peak_weight = vkk::or_fallback(peak_weight.data_ptr());
+    p.has_peak_weight = peak_weight.data_ptr() ? 1u : 0u;
+    p.peak_weight_scale = peak_weight_scale;
     p.scaler = scaler;
     p.num_splats = (uint32_t)num_splats;
     vkk::dispatch_flat("densify.densify_revised_add_noise", {}, num_splats,

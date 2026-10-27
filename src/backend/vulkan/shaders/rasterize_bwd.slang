@@ -265,7 +265,7 @@ struct Raster2dBwdParams {  // via params ring
     float v_dist_rgb_per_depth;
     uint32_t state_flags;  // kRb*
     float max_weight_scale;
-    uint32_t _pad0;
+    float kernel_cut;  // as RasterFwd2dParams::kernel_cut
 };
 
 struct Frag2d_ {
@@ -277,12 +277,13 @@ struct Frag2d_ {
 };
 
 [ForceInline]
-float _rb2_alpha(Frag2d_ s, float2 delta, out float sigma, out float vis) {
+float _rb2_alpha(Frag2d_ s, float2 delta, float cut, out float sigma, out float vis,
+                 out float dvis) {
     sigma =
         0.5f * (s.conic.x * delta.x * delta.x +
                 s.conic.z * delta.y * delta.y) +
         s.conic.y * delta.x * delta.y;
-    vis = exp(-sigma);
+    vis = kernel_vis(sigma, cut, dvis);
     float alpha = min(0.999f, s.opac * vis);
     return sigma < 0.f ? 0.f : alpha;
 }
@@ -290,10 +291,10 @@ float _rb2_alpha(Frag2d_ s, float2 delta, out float sigma, out float vis) {
 // sigma / vis come from _rb2_alpha: re-deriving them here would cost a second
 // exp() on every contributing pixel.
 [ForceInline]
-void _rb2_alpha_vjp(Frag2d_ s, float2 delta, float sigma, float vis,
+void _rb2_alpha_vjp(Frag2d_ s, float2 delta, float sigma, float vis, float dvis,
                     float v_alpha, inout Frag2d_ v) {
     if (sigma >= 0.f && s.opac * vis <= 0.999f) {
-        float v_sigma = -s.opac * vis * v_alpha;
+        float v_sigma = -s.opac * dvis * v_alpha;
         v.conic += float3(0.5f * v_sigma * delta.x * delta.x,
                           v_sigma * delta.x * delta.y,
                           0.5f * v_sigma * delta.y * delta.y);
@@ -308,7 +309,7 @@ void _rb2_alpha_vjp(Frag2d_ s, float2 delta, float sigma, float vis,
 // caller's barrier is never skipped.
 [ForceInline]
 void _rb2_step(int pix_id, int splat_idx, bool active,
-               uint wg_y, uint wg_z, Frag2d_ splat,
+               uint wg_y, uint wg_z, Frag2d_ splat, float kernel_cut,
                inout Frag2d_ v_splat,
                inout float accum_weight, inout float accum_weight_den,
                inout float max_weight, inout bool touched) {
@@ -319,8 +320,8 @@ void _rb2_step(int pix_id, int splat_idx, bool active,
     float2 delta = float2(splat.xy.x - (float(gx) + 0.5f),
                           splat.xy.y - (float(gy) + 0.5f));
 
-    float sigma, vis;
-    float alpha = _rb2_alpha(splat, delta, sigma, vis);
+    float sigma, vis, dvis;
+    float alpha = _rb2_alpha(splat, delta, kernel_cut, sigma, vis, dvis);
     if (alpha <= ALPHA_THRESHOLD) return;
     float4 color = float4(splat.rgb, splat.depth);
 
@@ -328,7 +329,7 @@ void _rb2_step(int pix_id, int splat_idx, bool active,
     float4 v_color;
     _rb_pixel_grad(pix_id, alpha, color, v_alpha, v_color);
 
-    _rb2_alpha_vjp(splat, delta, sigma, vis, v_alpha, v_splat);
+    _rb2_alpha_vjp(splat, delta, sigma, vis, dvis, v_alpha, v_splat);
     v_splat.rgb += v_color.xyz;
     v_splat.depth += v_color.w;
     touched = true;
@@ -416,7 +417,7 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                 c_conic = scr2_conic(c_row);
                 c_xy = scr2_xy(c_row);
                 if (c_opac > ALPHA_THRESHOLD) {
-                    float kk = 0.5f / log(c_opac / ALPHA_THRESHOLD);
+                    float kk = 0.5f / kernel_reach(c_opac, p.kernel_cut);
                     ok = ellipse_box_overlap_test(
                         c_conic * kk, cull_bx0 - c_xy.x,
                         cull_bx0 + TILE_SIZE_DX - c_xy.x, cull_by0 - c_xy.y,
@@ -482,8 +483,8 @@ void rasterize_bwd_2d(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 
             for (int t = 0; t < batch_size + (int)RB_BLOCK - 1; t++) {
                 _rb2_step(t - int(tid), splat_idx, active, wg.y, wg.z, splat,
-                          v_splat, accum_weight, accum_weight_den, max_weight,
-                          touched);
+                          p.kernel_cut, v_splat, accum_weight, accum_weight_den,
+                          max_weight, touched);
                 GroupMemoryBarrierWithGroupSync();
             }
 

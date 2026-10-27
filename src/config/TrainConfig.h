@@ -205,6 +205,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(int, background_noise_warmup, 2000, "splats", "expert", "")            \
     X(float, background_noise_pre_warmup, 0.25f, "splats", "expert", "")     \
     X(bool, background_match_luminance, false, "splats", "advanced", "")     \
+    X(float, viewer_kernel_fraction, 0.3f, "splats", "advanced", "")         \
     X(std::optional<float>, scale_init, 0.35f, "splats", "advanced", "") \
     X(std::optional<float>, opacity_init, std::nullopt, "splats", "advanced", "") \
     X(bool, suppress_initial_scales, false, "splats", "expert", "")          \
@@ -230,6 +231,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(int, refine_stop_iter, 14000, "detail", "advanced", "")                \
     X(float, noise_lr, 160.0f, "detail", "expert", "")                        \
     X(float, noise_lr_final, 1.6f, "detail", "expert", "")                   \
+    X(bool, noise_gate_peak_weight, true, "detail", "expert", "")            \
     X(bool, use_revised_densification, true, "detail", "expert", "")         \
     X(std::string, densify_score_mode, "mean", "detail", "basic", "mean|max|median|geom") \
     X(float, densify_score_blend_world_grad, 0.0f, "detail", "advanced", "") \
@@ -309,7 +311,7 @@ inline bool train_choices_free_form(const char* choices) {
     X(float, scale_regularization_weight, 0.0f, "shape", "advanced", "")     \
     X(float, max_gauss_ratio, 10.0f, "shape", "advanced", "")                \
     X(float, dc_reg, 0.001f, "shape", "basic", "")                           \
-    X(float, sh_reg, 0.001f, "shape", "basic", "")                           \
+    X(float, sh_reg, 0.025f, "shape", "basic", "")                            \
     X(float, overexposure_reg, 0.0f, "shape", "advanced", "")                \
     X(float, quat_norm_reg, 0.01f, "shape", "advanced", "")                  \
                                                                              \
@@ -706,7 +708,7 @@ inline void train_resolve_macros(TrainConfig& c,
             strong ? 0.03f : 0.01f);
         put("rgb_distortion_reg", c.rgb_distortion_reg,
             strong ? 0.05f : 0.01f);
-        put("sh_reg", c.sh_reg, strong ? 0.05f : 0.01f);
+        put("sh_reg", c.sh_reg, strong ? 0.1f : 0.067f);  // above the 0.04 default
         put("max_screen_size", c.max_screen_size, strong ? 0.1f : 0.2f);
         put("max_screen_size_clip_hardness", c.max_screen_size_clip_hardness, strong ? 1.1f : 1.25f);
     }

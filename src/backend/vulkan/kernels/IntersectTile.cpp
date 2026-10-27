@@ -20,8 +20,10 @@ struct IsectCountParams {
     uint32_t N, image_width, image_height, tile_width, tile_height, total,
         wgs_per_row, macro_log2;
     int32_t row_stride, xy_off, conic_off, opac_off;
+    float max_sigma;
+    uint32_t _pad0;
 };
-static_assert(sizeof(IsectCountParams) == 6 * 8 + 12 * 4,
+static_assert(sizeof(IsectCountParams) == 6 * 8 + 14 * 4,
               "params layout must match the slang struct");
 
 struct IsectWriteParams {
@@ -30,8 +32,9 @@ struct IsectWriteParams {
     uint32_t N, image_width, image_height, tile_width, tile_height, total,
         wgs_per_row, n_isects, macro_log2;
     int32_t row_stride, xy_off, conic_off, opac_off;
+    float max_sigma;
 };
-static_assert(sizeof(IsectWriteParams) == 8 * 8 + 13 * 4 + 4 /*pad*/,
+static_assert(sizeof(IsectWriteParams) == 8 * 8 + 14 * 4,
               "params layout must match the slang struct");
 
 struct TileActiveParams {
@@ -166,6 +169,7 @@ std::tuple<
             cp.xy_off = ellipse.xy;
             cp.conic_off = ellipse.conic;
             cp.opac_off = ellipse.opac;
+            cp.max_sigma = ellipse.max_sigma;
             vkk::dispatch("intersect_tile.intersect_tile_count", mode_spec,
                           g.per_row, g.rows, 1, &cp, sizeof(cp));
         }
@@ -235,6 +239,7 @@ std::tuple<
         wp.xy_off = ellipse.xy;
         wp.conic_off = ellipse.conic;
         wp.opac_off = ellipse.opac;
+        wp.max_sigma = ellipse.max_sigma;
         vkk::dispatch("intersect_tile.intersect_tile_write", mode_spec, g.per_row,
                       g.rows, 1, &wp, sizeof(wp));
     }

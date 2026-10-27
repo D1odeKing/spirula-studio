@@ -21,8 +21,10 @@ struct RasterFwd2dParams {
     uint64_t score_io;
     uint32_t I, n_isects, width, height, tile_width, tile_height, macro_log2;
     uint32_t out_depth_on;
+    float kernel_cut;
+    uint32_t _pad0;
 };
-static_assert(sizeof(RasterFwd2dParams) == 11 * 8 + 8 * 4,
+static_assert(sizeof(RasterFwd2dParams) == 11 * 8 + 10 * 4,
               "params layout must match the slang struct");
 
 // Mirrors RasterFwd3dgutParams in shaders/rasterize_fwd.slang.
@@ -152,7 +154,7 @@ launch_raster_2d_fwd(
     const DeviceVector<int32_t>& flatten_ids,
     int macro_log2,
     DistortionType dist_type, bool output_median, bool output_depth,
-    const SplatScoreRender& score) {
+    const SplatScoreRender& score, float kernel_cut) {
     const int64_t batch = tile_offsets.size<0>();
     const uint32_t tile_height = (uint32_t)tile_offsets.size<1>();
     const uint32_t tile_width = (uint32_t)tile_offsets.size<2>();
@@ -183,6 +185,7 @@ launch_raster_2d_fwd(
     p.tile_width = tile_width;
     p.tile_height = tile_height;
     p.macro_log2 = (uint32_t)macro_log2;
+    p.kernel_cut = kernel_cut;
 
     // Spec IDs as in the 3dgut entry; only the score map reads gaussian_ids.
     const bool packed = score.enabled() && gaussian_ids.data_ptr();
@@ -224,7 +227,8 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,
-    SplatScoreRender score
+    SplatScoreRender score,
+    float kernel_cut
 ) {
     // The 2D fragment reads only the screen buffer (as in the CUDA path);
     // num_splats / gaussian_ids reach the kernel for the score map alone.
@@ -232,7 +236,7 @@ std::tuple<
     return launch_raster_2d_fwd(num_splats, gaussian_ids, splats_s, image_width,
                                 image_height, tile_offsets, flatten_ids,
                                 macro_log2, dist_type, output_median,
-                                output_depth, score);
+                                output_depth, score, kernel_cut);
 }
 
 std::tuple<
@@ -254,13 +258,14 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,
-    SplatScoreRender score
+    SplatScoreRender score,
+    float kernel_cut
 ) {
     (void)splats_w;
     return launch_raster_2d_fwd(num_splats, gaussian_ids, splats_s, image_width,
                                 image_height, tile_offsets, flatten_ids,
                                 macro_log2, dist_type, output_median,
-                                output_depth, score);
+                                output_depth, score, kernel_cut);
 }
 
 /* API definition matching kernels/raster/RasterizationEval3DFwd.cuh */

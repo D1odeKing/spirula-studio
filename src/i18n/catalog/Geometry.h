@@ -110,39 +110,39 @@ SS_MSG(opt_image_dir,
 
 SS_MSG(opt_model,
     EN("Which checkpoint to run. A known id is fetched and cached; a path to "
-       "an .onnx file is used as it is. Larger is slower and only somewhat "
-       "better."),
-    JA("使うチェックポイントです。既知の ID は取得してキャッシュし、.onnx への"
-       "パスはそのまま使います。大きいほど遅く、精度の伸びはわずかです。"),
-    ZH_HANS("要运行的权重。已知 id 会自动下载并缓存；给出 .onnx 路径则直接使用。"
+       "an .onnx or .pt file is used as it is. Larger is slower and only "
+       "somewhat better."),
+    JA("使うチェックポイントです。既知の ID は取得してキャッシュし、.onnx や .pt "
+       "へのパスはそのまま使います。大きいほど遅く、精度の伸びはわずかです。"),
+    ZH_HANS("要运行的权重。已知 id 会自动下载并缓存；给出 .onnx 或 .pt 路径则直接使用。"
             "越大越慢，精度提升有限。"),
-    ZH_HANT("要執行的權重。已知 id 會自動下載並快取；給出 .onnx 路徑則直接使用。"
+    ZH_HANT("要執行的權重。已知 id 會自動下載並快取；給出 .onnx 或 .pt 路徑則直接使用。"
             "越大越慢，精度提升有限。"),
-    KO("실행할 체크포인트입니다. 알려진 id 는 받아서 캐시하고, .onnx 경로는 그대로 "
-       "씁니다. 클수록 느리고 정확도 향상은 크지 않습니다."),
+    KO("실행할 체크포인트입니다. 알려진 id 는 받아서 캐시하고, .onnx 나 .pt 경로는 "
+       "그대로 씁니다. 클수록 느리고 정확도 향상은 크지 않습니다."),
     DE("Welche Gewichte laufen sollen. Eine bekannte Kennung wird geholt und "
-       "zwischengespeichert, ein Pfad auf eine .onnx unverändert benutzt. "
+       "zwischengespeichert, ein Pfad auf eine .onnx oder .pt unverändert benutzt. "
        "Größer heißt langsamer und nur etwas besser."),
     FR("Quel jeu de poids exécuter. Un identifiant connu est téléchargé puis "
-       "mis en cache ; un chemin vers un .onnx est utilisé tel quel. Plus gros "
+       "mis en cache ; un chemin vers un .onnx ou un .pt est utilisé tel quel. Plus gros "
        "est plus lent et à peine meilleur."),
     ES("Qué pesos ejecutar. Un identificador conocido se descarga y se guarda "
-       "en caché; una ruta a un .onnx se usa tal cual. Más grande es más lento "
+       "en caché; una ruta a un .onnx o .pt se usa tal cual. Más grande es más lento "
        "y solo algo mejor."),
     PT("Que pesos executar. Um identificador conhecido é obtido e guardado em "
-       "cache; um caminho para um .onnx é usado tal como está. Maior é mais "
+       "cache; um caminho para um .onnx ou .pt é usado tal como está. Maior é mais "
        "lento e só um pouco melhor."),
     IT("Quali pesi eseguire. Un identificatore noto viene scaricato e messo in "
-       "cache; un percorso a un .onnx è usato così com'è. Più grande è più "
+       "cache; un percorso a un .onnx o .pt è usato così com'è. Più grande è più "
        "lento e solo un po' migliore."),
     NL("Welke gewichten draaien. Een bekende id wordt opgehaald en bewaard; "
-       "een pad naar een .onnx wordt gebruikt zoals het is. Groter is trager "
+       "een pad naar een .onnx of .pt wordt gebruikt zoals het is. Groter is trager "
        "en maar iets beter."),
     RU("Какие веса запускать. Известный идентификатор скачивается и "
-       "кэшируется, путь к .onnx берётся как есть. Крупнее — медленнее и лишь "
+       "кэшируется, путь к .onnx или .pt берётся как есть. Крупнее — медленнее и лишь "
        "немного точнее."),
     TR("Hangi ağırlıkların çalışacağı. Bilinen bir kimlik indirilip "
-       "önbelleğe alınır; bir .onnx yolu olduğu gibi kullanılır. Büyüğü daha "
+       "önbelleğe alınır; bir .onnx veya .pt yolu olduğu gibi kullanılır. Büyüğü daha "
        "yavaştır ve yalnızca biraz daha iyidir."));
 
 SS_MSG(opt_max_size,

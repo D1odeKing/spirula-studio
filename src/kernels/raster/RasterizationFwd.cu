@@ -28,7 +28,8 @@ void rasterize_to_pixels_fwd_kernel_wrapper(
     int32_t *__restrict__ last_ids,        // [I, image_height, image_width]
     RenderOutput::Buffer render_distortions, // [I, image_height, image_width, ...]
     float *__restrict__ render_median, // [I, image_height, image_width, 1], optional
-    const SplatScoreRender score
+    const SplatScoreRender score,
+    const float kernel_cut
 );
 
 template <typename SplatPrimitive, DistortionType dist_type, bool output_median,
@@ -52,7 +53,8 @@ inline void launch_rasterize_to_pixels_fwd_kernel(
     DeviceTensor3D<int32_t> last_ids,
     RenderOutput::Tensor distortions,
     DeviceTensor3D<float> render_median,
-    const SplatScoreRender& score
+    const SplatScoreRender& score,
+    float kernel_cut
 ) {
     // splats_w.size() returns max_num_splats (pre-allocated); the projection
     // layout uses cur_num_splats per camera stride. See RasterizationBwd.cu
@@ -81,7 +83,7 @@ inline void launch_rasterize_to_pixels_fwd_kernel(
         last_ids.data_ptr(),
         dist_any(dist_type) ? distortions.buffer() : RenderOutput::Buffer(),
         output_median ? render_median.data_ptr() : nullptr,
-        score
+        score, kernel_cut
     );
     CHECK_DEVICE_ERROR(cudaGetLastError());
 }
@@ -109,7 +111,8 @@ inline std::tuple<
     const DeviceVector<int32_t> flatten_ids,    // [n_isects]
     int macro_log2,                             // binning granularity
     bool output_depth,
-    const SplatScoreRender& score
+    const SplatScoreRender& score,
+    float kernel_cut
 ) {
     int64_t batch = tile_offsets.size<0>();
 
@@ -144,7 +147,7 @@ inline std::tuple<
         render_last_ids,
         distortions,
         render_median,
-        score
+        score, kernel_cut
     );
 
     return std::make_tuple(
@@ -174,7 +177,8 @@ static std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,
-    const SplatScoreRender& score
+    const SplatScoreRender& score,
+    float kernel_cut
 ) {
 #define _F(DT, M, S) rasterize_to_pixels_fwd_tensor<Vanilla3DGS<0>, DT, M, S>
 #define _DISPATCH_FWD(DT) (output_median \
@@ -191,7 +195,7 @@ static std::tuple<
         num_splats,
         splats_w, splats_s, gaussian_ids,
         image_width, image_height,
-        tile_offsets, flatten_ids, macro_log2, output_depth, score
+        tile_offsets, flatten_ids, macro_log2, output_depth, score, kernel_cut
     );
 }
 
@@ -223,12 +227,14 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,            // false: nothing reads the depth, leave it out
-    SplatScoreRender score
+    SplatScoreRender score,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut
 ) {
     return rasterize_to_pixels_2d_fwd(
         num_splats, splats_w, splats_s, gaussian_ids, image_width, image_height,
         tile_offsets, flatten_ids, macro_log2, dist_type, output_median,
-        output_depth, score);
+        output_depth, score, kernel_cut);
 }
 
 
@@ -260,10 +266,12 @@ std::tuple<
     DistortionType dist_type,
     bool output_median,
     bool output_depth,            // false: nothing reads the depth, leave it out
-    SplatScoreRender score
+    SplatScoreRender score,
+    // Primitive3DGS::kernel_vis: > 0 cut and renormalized, 0 the full gaussian
+    float kernel_cut
 ) {
     return rasterize_to_pixels_2d_fwd(
         num_splats, splats_w, splats_s, gaussian_ids, image_width, image_height,
         tile_offsets, flatten_ids, macro_log2, dist_type, output_median,
-        output_depth, score);
+        output_depth, score, kernel_cut);
 }

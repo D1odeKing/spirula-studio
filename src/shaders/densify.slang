@@ -41,11 +41,13 @@ void mcmc_add_noise_3dgs(
     mean += mul(covar, noise);  // unit: L (same as mean)
 }
 
+// gate_opac caps the opacity the noise gate sees: a splat's peak alpha * T when tracked, else 1
 [CudaDeviceExport]
 void revised_add_noise_3dgs(
     float scaler,  // unit: dimensionless, same as mean_lr
     float radii,
-    inout float3 mean, float3 log_scale, float4 quat, float logit_opac
+    inout float3 mean, float3 log_scale, float4 quat, float logit_opac,
+    float gate_opac
 ) {
     // Intuition:
     // - mean_lr should be dimensionless, noise should have same unit as mean
@@ -71,7 +73,7 @@ void revised_add_noise_3dgs(
     quat_scale_to_covar(normalize(quat), sqrt(scale), sqrt_covar);  // unit: L
 
     constexpr float typical_scale = 0.05;  // typical scale for Mip-NeRF 360 divided by fraction of visible Gaussians
-    float op_pow = pow(1.0f - opac, 150.0f);
+    float op_pow = pow(1.0f - min(opac, gate_opac), 150.0f);
     float extend = sqrt(2.0f * log(max(255.0f*opac, 1.0f)));
     float noise_lr = min(typical_scale * scaler * extend * op_pow, 1.0f);  // unit: dimensionless
 
