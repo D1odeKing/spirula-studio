@@ -75,6 +75,7 @@ void EditSession::open(std::unique_ptr<EditDoc> doc, ViewportPanel* panel) {
     if (_doc) _doc->mark_geometry_dirty();
     _seen_placement = Sim3();
     _seen_head = 0;
+    marker_reload();
     push_placement();
 }
 
@@ -83,10 +84,18 @@ void EditSession::close() {
     if (_comp_worker.joinable()) _comp_worker.join();
     if (_save_worker.joinable()) _save_worker.join();
     if (_attr_worker.joinable()) _attr_worker.join();
+    if (_marker_worker.joinable()) _marker_worker.join();
     _cancel = false;
     _comp_busy = false;
     _save_busy = false;
     _attr_busy = false;
+    _marker_busy = false;
+    _markers.clear();
+    _markers_file.clear();
+    _marker_dataset = {};
+    _marker_status.clear();
+    _marker_status_err = false;
+    _marker_origin = _marker_xaxis = _marker_xyplane = -1;
     _attr_job_axis = -1;
     _comp = Components{};
     _pending.reset();
@@ -261,6 +270,7 @@ void EditSession::draw_viewport_overlay(const ViewportOverlay& v) {
     const ImVec2 origin(v.x, v.y);
     XformFrame f;
     const bool have = xform_frame(f);
+    if (have && _marker_show && _tab == 1) draw_marker_overlay(v, f.cam);
     if (have && v.grid && draws_world_grid()) {
         float target[3] = {0, 0, 0};
         if (_panel) _panel->nav_target(target);
@@ -629,6 +639,7 @@ void EditSession::poll() {
         _cancel = false;
     }
     if (!_save_busy.load() && _save_worker.joinable()) take_save_result();
+    if (!_marker_busy.load() && _marker_worker.joinable()) take_marker_result();
     if (busy()) {
         if (_panel) _panel->invalidate();
         return;
