@@ -25,7 +25,6 @@ find_package(Threads REQUIRED)
 
 include(SsSlang)
 ss_find_slangc(SS_NN_SLANGC)
-ss_build_spirv_tool(SS_NN_SPIRV_TOOL)
 
 set(SS_NN_SHADER_ROOT ${SS_SRC}/nn/shaders)
 
@@ -83,17 +82,10 @@ function(ss_nn_shaders tag shader_dir out_embed_cpp)
     list(LENGTH _blobs _n)
     message(STATUS "Inference SPIR-V (${tag}): ${_n} modules")
 
-    set(_listfile ${_spv_dir}/blobs.txt)
-    string(REPLACE ";" "\n" _listbody "${_blobs}")
-    ss_write_if_different(${_listfile} "${_listbody}\n")
-
     set(_embed ${CMAKE_CURRENT_BINARY_DIR}/nn_shaders_${tag}.cpp)
-    add_custom_command(OUTPUT ${_embed}
-        COMMAND ${SS_NN_SPIRV_TOOL} embed --nn ${tag} ${_embed}
-                --list ${_listfile}
-        DEPENDS ${SS_NN_SPIRV_TOOL} ${_blobs} ${_listfile}
-        COMMENT "Embedding SPIR-V (${tag}: ${_n} modules)"
-        VERBATIM)
+    ss_embed_spirv(${_embed} ${_spv_dir}/blobs.txt
+        "Embedding SPIR-V (${tag}: ${_n} modules)"
+        BLOBS ${_blobs} FLAGS --nn ${tag})
 
     set(${out_embed_cpp} ${_embed} PARENT_SCOPE)
 endfunction()
@@ -228,7 +220,7 @@ target_compile_options(ss_metric3d PRIVATE
 set_property(TARGET ss_metric3d PROPERTY CXX_STANDARD 17)
 
 # ---------------------------------------------------------------------------
-# ss_moge -- MoGe-2 monocular point maps, normals and a validity mask
+# ss_moge -- MoGe-2 / MoGe-3 monocular point maps, normals and a validity mask
 #
 # The only one of these libraries with NO shaders of its own, hence no
 # ss_nn_shaders() edge: the ops it needed were general and went into nn/.

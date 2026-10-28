@@ -199,6 +199,7 @@ void SfmRunner::start(const SfmJob& job, RunFilms films) {
     _have_status = false;
     _progressive_label.clear();
     _status_mtime = 0;
+    _map_work = MappingWork(job.mapper == 1);
     _films = films;
     _prog.reset();
     if (_films.frames) _films.frames->clear();
@@ -383,9 +384,12 @@ void SfmRunner::log(const std::string& line, bool detail) {
     _prog.note(line, detail);
 }
 
-void SfmRunner::set_stage_if_new(Stage st, const char* s) {
-    if (_prog.current() == st && _prog.stage(st).detail == s) return;
-    set_stage(st, s);
+void SfmRunner::set_stage_if_new(Stage st, const char* s, bool relabel) {
+    const bool same_stage = _prog.current() == st;
+    if (same_stage && _prog.stage(st).detail == s) return;
+    if (!same_stage || !relabel) return set_stage(st, s);
+    _prog.detail(st, s);
+    log(std::string("==== ") + s + " ====", /*detail=*/false);
 }
 
 void SfmRunner::set_stage(Stage st, const std::string& s) {
@@ -410,9 +414,9 @@ void SfmRunner::apply_status(const RunStatus& st) {
     switch (st.stage) {
         case 0: set_stage_if_new(Stage::Features, lmsg::stage_finding_features.get());
                 _prog.count(Stage::Features, st.done, st.total); break;
-        // Reading the feature files and choosing which pairs to match are both
-        // matching, and both used to leave the screen on a full features bar
-        // with nothing moving -- minutes of it with a learned frontend.
+        // Reading the features and choosing pairs are matching too -- minutes
+        // with a learned frontend. Each phase counts something different, so
+        // each is a bar of its own.
         case 6: set_stage_if_new(Stage::Matching, lmsg::stage_reading_features.get());
                 _prog.count(Stage::Matching, st.done, st.total); break;
         case 7: set_stage_if_new(Stage::Matching, lmsg::stage_selecting_pairs.get());
@@ -421,38 +425,31 @@ void SfmRunner::apply_status(const RunStatus& st) {
                  _prog.count(Stage::Matching, st.done, st.total); break;
         case 1: set_stage_if_new(Stage::Matching, lmsg::stage_matching_images.get());
                 _prog.count(Stage::Matching, st.done, st.total); break;
-        // Inside progressive alignment every attempt registers the images again;
-        // the attempt is what the label and the bar follow, not each image.
-        case 2: case 3: case 4: case 8:
-                if (!_progressive_label.empty()) {
-                    set_stage_if_new(Stage::Mapping, _progressive_label.c_str());
-                    break;
-                }
-                if (st.stage == 8) {
-                    set_stage_if_new(Stage::Mapping, lmsg::stage_seeding.get());
-                    _prog.fraction(Stage::Mapping, 0.0f);
-                    break;
-                }
-                set_stage_if_new(Stage::Mapping, lmsg::stage_reconstructing.get());
-                _prog.count(Stage::Mapping, st.done, st.total);
-                _prog.fraction(Stage::Mapping, mapping_fraction(st.done, st.total));
-                break;
-        // Two stretches of the mapping step place no image, so the bar has
-        // nothing to say and the label has to: choosing a focal and a seed
-        // before the first (8, above), and the finishing solves after the last.
-        case 9: _progressive_label.clear();
-                set_stage_if_new(Stage::Mapping, lmsg::stage_refining.get());
-                _prog.fraction(Stage::Mapping, kMappingBarFull);
-                break;
+        // One bar over the whole step, whatever it is doing: a seed retry comes
+        // back to seeding mid-run, and the finishing solves place no image.
+        case 2: case 3: case 4: case 8: case 9: {
+            // Inside progressive alignment the attempt (11) drives label and bar.
+            if (st.stage == 9) _progressive_label.clear();
+            if (!_progressive_label.empty()) break;
+            if (st.stage == 2) _map_work.placed(st.done, st.total);
+            if (st.stage == 3) _map_work.levels(st.done, st.total);
+            if (st.stage == 9) _map_work.refining();
+            set_stage_if_new(Stage::Mapping,
+                             st.stage == 8   ? lmsg::stage_seeding.get()
+                             : st.stage == 9 ? lmsg::stage_refining.get()
+                                             : lmsg::stage_reconstructing.get(),
+                             /*relabel=*/true);
+            if (_map_work.work() > 0.0) _prog.fraction(Stage::Mapping, (float)_map_work.work());
+            break;
+        }
         // Every attempt places the images again, so the bar counts attempts.
         // Each step begins the stage over, at 0, an instant before its count.
         case 11: if (st.done <= 0) break;
                  _progressive_label =
                      format(lmsg::stage_progressive, {(long long)st.done, (long long)st.total});
-                 set_stage_if_new(Stage::Mapping, _progressive_label.c_str());
-                 if (st.total > 0)
-                     _prog.fraction(Stage::Mapping,
-                                    kMappingBarFull * (float)st.done / (float)st.total);
+                 set_stage_if_new(Stage::Mapping, _progressive_label.c_str(), /*relabel=*/true);
+                 _map_work.placed(st.done, st.total);
+                 _prog.fraction(Stage::Mapping, (float)_map_work.work());
                  break;
         default: break;
     }

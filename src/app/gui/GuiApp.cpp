@@ -32,6 +32,8 @@
 #include "app/gui/ViewBookmarks.h"
 #include "mesh/MeshImport.h"
 #include "app/gui/Ui.h"
+#include "app/gui/ProgressView.h"
+#include "app/gui/SfmInProcess.h"
 #include "app/gui/VramForecastView.h"
 #include "i18n/TimeFormat.h"
 #include "checkpoint/Resume.h"
@@ -102,7 +104,7 @@ namespace rmsg = spirula::i18n::msg::render;
 namespace mmsg = spirula::i18n::msg::maskedit;
 namespace svmsg = spirula::i18n::msg::preview;
 using spirula::i18n::Msg;
-using spirula::format_duration;
+using spirula::i18n::format_duration_coarse;
 
 namespace gui {
 
@@ -1737,6 +1739,8 @@ void GuiApp::start_batch(bool skip_invalid) {
     _batch_active = true;
     _batch_launched = false;
     _batch_current = -1;
+    _batch_queue_clock.start(progress_now());
+    _batch_clock_task = -1;
     _batch_stop_after = false;
     _batch_stop_now = false;
     int todo = 0;
@@ -3569,6 +3573,7 @@ void GuiApp::draw_menu_bar() {
     if (ui::BeginMenu(msg::menu_help)) {
         if (ui::BeginMenu(msg::menu_about)) {
             ui::Text(spirula::i18n::msg::brand::product);
+            ui::Text(msg::about_version, {SS_VERSION});
             ui::TextDisabled(spirula::i18n::msg::brand::about_line);
             ui::TextDisabledRaw("github.com/harry7557558/spirulae-splat");
             ImGui::EndMenu();
@@ -3618,8 +3623,7 @@ void GuiApp::draw_language_menu() {
         if (!FontSet::fetch_enabled()) {
             ui::TextDisabled(msg::font_no_fetch);
         } else if (_font_download.state() == FileDownload::State::Running) {
-            ui::ProgressBar(std::max(_font_download.progress(), 0.0f),
-                            ImVec2(340, 0), msg::font_downloading);
+            download_bar(_font_download, msg::font_downloading.get());
         } else {
             if (ui::Button(msg::font_download, ImVec2(340, 0))) {
                 _font_fetching = f;
@@ -4169,8 +4173,7 @@ void GuiApp::draw_model_fetch(FileDownload& dl, const Msg& missing, const Msg& g
     ui::TextDisabled(missing);
     ImGui::SameLine();
     if (dl.state() == FileDownload::State::Running)
-        ui::ProgressBarRaw(std::max(dl.progress(), 0.0f), ImVec2(px(200.0f), 0),
-                           dl.status().c_str());
+        download_bar(dl, dl.status());
     else if (ui::Button(get))
         request();
     if (!_license_notice.empty()) {
@@ -6167,8 +6170,7 @@ void GuiApp::draw_geometry_options() {
     FileDownload& geom_dl = _geom_download.current();
     if (_geom_download.running()) {
         // The overlay is a byte count from curl, not a sentence.
-        ui::ProgressBarRaw(std::max(geom_dl.progress(), 0.0f),
-                           ImVec2(px(260.0f), 0), geom_dl.status().c_str());
+        download_bar(geom_dl, geom_dl.status());
         ImGui::SameLine();
         // The mask download's Stop button carries the same message; two of
         // them can be on screen at once, so this one needs its own ID.
@@ -6334,14 +6336,15 @@ void draw_run_steps(const RunProgress& prog, const std::vector<RunStep>& steps) 
     }
 
     // A step that can say how far through it is gets a bar; one that cannot
-    // (the mapper counts registrations, not a total) gets its own sentence.
+    // gets its own sentence. Either way the time it has taken is shown.
     if (any) {
         const StageProgress p = prog.stage(running);
-        if (p.fraction >= 0.0f)
-            ui::ProgressBarRaw(p.fraction, ImVec2(-1, 0),
-                               p.detail.empty() ? nullptr : p.detail.c_str());
-        else if (!p.detail.empty())
-            ui::TextDisabledRaw(p.detail);
+        if (p.fraction >= 0.0f) {
+            timed_progress_bar(p.clock, p.detail.empty() ? nullptr : p.detail.c_str());
+        } else {
+            if (!p.detail.empty()) ui::TextDisabledRaw(p.detail);
+            progress_time_line(p.clock);
+        }
     }
 }
 
@@ -7348,6 +7351,7 @@ void GuiApp::draw_dataset_preview(float height) {
     for (bool v : avail) any_avail = any_avail || v;
     if (!any_avail && _dense_preview_error.empty() && !_dense_live) return;
 
+    ImGui::SameLine();
     if (ui::Checkbox(dmsg::show_run_preview, &_show_preview)) {
         _dense_polled_at = -1.0;
         _dense_refresh_seconds = 0.5;
@@ -8482,8 +8486,7 @@ void GuiApp::request_feature_download() {
 void GuiApp::draw_feature_download() {
     FileDownload& dl = _feat_download.current();
     if (_feat_download.running()) {
-        ui::ProgressBarRaw(std::max(dl.progress(), 0.0f), ImVec2(px(260.0f), 0),
-                           dl.status().c_str());
+        download_bar(dl, dl.status());
         ImGui::SameLine();
         ImGui::PushID("featdl");
         if (ui::Button(dmsg::stop)) _feat_download.cancel();
@@ -9129,20 +9132,29 @@ void GuiApp::draw_new_dataset() {
     // one column or two.
     poll_sfm_progress();
     poll_dense_progress();
-    const bool dense_running = running && dataset_steps()->current() == Stage::Dense && !_workspace.empty();
-    if (dense_running && !_dense_memory_active) {
-        _dense_memory.reset(); _dense_eta.reset();
-        _dense_started_at = ImGui::GetTime();
+    // The memory of the steps that can run out of it -- mapping and dense --
+    // sits in a strip above the log, where training keeps its status.
+    const Stage step = dataset_steps()->current();
+    const bool builtin = effective_engine() == Engine::BuiltIn;
+    const Stage memory_step = !running ? Stage::Frames
+                            : step == Stage::Dense && !_workspace.empty() ? Stage::Dense
+                            : step == Stage::Mapping && builtin ? Stage::Mapping
+                                                                : Stage::Frames;
+    if (memory_step != _run_memory_step) _run_memory.reset();
+    _run_memory_step = memory_step;
+    if (memory_step == Stage::Dense) {
+        _run_memory.poll_report(spirula::dense::progress_dir(_workspace).string());
+    } else if (memory_step == Stage::Mapping) {
+        const double work = std::max(0.0f, dataset_steps()->stage(Stage::Mapping).fraction);
+        if (_sfm_job.subprocess)
+            _run_memory.poll_report(_sfm.progress_dir(), work);
+        else
+            _run_memory.poll_self(work, [](spirula::RunReporter::Device& d) {
+                return sfm_device_memory(d.ours, d.others, d.capacity);
+            });
     }
-    _dense_memory_active = dense_running;
-    if (dense_running) {
-        _dense_memory.poll(spirula::dense::progress_dir(_workspace).string());
-        const StageProgress p = dataset_steps()->stage(Stage::Dense);
-        if (p.total > 0) _dense_eta.update(ImGui::GetTime(), p.done, p.total);
-    }
-    // The dense step's timing and memory sit in a strip above the log, where training keeps its status.
-    const bool dense_strip = dense_running;
-    const float strip_h = dense_strip ? ImGui::GetTextLineHeightWithSpacing() + px(6.0f) : 0.0f;
+    const bool memory_strip = memory_step != Stage::Frames;
+    const float strip_h = memory_strip ? ImGui::GetTextLineHeightWithSpacing() + px(6.0f) : 0.0f;
 
     // The log spans the bottom whatever the body does above it: it is the one
     // panel that is read across everything, and it is what a run used to be
@@ -9187,17 +9199,12 @@ void GuiApp::draw_new_dataset() {
     }
     ImGui::EndChild();
 
-    if (dense_strip) {
+    if (memory_strip) {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + px(3.0f));
         const float x0 = ImGui::GetCursorPosX(), avail = ImGui::GetContentRegionAvail().x;
-        ui::TextDisabled(spirula::i18n::msg::dense::stage_time,
-                         {spirula::i18n::format_duration_coarse(ImGui::GetTime() - _dense_started_at),
-                          spirula::i18n::format_duration_coarse(_dense_eta.seconds())});
-        ui::help_on_hover(spirula::i18n::msg::dense::stage_time_help);
-        if (_dense_memory.visible()) {
-            ImGui::SameLine();
-            _dense_memory.draw(x0, avail);
-        }
+        _run_memory.draw(memory_step == Stage::Dense ? spirula::i18n::msg::dense::memory_help
+                                                     : msg::sfm_memory_help,
+                         x0, avail);
     }
     draw_log_panel(log_h);
 
@@ -9789,9 +9796,13 @@ void GuiApp::draw_mesh() {
     ui::Text(msg::mesh_title);
 
     const bool running = _mesh.busy();
-    const float log_h = log_height(ImGui::GetContentRegionAvail().y);
+    _mesh.poll();
+    // The run's memory sits in a strip above the log, as on the dataset screen.
+    const bool memory_strip = running && _mesh.memory().visible();
+    const float strip_h = memory_strip ? ImGui::GetTextLineHeightWithSpacing() + px(6.0f) : 0.0f;
+    const float log_h = log_height(ImGui::GetContentRegionAvail().y - strip_h);
 
-    ImGui::BeginChild("##meshbody", ImVec2(0, body_height(log_h)));
+    ImGui::BeginChild("##meshbody", ImVec2(0, body_height(log_h) - strip_h));
 
     if (_mesh_preview_open) {
         // ---- results ----
@@ -9845,10 +9856,8 @@ void GuiApp::draw_mesh() {
 
         ImGui::Spacing();
         if (running) {
-            const float p = _mesh.progress();
-            ui::ProgressBar(p >= 0 ? p : 0.0f, ImVec2(-1, 0), msg::mesh_running);
             const std::string st = _mesh.stage();
-            if (!st.empty()) ui::TextDisabledRaw(st);
+            timed_progress_bar(_mesh.clock(), st.empty() ? msg::mesh_running.get() : st.c_str());
             if (ui::Button(msg::mesh_cancel)) {
                 if (_batch_active) _batch_stop_after = _batch_stop_now = true;
                 _mesh.cancel();
@@ -9871,6 +9880,11 @@ void GuiApp::draw_mesh() {
         }
     }
     ImGui::EndChild();
+    if (memory_strip) {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + px(3.0f));
+        const float x0 = ImGui::GetCursorPosX(), avail = ImGui::GetContentRegionAvail().x;
+        _mesh.memory().draw(msg::mesh_memory_help, x0, avail);
+    }
     draw_log_panel(log_h);
 }
 
@@ -11036,13 +11050,13 @@ float GuiApp::batch_task_fraction() {
             const float inner = sp.fraction >= 0.0f ? sp.fraction : 0.5f;
             return std::min(1.0f, ((float)at + inner) / (float)kNumStages);
         }
-        case BatchStage::Train: {
-            const spirula::TrainerProgress pr = _runner.latest_progress();
-            if (pr.total_steps <= 0) return -1.0f;
-            return std::min(1.0f, (float)(pr.step + 1) / (float)pr.total_steps);
-        }
+        case BatchStage::Train:
+            tick_train_clock();
+            return _train_clock.started() ? _train_clock.fraction() : -1.0f;
         case BatchStage::Merge: return 0.5f;
-        case BatchStage::Mesh: return _mesh.progress();
+        case BatchStage::Mesh:
+            _mesh.poll();
+            return _mesh.clock().started() ? _mesh.clock().fraction() : -1.0f;
     }
     return -1.0f;
 }
@@ -11094,13 +11108,19 @@ void GuiApp::draw_batch_progress() {
     const double elapsed = batch_task_elapsed();
     const BatchProgress p =
         batch_progress(_batch_tasks, _batch_current, frac, elapsed);
+    const double now = progress_now();
+    if (!_batch_queue_clock.started()) _batch_queue_clock.start(now);
+    _batch_queue_clock.work(now, p.total > 0 ? (double)p.done / (double)p.total : 0.0,
+                            p.remaining);
+    if (_batch_clock_task != _batch_current) {
+        _batch_task_clock.start(now - elapsed);
+        _batch_clock_task = _batch_current;
+    }
+    if (frac >= 0.0f) _batch_task_clock.work(now, frac, p.task_remaining);
 
     ui::Text(msg::batch_running_banner,
              {(long long)(_batch_current + 1), (long long)_batch_tasks.size()});
-    ui::ProgressBarRaw(p.total > 0 ? (float)p.done / (float)p.total : 0.0f,
-                       ImVec2(-8, 0), nullptr);
-    ui::TextDisabled(msg::batch_eta_total,
-                     {spirula::i18n::format_duration_coarse(p.remaining)});
+    timed_progress_bar(_batch_queue_clock, nullptr, -8);
 
     if (_batch_current >= 0 && _batch_current < (int)_batch_tasks.size()) {
         const BatchTask& t = _batch_tasks[(size_t)_batch_current];
@@ -11111,10 +11131,7 @@ void GuiApp::draw_batch_progress() {
             if (!what.empty()) ui::TextDisabledRaw(what);
         }
         ImGui::PopTextWrapPos();
-        ui::ProgressBarRaw(frac >= 0.0f ? frac : 0.0f, ImVec2(-8, 0), nullptr);
-        ui::TextDisabled(msg::batch_eta_task,
-                         {spirula::i18n::format_duration_coarse(elapsed),
-                          spirula::i18n::format_duration_coarse(p.task_remaining)});
+        timed_progress_bar(_batch_task_clock, nullptr, -8);
     }
     if (_batch_stop_after) ui::TextColored(kWarn, msg::batch_stopping);
 
@@ -12178,6 +12195,23 @@ void GuiApp::draw_metrics() {
                     {format_count(last.num_splats), line, loss});
 }
 
+// The bar is the trainer's own time forecast, so a run whose steps get dearer
+// as the model grows does not crawl through its last half.
+void GuiApp::tick_train_clock() {
+    const TrainRunner::Phase ph = _runner.phase();
+    const spirula::TrainerProgress p = _runner.latest_progress();
+    const double now = progress_now();
+    if (ph == TrainRunner::Phase::Training && p.total_steps > 0) {
+        const double elapsed = _runner.elapsed_seconds();
+        if (!_train_clock.started() || elapsed + 1.0 < _train_clock.elapsed(now))
+            _train_clock.start(now - elapsed);
+        _train_clock.work(now, (double)(p.step + 1) / (double)p.total_steps,
+                          _runner.eta_seconds());
+    } else if (ph == TrainRunner::Phase::Done && _train_clock.started()) {
+        _train_clock.finish(now);
+    }
+}
+
 void GuiApp::draw_status_strip() {
     // Strip content region, captured before any widget consumes it -- used to
     // right-align the VRAM readout on the second (text) row.
@@ -12186,21 +12220,23 @@ void GuiApp::draw_status_strip() {
 
     TrainRunner::Phase ph = _runner.phase();
     spirula::TrainerProgress p = _runner.latest_progress();
+    const double now = progress_now();
+    if (ph != TrainRunner::Phase::Evaluating) _eval_clock = ProgressClock{};
+    tick_train_clock();
     if (ph == TrainRunner::Phase::Training && p.total_steps > 0) {
-        float frac = (float)(p.step + 1) / (float)p.total_steps;
-        ui::ProgressBar(frac, ImVec2(-8, 0), msg::status_step,
-                        {p.step + 1, p.total_steps, (int)(frac * 100.0f)});
+        ui::ProgressBar(_train_clock.fraction(), ImVec2(-8, 0), msg::status_step,
+                        {p.step + 1, p.total_steps, (int)(_train_clock.fraction() * 100.0f)});
         const double avg = _runner.avg_step_latency();
         char ms[32];
         std::snprintf(ms, sizeof ms, "%.0f",
                       (avg >= 0.0 ? avg : p.step_latency) * 1000.0);
         ui::Text(_runner.paused() ? msg::status_rate_paused : msg::status_rate,
-                 {ms, format_duration(_runner.elapsed_seconds()),
-                  format_duration(_runner.eta_seconds()),
+                 {ms, format_duration_coarse(_train_clock.elapsed(now)),
+                  format_duration_coarse(_train_clock.remaining(now)),
                   format_count((double)p.num_splats)});
     } else if (ph == TrainRunner::Phase::Done && p.total_steps > 0) {
         ui::ProgressBar(1.0f, ImVec2(-8, 0), msg::status_done_steps,
-                        {p.step + 1, format_duration(_runner.elapsed_seconds())});
+                        {p.step + 1, format_duration_coarse(_runner.elapsed_seconds())});
         ui::TextDisabled(msg::status_explore);
     } else if (ph == TrainRunner::Phase::Preparing) {
         const std::string fetching = _runner.fetch_line();
@@ -12213,16 +12249,16 @@ void GuiApp::draw_status_strip() {
         ui::TextDisabledRaw(" ");
     } else if (ph == TrainRunner::Phase::Evaluating) {
         const spirula::EvalProgress p = _runner.latest_eval_progress();
+        if (!_eval_clock.started()) _eval_clock.start(now);
         if (p.total > 0) {
-            const float frac = std::clamp((float)p.completed / (float)p.total,
-                                          0.0f, 1.0f);
-            ui::ProgressBar(frac, ImVec2(-8, 0), msg::status_eval_views,
-                            {p.completed, p.total, (int)(frac * 100.0f)});
+            _eval_clock.work(now, std::clamp((double)p.completed / (double)p.total, 0.0, 1.0));
+            ui::ProgressBar(_eval_clock.fraction(), ImVec2(-8, 0), msg::status_eval_views,
+                            {p.completed, p.total, (int)(_eval_clock.fraction() * 100.0f)});
         } else {
             ui::ProgressBar(-(float)ImGui::GetTime(), ImVec2(-8, 0),
                             msg::status_evaluating);
         }
-        ui::TextDisabledRaw(" ");
+        progress_time_line(_eval_clock);
     } else if (ph == TrainRunner::Phase::Ready) {
         ui::ProgressBar(0.0f, ImVec2(-8, 0), msg::status_ready);
         ui::TextDisabled(msg::status_ready_hint);

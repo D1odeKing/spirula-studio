@@ -4,6 +4,7 @@
 
 #include "app/gui/Layout.h"
 #include "app/gui/ModelCache.h"
+#include "app/gui/ProgressView.h"
 #include "app/gui/Ui.h"
 #include "i18n/catalog/Dataset.h"
 
@@ -347,8 +348,7 @@ void draw_mask_model_picker(std::string& model_id, std::string* detector_id,
             break;
         case PickerRow::Downloading:
             // The overlay is a byte count from curl, not a sentence.
-            ui::ProgressBarRaw(std::max(download.progress(), 0.0f), ImVec2(260, 0),
-                               download.status().c_str());
+            download_bar(download, download.status());
             ImGui::SameLine();
             if (ui::Button(dmsg::stop)) download.cancel();
             break;

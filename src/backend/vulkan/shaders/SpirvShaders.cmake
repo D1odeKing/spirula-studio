@@ -115,15 +115,6 @@ function(ss_setup_spirv shared_dir vk_dir slangc spirv_dir embed_cpp debug)
     list(LENGTH blob_outputs blob_count)
     message(STATUS "SPIR-V: ${blob_count} blobs to compile (per-blob, -j aware)")
 
-    # List file for the embed step (avoids a very long command line).
-    set(listfile ${spirv_dir}/blobs.txt)
-    string(REPLACE ";" "\n" listfile_body "${blob_outputs}")
-    ss_write_if_different(${listfile} "${listfile_body}\n")
-
-    add_custom_command(
-        OUTPUT ${embed_cpp}
-        COMMAND ${tool_exe} embed ${embed_cpp} --list ${listfile}
-        DEPENDS ${tool_exe} ${blob_outputs}
-        COMMENT "Embedding SPIR-V (${blob_count} blobs)"
-        VERBATIM)
+    ss_embed_spirv(${embed_cpp} ${spirv_dir}/blobs.txt
+        "Embedding SPIR-V (${blob_count} blobs)" BLOBS ${blob_outputs})
 endfunction()

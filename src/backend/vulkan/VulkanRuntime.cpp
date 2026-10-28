@@ -1001,9 +1001,13 @@ void event_destroy(Event* event) {
 
 float event_elapsed_ms(Event* start, Event* end) {
     vk::Context& ctx = vk::Context::get();
-    if (!start || !end || start->slot < 0 || end->slot < 0) {
-        vk::set_error("event_elapsed_ms: events not created with timing "
-                      "or timestamps unsupported", VK_SUCCESS);
+    if (!start || !end || !start->timing || !end->timing) {
+        vk::set_error("event_elapsed_ms: events not created with timing", VK_SUCCESS);
+        return 0.0f;
+    }
+    if (!ctx.caps().timestamps) return 0.0f;  // Optional timing must not fail training.
+    if (start->slot < 0 || end->slot < 0) {
+        vk::set_error("event_elapsed_ms: timestamp query slots unavailable", VK_SUCCESS);
         return 0.0f;
     }
     uint64_t ts[2] = {0, 0};

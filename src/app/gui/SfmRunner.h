@@ -319,9 +319,9 @@ private:
     void take_dense(SfmJob& job);
     void log(const std::string& line, bool detail = true);
     void set_stage(Stage st, const std::string& s);
-    // Stage changes driven by the child's output, which repeats a
-    // stage's lines many times over.
-    void set_stage_if_new(Stage st, const char* s);
+    // Stage changes driven by the child's output, which repeats a stage's
+    // lines many times over. `relabel` keeps the running step's bar.
+    void set_stage_if_new(Stage st, const char* s, bool relabel = false);
     // Where the run is: polled from the child's status.bin, or handed over
     // by the in-process run. apply_status is what both feed.
     void poll_status();
@@ -346,6 +346,7 @@ private:
     bool _have_status = false;
     std::string _progressive_label;   // set while progressive attempts run
     int64_t _status_mtime = 0;
+    MappingWork _map_work;
     RunProgress _prog;
     RunFilms _films;
     std::mutex _mu;

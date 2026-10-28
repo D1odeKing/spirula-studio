@@ -22,6 +22,28 @@ const int kSsimTile = 16;
 // per load from the params instead, the formats cost ssim_bwd_inplace ~55%.
 [SpecializationConstant]
 const int kSsimFmts = 0;
+// SsimLossMapMode. The kSsim* flags stay in the params: specializing them
+// changes NVIDIA's float codegen, so the outputs stop matching bit for bit.
+[SpecializationConstant]
+const int kSsimMode = 0;
+// Blur-tolerant SSIM's blur radius and taps by |offset| (floats bit-cast by
+// the host); a few values per run, one per loss scale.
+[SpecializationConstant]
+const int kBtR = 6;
+[SpecializationConstant]
+const float kBtW0 = 0.0f;
+[SpecializationConstant]
+const float kBtW1 = 0.0f;
+[SpecializationConstant]
+const float kBtW2 = 0.0f;
+[SpecializationConstant]
+const float kBtW3 = 0.0f;
+[SpecializationConstant]
+const float kBtW4 = 0.0f;
+[SpecializationConstant]
+const float kBtW5 = 0.0f;
+[SpecializationConstant]
+const float kBtW6 = 0.0f;
 
 static const int BX = kSsimTile;
 static const int BY = kSsimTile;
@@ -62,8 +84,7 @@ struct SsimParams {
     float dL_dmap;
     float map_weight;
     float sat;        // clip threshold, or <= 0 to disable
-    int mode;         // SsimLossMapMode: 0 skip, 1 LCS, 2 CS, 3 structure
-    uint flags;
+    uint flags;       // kSsim* bits
 };
 
 [ForceInline]
@@ -202,7 +223,7 @@ void ssim_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
     const int startX = int(wg.x) * BX;
     const int num_pix = p.H * p.W;
 
-    const bool lm_active = p.mode != 0 && (p.flags & kSsimHasLossMap) != 0;
+    const bool lm_active = kSsimMode != 0 && (p.flags & kSsimHasLossMap) != 0;
     const bool has_val = (p.flags & kSsimHasVal) != 0;
     const uint fmt1 = uint(kSsimFmts) & 3u;
     const uint fmt2 = (uint(kSsimFmts) >> 2) & 3u;
@@ -324,9 +345,9 @@ void ssim_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
                 float ssim_v = (C_ * D_) / (A * B_);
                 if (lm_active) {
                     float lm_v;
-                    if (p.mode == 2) {  // contrast*structure
+                    if (kSsimMode == 2) {  // contrast*structure
                         lm_v = D_ / B_;
-                    } else if (p.mode == 3) {  // structure only
+                    } else if (kSsimMode == 3) {  // structure only
                         float s1s2 = sqrt(max(sigma1_sq, 0.0f) *
                                           max(sigma2_sq, 0.0f));
                         lm_v = D_ / (2.0f * s1s2 + kC2);
@@ -1191,7 +1212,7 @@ void flip_bwd_inplace(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID,
 static const int BT_T = kSsimTile;
 static const int BT_S = BT_T + 2 * HALO;
 static const int BT_L = BT_T + 4 * HALO;
-static const int BT_R = 6;
+static const int BT_R = 6;    // the largest kBtR
 static const int BT_NW = 5;   // window slots per thread, enough for tile 24
 static const int BB_T = 16;
 static const float kBtTemp = 50.0f;
@@ -1210,11 +1231,14 @@ struct BtParams {
     int B, H, W;
     int Bm, Hm, Wm;
     float dL_dmap, map_weight, sat;
-    int mode;          // SsimLossMapMode
     uint flags;        // kSsim* bits
-    int r;             // blur radius
-    float w[BT_R + 1]; // blur taps by |offset|
 };
+
+[ForceInline]
+float _bt_w(int i) {
+    return i == 0 ? kBtW0 : i == 1 ? kBtW1 : i == 2 ? kBtW2 : i == 3 ? kBtW3
+         : i == 4 ? kBtW4 : i == 5 ? kBtW5 : kBtW6;
+}
 
 [ForceInline]
 bool _bt_mask(BtParams p, int b, int y, int x) {
@@ -1224,7 +1248,7 @@ bool _bt_mask(BtParams p, int b, int y, int x) {
     return _fs_unclipped(p.img1, p.img2, uint(kSsimFmts), p.sat, p.H, p.W, b, y, x);
 }
 
-static const int BT_BS = BB_T + 2 * BT_R;
+static const int BT_BS = BB_T + 2 * kBtR;
 groupshared float _bt_bt[BT_BS * BT_BS * 4];
 groupshared float _bt_bh[BT_BS * BB_T * 4];
 
@@ -1232,9 +1256,9 @@ groupshared float _bt_bh[BT_BS * BB_T * 4];
 // Adjoint: dL_dimg1 += m B^T g_blur.
 [ForceInline]
 void _bt_blur(uint3 wg, uint tid, BtParams p, bool adjoint) {
-    const int S = BB_T + 2 * p.r;
+    const int S = BT_BS;
     const int b = int(wg.z);
-    const int x0 = int(wg.x) * BB_T - p.r, y0 = int(wg.y) * BB_T - p.r;
+    const int x0 = int(wg.x) * BB_T - kBtR, y0 = int(wg.y) * BB_T - kBtR;
     const uint fmt1 = uint(kSsimFmts) & 3u;
     for (int i = int(tid); i < S * S; i += 256) {
         int x = x0 + i % S, y = y0 + i / S;
@@ -1255,9 +1279,11 @@ void _bt_blur(uint3 wg, uint tid, BtParams p, bool adjoint) {
     for (int i = int(tid); i < S * BB_T; i += 256) {
         int ly = i / BB_T, lx = i % BB_T;
         float4 a = float4(0.0f);
-        for (int d = -p.r; d <= p.r; d++) {
-            int j = (ly * S + lx + p.r + d) * 4;
-            a += p.w[abs(d)] * float4(_bt_bt[j], _bt_bt[j + 1], _bt_bt[j + 2], _bt_bt[j + 3]);
+        [ForceUnroll]
+        for (int d = -BT_R; d <= BT_R; d++) {
+            if (abs(d) > kBtR) continue;
+            int j = (ly * S + lx + kBtR + d) * 4;
+            a += _bt_w(abs(d)) * float4(_bt_bt[j], _bt_bt[j + 1], _bt_bt[j + 2], _bt_bt[j + 3]);
         }
         _bt_bh[i * 4] = a.x;
         _bt_bh[i * 4 + 1] = a.y;
@@ -1269,9 +1295,11 @@ void _bt_blur(uint3 wg, uint tid, BtParams p, bool adjoint) {
     int x = int(wg.x) * BB_T + tx, y = int(wg.y) * BB_T + ty;
     if (x >= p.W || y >= p.H) return;
     float4 a = float4(0.0f);
-    for (int d = -p.r; d <= p.r; d++) {
-        int j = ((ty + p.r + d) * BB_T + tx) * 4;
-        a += p.w[abs(d)] * float4(_bt_bh[j], _bt_bh[j + 1], _bt_bh[j + 2], _bt_bh[j + 3]);
+    [ForceUnroll]
+    for (int d = -BT_R; d <= BT_R; d++) {
+        if (abs(d) > kBtR) continue;
+        int j = ((ty + kBtR + d) * BB_T + tx) * 4;
+        a += _bt_w(abs(d)) * float4(_bt_bh[j], _bt_bh[j + 1], _bt_bh[j + 2], _bt_bh[j + 3]);
     }
     int pix = (b * p.H + y) * p.W + x;
     if (adjoint) {
@@ -1325,7 +1353,7 @@ void ssim_bt_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID, uniform BtPar
     const int sx0 = int(wg.x) * BT_T, sy0 = int(wg.y) * BT_T;
     const uint fmt1 = uint(kSsimFmts) & 3u;
     const uint fmt2 = (uint(kSsimFmts) >> 2) & 3u;
-    const bool lm_active = p.mode != 0 && (p.flags & kSsimHasLossMap) != 0;
+    const bool lm_active = kSsimMode != 0 && (p.flags & kSsimHasLossMap) != 0;
     const bool has_cov = (p.flags & kSsimHasCov) != 0;
     const float grad = p.dL_dmap / (3.0f * float(p.B) * float(p.W) * float(p.H));
     const int XC = 2 * BT_L * BT_L;     // window sums [BT_L][BT_S][5]
@@ -1415,9 +1443,9 @@ void ssim_bt_bwd(uint3 wg: SV_GroupID, uint tid: SV_GroupThreadID, uniform BtPar
                         ly < 2 * HALO + BT_T && in) {
                     if (lm_active) {
                         float lm = S;
-                        if (p.mode == 2) {  // contrast*structure
+                        if (kSsimMode == 2) {  // contrast*structure
                             lm = w0 * cs0 + w1 * cs1;
-                        } else if (p.mode == 3) {  // structure only
+                        } else if (kSsimMode == 3) {  // structure only
                             float vy = max(syy, 0.0f);
                             lm = w0 * (2.0f * sxy + kC2) / (2.0f * sqrt(max(sxx, 0.0f) * vy) + kC2) +
                                  w1 * (2.0f * sby + kC2) / (2.0f * sqrt(max(sbb, 0.0f) * vy) + kC2);

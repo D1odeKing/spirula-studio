@@ -8,6 +8,7 @@
 // what the GUI edits. Flags that do not name one scalar field are parsed here
 // first, so a hand-parsed name wins -- `map --audit` (run an audit pass) has to
 // beat the table's `--audit` / `--no-audit` switch.
+#include "app/RunReport.h"
 #include "app/Tools.h"
 #include "sfm/Pipeline.h"
 
@@ -1231,6 +1232,13 @@ static int cmdAuto(int argc, char** argv) {
         return usageError("auto", err);
     if (req.wants_help) { printCommandHelp(*findCommand("auto")); return 0; }
     if (!req.progress_dir.empty()) sfm::progress::set_dir(req.progress_dir);
+    spirula::RunReporter memory(req.progress_dir, [](spirula::RunReporter::Device& d) {
+        const sfm::DeviceMemoryTally& t = sfm::DeviceMemoryTally::get();
+        d.capacity = t.capacity.load();
+        d.ours = t.bytes.load();
+        d.others = t.others.load();
+        return d.capacity > 0;
+    });
     installEventPrinter(req.cfg);
     return run_auto(req.cfg, req.in).exit_code;
 }

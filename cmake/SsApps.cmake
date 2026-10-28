@@ -29,6 +29,7 @@
 function(ss_configure_app target)
     target_include_directories(${target} PRIVATE
         ${SS_SRC}
+        ${SS_SRC}/external/apriltag
         ${CMAKE_BINARY_DIR}      # app_generated/*.h
         ${CUDAToolkit_INCLUDE_DIRS}
     )
@@ -126,6 +127,10 @@ list(APPEND SS_TOOL_SOURCES
      ${SS_SRC}/app/ScanDepth.cpp
      ${SS_SRC}/app/DepthPng.cpp)
 list(APPEND SS_TOOL_DEFS SS_TOOL_E57=1)
+
+# ---- fiducial marker tool: detect, align, crop ----
+list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/marker_main.cpp)
+list(APPEND SS_TOOL_DEFS SS_TOOL_MARKER=1)
 
 if(SS_BUILD_SFM)
     # ---- structure from motion ----
@@ -425,6 +430,7 @@ ss_configure_app(frame_pick_test)
 add_executable(model_download_test
     ${SS_SRC}/app/tests/model_download_test.cpp
     ${SS_SRC}/app/gui/ModelCache.cpp
+    ${SS_SRC}/app/gui/ProgressClock.cpp
     ${SS_SRC}/app/gui/Subprocess.cpp
     ${SS_SRC}/app/AppPaths.cpp)
 ss_configure_app(model_download_test)
@@ -490,9 +496,10 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/tests/align_fit_test.cpp)
     ss_configure_app(align_fit_test)
 
-    add_executable(stage_eta_test
-        ${SS_SRC}/app/gui/tests/stage_eta_test.cpp)
-    ss_configure_app(stage_eta_test)
+    add_executable(progress_clock_test
+        ${SS_SRC}/app/gui/tests/progress_clock_test.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp)
+    ss_configure_app(progress_clock_test)
 
     add_executable(recent_list_test
         ${SS_SRC}/app/gui/tests/recent_list_test.cpp
@@ -506,6 +513,18 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/edit/ElementGrid.cpp
         ${SS_SRC}/app/gui/edit/Selection.cpp)
     ss_configure_app(attributes_test)
+
+    add_executable(distance_scale_test
+        ${SS_SRC}/app/gui/tests/distance_scale_test.cpp
+        ${SS_SRC}/app/gui/edit/DistanceScaleTool.cpp
+        ${SS_SRC}/app/gui/edit/SelectShape.cpp
+        ${SS_SRC}/app/gui/edit/EditDoc.cpp
+        ${SS_SRC}/app/gui/edit/ElementGrid.cpp
+        ${SS_SRC}/app/gui/edit/Selection.cpp
+        ${SS_SRC}/app/gui/Automation.cpp
+        ${SS_SRC}/app/AppPaths.cpp)
+    ss_configure_app(distance_scale_test)
+    target_link_libraries(distance_scale_test PRIVATE imgui_glfw OpenGL::GL)
 
     add_executable(rig_guess_test
         ${SS_SRC}/app/gui/tests/rig_guess_test.cpp
@@ -580,6 +599,7 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameSharpness.cpp
         ${SS_SRC}/app/FfmpegVideo.cpp
         ${SS_SRC}/app/gui/PrepProgress.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp
         ${SS_SRC}/app/gui/DatasetRecord.cpp
         ${SS_SRC}/app/gui/Subprocess.cpp
         ${SS_SRC}/app/gui/mask/MaskLayer.cpp
@@ -606,6 +626,7 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameSharpness.cpp
         ${SS_SRC}/app/FfmpegVideo.cpp
         ${SS_SRC}/app/gui/PrepProgress.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp
         ${SS_SRC}/app/gui/Subprocess.cpp
         ${SS_SRC}/app/gui/mask/MaskLayer.cpp
         ${SS_SRC}/app/FrameMask.cpp

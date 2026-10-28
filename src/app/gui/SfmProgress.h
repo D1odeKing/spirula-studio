@@ -85,15 +85,22 @@ struct RunStatus {
 
 bool read_status(const std::string& dir, int64_t& mtime, RunStatus& out);
 
-// Where the mapping bar stops with every image placed: the finishing solves
-// come after the last one, and a phase that places none holds it here or at
-// zero and moves its label instead.
-inline constexpr float kMappingBarFull = 0.94f;
+// How far the mapping step is, 0..1, from what the mapper reports: images
+// placed, then merge levels, then the finishing solves, each given its share
+// of the step's time. Never falls back. Shares: docs/notes/progress-bars.md.
+class MappingWork {
+public:
+    explicit MappingWork(bool bottom_up = false);
+    void placed(int64_t done, int64_t total);
+    void levels(int64_t done, int64_t total);
+    void refining();
+    double work() const { return _work; }
 
-// The mapping bar at `done` of `total` images placed. Not the ratio: an image
-// costs what the model it joins costs to solve, so the count runs ahead of the
-// clock (docs/notes/sfm-design.md D77).
-float mapping_fraction(int64_t done, int64_t total);
+private:
+    void raise(double w);
+    double _place = 0.0, _merge = 0.0;
+    double _work = 0.0;
+};
 
 // `dir` is the --progress-dir the child was given. All return false when the
 // file is absent, unfinished or not newer than `mtime` -- which the caller

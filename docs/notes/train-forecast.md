@@ -84,17 +84,30 @@ The growth is `g0 + g1 * N`, a Kalman filter over `[g0, g1]` from one
 high-water measurement per window, starting at `g0 = 0`: fitting a fixed
 chunk from the first windows under-read bonsai's peak by 14 sigma, while
 putting it all per splat over-reads garden's (its 55 MiB chunk) by up to
-36% -- the safe side. Two terms widen the projection: the expected largest
-per-step demand over the draws still to come at each count, minus what a
-window already saw (the pool keeps the largest draw, and a view that sees
-more of the model sets it); and 0.3 relative sigma per e-fold the count is
-extrapolated.
+36% -- the safe side. Four terms widen the projection:
+
+- the expected largest per-step demand over the draws still to come at each
+  count, minus what a window already saw (the pool keeps the largest draw, and
+  a view that sees more of the model sets it);
+- 0.3 relative sigma per e-fold the count is extrapolated;
+- 0.15 relative sigma per e-fold of steps still to run, whatever the count:
+  splats shrink and spread as a run goes, so the tiles each covers -- and with
+  them bytes per splat -- move even once the count is at the cap;
+- the spread of each window's own peak about the fit, an average of its
+  squared relative error: the ceiling a view sets swings from window to
+  window, and a fit to the running high-water alone does not see that.
+
+Before the first densify step nothing has measured the growth, and the band
+says so by its width (70% per splat, plus the scratch estimate's 2.5%) rather
+than by a note under the chart.
 
 "Others" is device use minus ours (on CUDA that includes the context), an
 exponential average with its spread. The chance of running out is the normal
 tail of `peak + others` above 99% of the device -- the last percent is
-fragmentation. Low below 10%, medium below 50%, high above; the trainer logs a
-warning the first time the risk reaches each of medium and high.
+fragmentation -- through the same rule every memory forecast uses
+(`assess_oom`, docs/notes/memory-forecast.md). Low below 10%, medium below
+50%, high above; the trainer logs a warning the first time the risk reaches
+each of medium and high.
 
 On Windows there is a second ceiling. WDDM charges every device allocation to
 the system commit limit (RAM plus page file): on the RTX 3070 laptop a 4140
@@ -103,7 +116,7 @@ matched its VRAM. With a small page file the commit runs out first and the
 allocation fails as an out-of-memory with VRAM to spare -- the 13M-splat run
 in vram-splat-x-img.md left 0.2 GiB of commit and an 8 GB device. So on Vulkan
 under Windows the limit is the lower of the device's and ours plus the commit
-still free (`limit_bytes`, `commit_limited`), and the out-of-memory error
+still free (`limit`, `commit_limited`), and the out-of-memory error
 says so when commit is what is short.
 
 On the three runs, from the first densify step on, the projected peak stayed

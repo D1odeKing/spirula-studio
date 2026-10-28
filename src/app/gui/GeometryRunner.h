@@ -24,7 +24,7 @@ struct GeometryJob {
     bool enable = false;
     // Canonical UUID from the frozen GUI choice; children must not re-rank.
     std::string device_uuid;
-    // A model id (geometry_models()) or a path to an .onnx file.
+    // A model id (geometry_models()) or a path to an .onnx or .pt file.
     std::string model = "moge2-vitb";
     int  max_size = 1064;         // longest side of the maps, and of one face
     int  num_tokens = 3600;       // MoGe's ViT budget; Metric3D ignores it
@@ -44,7 +44,7 @@ struct GeometryJob {
     std::string image_exposure;
 };
 
-// One checkpoint the screen offers, MoGe's three first and each family's
+// One checkpoint the screen offers, MoGe's four first and each family's
 // largest last. Index 1 is the default -- moge2-vitb, which is metric, rejects
 // the sky, and is quicker than Metric3D's large.
 struct GeometryModel {

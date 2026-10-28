@@ -1729,7 +1729,7 @@ void TrainerSession::observe_memory(int step, int64_t splats_ran) {
 
     // Once per level, so a run that stays at risk says it once.
     const VramForecast v = _forecast.vram(false);
-    if (!v.valid || (int)v.risk <= (int)_warned_risk) return;
+    if (!v.projected || (int)v.risk <= (int)_warned_risk) return;
     _warned_risk = v.risk;
     auto gib = [](double b) {
         char s[32];
@@ -1739,7 +1739,7 @@ void TrainerSession::observe_memory(int step, int64_t splats_ran) {
     char pct[16];
     std::snprintf(pct, sizeof pct, "%.0f", v.p_oom * 100.0);
     log(lfmt(lmsg::vram_forecast_warn,
-             {gib(v.peak_mean), gib(v.peak_sigma), gib(v.limit_bytes),
+             {gib(v.peak_mean), gib(v.peak_sigma), gib(v.limit),
               std::string(pct)}));
 }
 
@@ -1856,13 +1856,12 @@ void TrainerSession::train(const TrainerCallbacks& cb) {
             const double gib = 1024.0 * 1024.0 * 1024.0;
             std::fprintf(stderr,
                 "[forecast] step %d  eta %.1f +- %.1f s  ours %.3f GiB  peak %.3f +- %.3f GiB"
-                "  others %.3f  total %.3f  limit %.3f%s  p_oom %.3f%s\n",
+                "  others %.3f  total %.3f  limit %.3f%s  p_oom %.3f\n",
                 step + 1, e.seconds, e.sigma,
-                v.ours_bytes / gib,
-                v.peak_mean / gib, v.peak_sigma / gib, v.others_bytes / gib,
-                v.total_bytes / gib, v.limit_bytes / gib,
-                v.commit_limited ? " (commit)" : "", v.p_oom,
-                v.provisional ? "  provisional" : "");
+                v.ours / gib,
+                v.peak_mean / gib, v.peak_sigma / gib, v.others / gib,
+                v.capacity / gib, v.limit / gib,
+                v.commit_limited ? " (commit)" : "", v.p_oom);
         }
 
         if (cb.on_step) {
@@ -1915,7 +1914,7 @@ std::string TrainerSession::progress_json() {
     const VramForecast v = _forecast.vram(false);
     static const char* const kRisk[] = {"unknown", "low", "medium", "high"};
     char tail[160];
-    if (v.valid)
+    if (v.projected)
         std::snprintf(tail, sizeof tail,
             ", \"vram_peak_bytes\": %.0f, \"vram_peak_sigma\": %.0f, "
             "\"oom_probability\": %.4f, \"oom_risk\": \"%s\"}",
