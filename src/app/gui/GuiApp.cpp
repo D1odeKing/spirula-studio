@@ -6920,11 +6920,13 @@ void GuiApp::poll_sfm_progress() {
     if (_sfm_polled_at > 0.0 && now - _sfm_polled_at < 0.5) return;
     _sfm_polled_at = now;
 
-    // Features are read off disk. A progressive pass enters the step again with
-    // mapping still running and writes its own folder: only the images it redoes.
-    if (dataset_busy() && dataset_steps()->current() == Stage::Features) {
+    const Stage stage = dataset_steps()->current();
+    const bool preparing = dataset_busy() && (stage == Stage::Frames || stage == Stage::Masks);
+    // Reused features still populate the reel when a run skips extraction. While
+    // mapping runs, a progressive pass's own folder: only the images it redoes.
+    if (!preparing) {
         std::string fdir = _sfm.features_dir();
-        if (dataset_steps()->stage(Stage::Mapping).status == StageStatus::Running) {
+        if (dataset_busy() && dataset_steps()->stage(Stage::Mapping).status == StageStatus::Running) {
             const std::string pass =
                 newest_pass_dir(fs::path(fdir).parent_path() / "features.progressive");
             if (!pass.empty()) fdir = pass;
@@ -6967,7 +6969,8 @@ void GuiApp::poll_sfm_progress() {
     if (read_pair_matrix(dir, _pairs_mtime, pm)) _matrix.set(pm);
     // matches.bin is the whole truth and outlives the live file, which the run
     // deletes with the rest of the intermediates.
-    if (!dataset_busy() &&
+    const bool mapping = !preparing && stage != Stage::Features && stage != Stage::Matching;
+    if ((!dataset_busy() || mapping) &&
         read_pair_matrix_from_matches(_sfm.matches_path(), _matches_mtime, pm))
         _matrix.set(pm);
 
@@ -7387,7 +7390,7 @@ void GuiApp::draw_dataset_preview(float height) {
     // is made from them, and the image list comes from the model.
     const int order[9] = {0, 7, 6, 1, 2, 3, 4, 5, 8};
     const int tab = draw_view_tabs(names, avail, order, 9, implied, _preview_tab);
-    if (tab == 3) ui::help_on_hover(dmsg::matrix_help);
+    if (tab == 3) ui::help_on_hover(dmsg::matrix_help_edit, {dmsg::matrix_help.get()});
     if (tab == 6) ui::help_on_hover(dmsg::frame_spacing_help);
     if (tab == 7) ui::help_on_hover(dmsg::sharpness_view_help);
 
@@ -7440,7 +7443,24 @@ void GuiApp::draw_dataset_preview(float height) {
         // Grouped so the pair view sits beside the map rather than beside the
         // legend under it.
         ImGui::BeginGroup();
-        if (_matrix.draw(side, block)) _pairs_view.show(block);
+        const bool over = _matrix.draw(side, block);
+        if (over) _pairs_view.show(block);
+        // Editing the matches is for the rare capture that needs it, so it
+        // is on the map's context menu rather than a button under it.
+        if (over && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+            ImGui::OpenPopup("##matrixmenu");
+        if (ImGui::BeginPopup("##matrixmenu")) {
+            std::error_code ec;
+            const std::string matches = _sfm.matches_path();
+            const bool can = !dataset_busy() && !matches.empty() &&
+                             fs::exists(fs::u8path(matches), ec);
+            if (ui::MenuItem(dmsg::matrix_edit_matches, nullptr, false, can)) {
+                _matrix_editor.configure(_sfm.sfm_image_dir(), _sfm.sfm_mask_dir(),
+                                         _sfm.features_dir(), matches);
+                _matrix_editor.open();
+            }
+            ImGui::EndPopup();
+        }
         ImGui::EndGroup();
         const float rest = avail - side - ImGui::GetStyle().ItemSpacing.x;
         if (rest > px(160.0f)) {
@@ -9229,6 +9249,13 @@ void GuiApp::draw_new_dataset() {
     draw_clear_project_modal();
     draw_drop_intermediate_modal();
     draw_rebuild_confirm_modal();
+    // The model on disk was mapped from the matches before the edit.
+    if (_matrix_editor.is_open() && _matrix_editor.draw(dataset_busy())) {
+        _matches_mtime = 0;
+        _pairs_view.reload();
+        _redo_model = true;
+        _sfm.keep_intermediates();
+    }
 }
 
 // ---------------------------------------------------------------------------

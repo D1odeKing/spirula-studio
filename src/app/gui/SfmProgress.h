@@ -35,7 +35,7 @@ struct LiveModel {
 };
 
 // Inlier counts between image ranges. `bins` is `n_images` for a capture small
-// enough and 512 above that, so a cell is a block of images rather than one.
+// enough and capped above that, so a cell is a block of images rather than one.
 struct PairMatrix {
     uint32_t n_images = 0, bins = 0;
     std::vector<uint32_t> counts;   // bins*bins, symmetric
@@ -48,6 +48,9 @@ struct PairMatrix {
     bool empty() const { return bins == 0 || counts.empty(); }
     bool staged() const { return planned.size() == counts.size(); }
     uint32_t at(uint32_t r, uint32_t c) const { return cell(counts, r, c); }
+    uint32_t cell_of(uint32_t image) const {
+        return (uint32_t)((uint64_t)image * bins / n_images);
+    }
     uint32_t cell(const std::vector<uint32_t>& v, uint32_t r, uint32_t c) const {
         const size_t i = (size_t)r * bins + c;
         return r < bins && c < bins && i < v.size() ? v[i] : 0;
@@ -134,8 +137,10 @@ bool read_pair_matrix(const std::string& dir, int64_t& mtime, PairMatrix& out);
 
 // The same matrix from a finished `matches.bin`, which is what a run leaves
 // behind: the live file is deleted with the rest of the intermediates.
+// `max_bins` 0 is the live matrix's size, so the map does not change at the end.
 bool read_pair_matrix_from_matches(const std::string& matches_path,
-                                   int64_t& mtime, PairMatrix& out);
+                                   int64_t& mtime, PairMatrix& out,
+                                   uint32_t max_bins = 0);
 
 // A keypoint as a preview draws it: where it is, and how big the detector said
 // the feature was. `r` is 0 when the detector reports no scale -- ALIKED has

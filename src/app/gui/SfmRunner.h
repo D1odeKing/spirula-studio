@@ -302,6 +302,9 @@ public:
     // leaving the dataset screen, or closing the app. A no-op while a run is
     // going, and for a job that asked to keep them.
     void sweep_intermediates();
+    // Never sweeps them: the matches were edited by hand, and a run that
+    // matched again would throw the edit away.
+    void keep_intermediates();
     // Done, but under half the images registered (or a high reprojection
     // error). The dataset is usable; the user should know it has gaps.
     bool partial() const { return _partial.load(); }

@@ -20,6 +20,7 @@
 #include "app/gui/RoiEditor.h"
 #include "app/gui/ImageCompare.h"
 #include "app/gui/MatchMatrix.h"
+#include "app/gui/MatchMatrixEditor.h"
 #include "app/gui/PickSheet.h"
 #include "app/gui/ProgressClock.h"
 #include "app/gui/RunMemoryView.h"
@@ -863,6 +864,7 @@ private:
     FeatureWatcher _features;
     std::string _features_shown;   // the folder the reel was filled from
     MatchMatrix _matrix;
+    MatchMatrixEditor _matrix_editor;
     // Every frame a run chose and what the rule made of it (the Sharpness view).
     PickSheet _picks;
     PickSheetView _picks_view;

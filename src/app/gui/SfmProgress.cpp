@@ -517,9 +517,10 @@ bool read_pair_matrix(const std::string& dir, int64_t& mtime, PairMatrix& out) {
 }
 
 bool read_pair_matrix_from_matches(const std::string& matches_path,
-                                   int64_t& mtime, PairMatrix& out) {
+                                   int64_t& mtime, PairMatrix& out,
+                                   uint32_t max_bins) {
 #ifndef SS_TOOL_SFM
-    (void)matches_path; (void)mtime; (void)out;
+    (void)matches_path; (void)mtime; (void)out; (void)max_bins;
     return false;
 #else
     std::error_code ec;
@@ -536,15 +537,15 @@ bool read_pair_matrix_from_matches(const std::string& matches_path,
     PairMatrix m;
     m.n_images = (uint32_t)idx.images.size();
     if (m.n_images == 0) return false;
-    m.bins = std::min(m.n_images, sfm::progress::kMatrixBins);
+    m.bins = std::min(m.n_images, max_bins ? max_bins : sfm::progress::kMatrixBins);
     m.counts.assign((size_t)m.bins * m.bins, 0);
     // A finished file holds the pairs that survived and says nothing about the
     // ones that were tried and failed, so it cannot fill `planned` /
     // `verified`: what is left is the count, and the drawing says so.
     for (const sfm::MatchesIndex::Entry& p : idx.pairs) {
         if (p.image1 >= m.n_images || p.image2 >= m.n_images) continue;
-        const uint32_t a = (uint32_t)((uint64_t)p.image1 * m.bins / m.n_images);
-        const uint32_t b = (uint32_t)((uint64_t)p.image2 * m.bins / m.n_images);
+        const uint32_t a = m.cell_of(p.image1);
+        const uint32_t b = m.cell_of(p.image2);
         m.counts[(size_t)a * m.bins + b] += p.count;
         if (a != b) m.counts[(size_t)b * m.bins + a] += p.count;
     }
