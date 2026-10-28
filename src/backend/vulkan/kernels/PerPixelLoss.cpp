@@ -17,6 +17,7 @@
 
 #include <array>
 #include <cmath>
+#include <cstring>
 
 // Quantile.cpp
 template <bool invert_quantile>
@@ -127,10 +128,9 @@ struct SsimParams {
     int32_t B, H, W;
     int32_t Bm, Hm, Wm;
     float dL_dmap, map_weight, sat;
-    int32_t mode;
     uint32_t flags;
 };
-static_assert(sizeof(SsimParams) == 7 * 8 + 11 * 4 + 4, "layout");
+static_assert(sizeof(SsimParams) == 7 * 8 + 10 * 4, "layout");
 
 struct SsimCovParams {
     uint64_t masks, img1, img2, out;
@@ -156,12 +156,9 @@ struct BtParams {
     int32_t B, H, W;
     int32_t Bm, Hm, Wm;
     float dL_dmap, map_weight, sat;
-    int32_t mode;
     uint32_t flags;
-    int32_t r;
-    float w[7];
 };
-static_assert(sizeof(BtParams) == 10 * 8 + 19 * 4 + 4, "layout");
+static_assert(sizeof(BtParams) == 10 * 8 + 10 * 4, "layout");
 
 constexpr uint32_t kSsimHasMask = 1u << 0;
 constexpr uint32_t kSsimHasVal = 1u << 1;
@@ -266,16 +263,17 @@ uint32_t ssim_tile() {
                                                                          : 16u;
 }
 
-// fmts: fused_ssim.slang's kSsimFmts.
+// fmts, mode: fused_ssim.slang's kSsimFmts, kSsimMode.
 void dispatch_ssim(const char* entry, int64_t W, int64_t H, int64_t B,
-                   const void* params, uint32_t size, uint32_t fmts) {
+                   const void* params, uint32_t size, uint32_t fmts,
+                   uint32_t mode) {
     if (W <= 0 || H <= 0 || B <= 0) return;
     const uint32_t t = ssim_tile();
     uint32_t gx = (uint32_t)((W + t - 1) / t), gy = (uint32_t)((H + t - 1) / t);
     if (gx > 65535 || gy > 65535 || B > 65535)
         throw std::runtime_error("ssim: tile grid dimension exceeds 65535");
-    vkk::dispatch_budgeted(entry, {t, fmts}, gx, gy, (uint32_t)B, params,
-                           size);
+    vkk::dispatch_budgeted(entry, {t, fmts, mode}, gx, gy, (uint32_t)B,
+                           params, size);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,10 +409,12 @@ void launch_fused_ssim_inplace(
     }
     p.dL_dmap = dL_dmap;
     p.map_weight = ssim_loss_map_weight;
-    p.mode = ssim_loss_map_mode;
     if (ssim_buf) p.flags |= kSsimHasVal;
     if (_has(dL_dimg1)) p.flags |= kSsimWriteGrad;
     if (_has(ssim_loss_map)) p.flags |= kSsimHasLossMap;
+    // The kernels read the mode only while writing the map: one pipeline.
+    const uint32_t mode =
+        (p.flags & kSsimHasLossMap) ? (uint32_t)ssim_loss_map_mode : 0u;
 
     if (blur_tolerance > 0.0f) {
         BtParams q{};
@@ -423,14 +423,22 @@ void launch_fused_ssim_inplace(
         q.B = B; q.H = H; q.W = W;
         q.Bm = p.Bm; q.Hm = p.Hm; q.Wm = p.Wm;
         q.dL_dmap = dL_dmap; q.map_weight = ssim_loss_map_weight;
-        q.sat = saturation_threshold; q.mode = ssim_loss_map_mode; q.flags = p.flags;
-        q.r = std::min(6, (int)std::ceil(3.0f * blur_tolerance));
+        q.sat = saturation_threshold; q.flags = p.flags;
+        const int r = std::min(6, (int)std::ceil(3.0f * blur_tolerance));
+        float w[7] = {};
         float sum = 0.0f;
-        for (int d = 0; d <= q.r; ++d) {
-            q.w[d] = std::exp(-0.5f * d * d / (blur_tolerance * blur_tolerance));
-            sum += (d ? 2.0f : 1.0f) * q.w[d];
+        for (int d = 0; d <= r; ++d) {
+            w[d] = std::exp(-0.5f * d * d / (blur_tolerance * blur_tolerance));
+            sum += (d ? 2.0f : 1.0f) * w[d];
         }
-        for (int d = 0; d <= q.r; ++d) q.w[d] /= sum;
+        for (int d = 0; d <= r; ++d) w[d] /= sum;
+        // The blur passes read no mode: 0 keeps one pipeline per radius.
+        backend::vk::SpecList blur_spec{16u, fmts, 0u, (uint32_t)r};
+        for (float v : w) {
+            uint32_t bits;
+            std::memcpy(&bits, &v, sizeof(bits));
+            blur_spec.values[blur_spec.count++] = bits;
+        }
         auto& pool = DevicePool::global();
         const size_t n = (size_t)B * H * W;
         q.blurred = (uint64_t)pool.acquire_reused<float>(PoolSlot::SsimBlurred, 3 * n);
@@ -438,15 +446,17 @@ void launch_fused_ssim_inplace(
         q.g_blur = _has(dL_dimg1) ? (uint64_t)pool.acquire_reused<float>(PoolSlot::SsimBlurGrad, 3 * n)
                                   : vkk::or_fallback(nullptr);
         const uint32_t gx = (uint32_t)((W + 15) / 16), gy = (uint32_t)((H + 15) / 16);
-        vkk::dispatch_budgeted("fused_ssim.ssim_bt_blur", {16u, fmts}, gx, gy,
+        vkk::dispatch_budgeted("fused_ssim.ssim_bt_blur", blur_spec, gx, gy,
                                (uint32_t)B, &q, sizeof(q));
-        dispatch_ssim("fused_ssim.ssim_bt_bwd", W, H, B, &q, sizeof(q), fmts);
+        dispatch_ssim("fused_ssim.ssim_bt_bwd", W, H, B, &q, sizeof(q), fmts,
+                      mode);
         if (_has(dL_dimg1))
-            vkk::dispatch_budgeted("fused_ssim.ssim_bt_blur_adj", {16u, fmts}, gx, gy,
+            vkk::dispatch_budgeted("fused_ssim.ssim_bt_blur_adj", blur_spec, gx, gy,
                                    (uint32_t)B, &q, sizeof(q));
         return;
     }
-    dispatch_ssim("fused_ssim.ssim_bwd_inplace", W, H, B, &p, sizeof(p), fmts);
+    dispatch_ssim("fused_ssim.ssim_bwd_inplace", W, H, B, &p, sizeof(p), fmts,
+                  mode);
 }
 
 float fused_ssim_inplace_vk(
