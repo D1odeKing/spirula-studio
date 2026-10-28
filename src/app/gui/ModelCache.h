@@ -20,6 +20,7 @@
 // every Linux/macOS ship it), resumable, into "<file>.part" so an interrupted
 // fetch never looks like a complete model.
 
+#include "app/gui/ProgressClock.h"
 #include "i18n/Message.h"
 
 #include <atomic>
@@ -165,6 +166,8 @@ public:
     State state() const { return _state.load(); }
     // 0..1, or -1 when the server did not send a length.
     float progress() const { return _progress.load(); }
+    // The bar's clock, brought up to date from progress(). UI thread.
+    const ProgressClock& clock();
     std::string status();          // "412 MB of 707 MB", or the error
     std::string path();            // valid when Done
     std::vector<std::string> drain_log();
@@ -179,6 +182,7 @@ private:
     std::atomic<State> _state{State::Idle};
     std::atomic<bool>  _cancel{false};
     std::atomic<float> _progress{-1.0f};
+    ProgressClock _clock;
     std::mutex _mu;
     std::string _status, _path;
     std::vector<std::string> _log;

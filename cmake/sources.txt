@@ -40,6 +40,8 @@ src/data/parsers/*.cpp
 src/app/webviewer/*.cpp
 src/app/TrainerCore.cpp
 src/app/TrainForecast.cpp
+src/app/ResourceForecast.cpp
+src/app/RunReport.cpp
 src/app/SystemRecorder.cpp
 src/app/EvalMetrics.cpp
 src/external/*.cpp
@@ -60,6 +62,8 @@ src/data/parsers/*.cpp
 src/app/webviewer/*.cpp
 src/app/TrainerCore.cpp
 src/app/TrainForecast.cpp
+src/app/ResourceForecast.cpp
+src/app/RunReport.cpp
 src/app/SystemRecorder.cpp
 src/app/EvalMetrics.cpp
 src/external/*.cpp

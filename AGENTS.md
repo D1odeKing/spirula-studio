@@ -217,7 +217,10 @@ src/
 │                             the GUI drive this; it lives in the engine
 │                             library (cmake/sources.txt), not the app targets.
 │                             TrainForecast.{h,cpp} beside it is the run's ETA
-│                             and VRAM forecast -- docs/notes/train-forecast.md
+│                             and VRAM forecast -- docs/notes/train-forecast.md;
+│                             ResourceForecast.h is the shape every job's RAM /
+│                             VRAM forecast takes, RunReport.h how a child
+│                             reports it -- docs/notes/memory-forecast.md
 ├── config/                 TrainConfig.h — the training config's single source
 │                             of truth: one X-macro row per flag, hand-written.
 │                             TrainConfigJson.h is the one flat-JSON encoding
@@ -788,6 +791,10 @@ no ceremony — do not ask, do not leave a note saying you removed it.
   primitive and selection test works unchanged. Anything that takes a
   RELATIVE depth tolerance has to subtract the pull-back first
   (`ViewProjection::ortho_back`).
+- **A progress bar is time, not a count, and never goes back.** Every bar is a
+  `ProgressClock` (`app/gui/ProgressClock.h`) fed the job's own 0..1 of work;
+  a job whose total can grow counts an upper bound first, so the bar jumps
+  forward when the real one arrives. docs/notes/progress-bars.md.
 - **A GUI worker that clears a `busy` flag at the end of its function will
   strand it.** Every early `return set_error(...)` skips the line, and the next
   request is refused forever. Use a scope guard (`SegmentPanel::start_job`).

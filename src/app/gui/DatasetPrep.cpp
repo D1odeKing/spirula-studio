@@ -438,7 +438,9 @@ public:
     // the log, which is the other place a user looks for signs of life.
     void begin(std::string name) {
         _name = std::move(name);
-        _prog->enter(Stage::Frames, line(_base));
+        // One bar over every input: a new label would start it over.
+        if (_base == 0) _prog->enter(Stage::Frames, line(_base));
+        else _prog->detail(Stage::Frames, line(_base));
         _prog->fraction(Stage::Frames, share(_base));
         // Only once the length is known: the first update() brings it where the
         // caller could not, and "0 of 0" is not a sign of life.

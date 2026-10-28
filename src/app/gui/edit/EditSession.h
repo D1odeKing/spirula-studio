@@ -8,6 +8,7 @@
 // knows nothing about editing and this knows nothing about how the panel
 // renders.
 
+#include "app/gui/ProgressClock.h"
 #include "app/gui/ViewportInput.h"
 #include "app/gui/edit/Attributes.h"
 #include "app/gui/edit/DistanceScaleTool.h"
@@ -265,6 +266,7 @@ private:
     std::thread _save_worker;
     std::atomic<bool> _save_busy{false};
     std::atomic<int> _save_done{0}, _save_total{0};
+    ProgressClock _work_clock;   // the UI thread's, for the bar
     std::string _save_error;
     std::string _save_path;
 

@@ -239,6 +239,14 @@ void register_dense_license() {
                           &spirula::i18n::msg::dense::terms);
 }
 
+const ProgressClock& FileDownload::clock() {
+    const double now = progress_now();
+    const State st = _state.load();
+    if (st == State::Done) _clock.finish(now);
+    else if (st == State::Running && _progress.load() >= 0.0f) _clock.work(now, _progress.load());
+    return _clock;
+}
+
 void FileDownload::start(const PendingDownload& d) {
     if (_state.load() == State::Running) return;
     if (_worker.joinable()) _worker.join();
@@ -252,6 +260,7 @@ void FileDownload::start(const PendingDownload& d) {
     }
     _cancel = false;
     _progress = -1.0f;
+    _clock.start(progress_now());
     {
         std::lock_guard<std::mutex> lk(_mu);
         _status.clear();

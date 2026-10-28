@@ -90,11 +90,37 @@ bool read_status(const std::string& dir, int64_t& mtime, RunStatus& out) {
     return true;
 }
 
-float mapping_fraction(int64_t done, int64_t total) {
-    if (total <= 0) return -1.0f;
+namespace {
+
+// The finishing solves after the last image took 19-28% of the flat mapper's
+// step on three captures of 39-226 images. Bottom-up on 235 images: seed and
+// atoms 48%, three merge levels 18%, the finishing passes 34% with no report.
+constexpr double kFlatFinish = 0.25;
+constexpr double kAtomShare = 0.4, kMergeShare = 0.25;
+
+}  // namespace
+
+MappingWork::MappingWork(bool bottom_up)
+    : _place(bottom_up ? kAtomShare : 1.0 - kFlatFinish),
+      _merge(bottom_up ? kMergeShare : 0.0) {}
+
+void MappingWork::raise(double w) { _work = std::max(_work, std::min(1.0, w)); }
+
+// An image costs what the model it joins costs to solve, so the flat mapper's
+// count runs ahead of the clock (docs/notes/sfm-design.md D77); atoms solve
+// small models side by side, and their count does not.
+void MappingWork::placed(int64_t done, int64_t total) {
+    if (total <= 0) return;
     const double x = std::min(1.0, (double)done / (double)total);
-    return (float)(kMappingBarFull * x * std::sqrt(x));
+    raise(_place * (_merge > 0.0 ? x : x * std::sqrt(x)));
 }
+
+void MappingWork::levels(int64_t done, int64_t total) {
+    if (total <= 0) return;
+    raise(_place + _merge * std::min(1.0, (double)done / (double)total));
+}
+
+void MappingWork::refining() { raise(_place + _merge); }
 
 bool read_live_model(const std::string& dir, int64_t& mtime, LiveModel& out, uint64_t point_memory_budget) {
     int64_t stamp = mtime;

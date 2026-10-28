@@ -430,6 +430,7 @@ ss_configure_app(frame_pick_test)
 add_executable(model_download_test
     ${SS_SRC}/app/tests/model_download_test.cpp
     ${SS_SRC}/app/gui/ModelCache.cpp
+    ${SS_SRC}/app/gui/ProgressClock.cpp
     ${SS_SRC}/app/gui/Subprocess.cpp
     ${SS_SRC}/app/AppPaths.cpp)
 ss_configure_app(model_download_test)
@@ -495,9 +496,10 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/gui/tests/align_fit_test.cpp)
     ss_configure_app(align_fit_test)
 
-    add_executable(stage_eta_test
-        ${SS_SRC}/app/gui/tests/stage_eta_test.cpp)
-    ss_configure_app(stage_eta_test)
+    add_executable(progress_clock_test
+        ${SS_SRC}/app/gui/tests/progress_clock_test.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp)
+    ss_configure_app(progress_clock_test)
 
     add_executable(recent_list_test
         ${SS_SRC}/app/gui/tests/recent_list_test.cpp
@@ -597,6 +599,7 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameSharpness.cpp
         ${SS_SRC}/app/FfmpegVideo.cpp
         ${SS_SRC}/app/gui/PrepProgress.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp
         ${SS_SRC}/app/gui/DatasetRecord.cpp
         ${SS_SRC}/app/gui/Subprocess.cpp
         ${SS_SRC}/app/gui/mask/MaskLayer.cpp
@@ -623,6 +626,7 @@ if(SS_BUILD_GUI)
         ${SS_SRC}/app/FrameSharpness.cpp
         ${SS_SRC}/app/FfmpegVideo.cpp
         ${SS_SRC}/app/gui/PrepProgress.cpp
+        ${SS_SRC}/app/gui/ProgressClock.cpp
         ${SS_SRC}/app/gui/Subprocess.cpp
         ${SS_SRC}/app/gui/mask/MaskLayer.cpp
         ${SS_SRC}/app/FrameMask.cpp

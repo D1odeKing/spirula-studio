@@ -4,6 +4,7 @@
 #include "app/gui/edit/EditSession.h"
 
 #include "app/gui/NavCamera.h"
+#include "app/gui/ProgressView.h"
 #include "app/gui/Ui.h"
 #include "i18n/catalog/Edit.h"
 #include "i18n/catalog/EditAttributes.h"
@@ -684,17 +685,24 @@ void EditSession::draw_panel() {
             ? ImGui::CalcTextSize(msg::cancel_job.get()).x +
                   2.0f * st.FramePadding.x + st.ItemSpacing.x
             : 0.0f;
-        if (total > 1)
-            ui::ProgressBar((float)done / (float)total, ImVec2(-bw, 0),
+        const double now = progress_now();
+        if (!_work_clock.started()) _work_clock.start(now);
+        if (total > 1) {
+            _work_clock.work(now, (double)done / (double)total);
+            ui::ProgressBar(_work_clock.fraction(), ImVec2(-bw, 0),
                             detecting ? mmsg::marker_progress : msg::saving_progress,
                             {(long long)done, (long long)total});
-        else
+        } else {
             ui::ProgressBar(-1.0f * (float)ImGui::GetTime(), ImVec2(-bw, 0),
                             msg::working);
+        }
         if (can_stop) {
             ImGui::SameLine();
             if (ui::Button(msg::cancel_job)) cancel_work();
         }
+        progress_time_line(_work_clock);
+    } else {
+        _work_clock = ProgressClock{};
     }
 }
 

@@ -2273,9 +2273,22 @@ int matchFeatureDir(const std::string& featdir, const SfmConfig& cfg, PairMode m
         resume::MatchJournal journal;
         if (res) journal.open(journal_path, res->signature, resumed_verify);
         vopt.journal = &journal;
+        // The rig-mate pass below verifies pairs only this pass's results name.
+        // Its bound is counted in now, so the bar jumps forward when the
+        // real count is known rather than falling back.
+        size_t mates_bound = 0;
+        if (cfg.rig_pairs && !cfg.rigs.empty()) {
+            try {
+                for (const auto& q : rigMatePairs(buildRigTable(image_names, cfg.rigs), pairs,
+                                                  cfg.rig_pair_angle, /*weak_only=*/false))
+                    if (!std::binary_search(pairs.begin(), pairs.end(), q) &&
+                        !done_set.count(resume::pairKey(q.first, q.second)))
+                        mates_bound++;
+            } catch (const std::exception&) {}
+        }
         vopt.progress_done_base = pairs.size() - todo.size();
-        vopt.progress_total = pairs.size();
-        events::stage_begin(Stage::Match, (int64_t)pairs.size());
+        vopt.progress_total = pairs.size() + mates_bound;
+        events::stage_begin(Stage::Match, (int64_t)vopt.progress_total);
         // Added, not assigned: the journal already counted what an earlier run
         // offered the verifier, and verifyPairs writes its own total.
         uint64_t putative = 0;
