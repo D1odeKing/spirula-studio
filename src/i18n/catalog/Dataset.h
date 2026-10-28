@@ -817,6 +817,309 @@ SS_MSG(matrix_pair_matches,
     ES("Emparejamientos: {0}"), PT("Pareamentos: {0}"), IT("Confronti: {0}"),
     NL("Koppelingen: {0}"), RU("Сопоставлений: {0}"), TR("Eşleşme: {0}"));
 
+SS_MSG(matrix_edit_matches,
+    EN("Edit Matches..."),
+    JA("照合を編集..."),
+    ZH_HANS("编辑匹配..."),
+    ZH_HANT("編輯比對..."),
+    KO("정합 편집..."),
+    DE("Zuordnungen bearbeiten..."),
+    FR("Modifier les appariements..."),
+    ES("Editar emparejamientos..."),
+    PT("Editar pareamentos..."),
+    IT("Modifica confronti..."),
+    NL("Koppelingen bewerken..."),
+    RU("Редактировать сопоставления..."),
+    TR("Eşleşmeleri düzenle..."));
+
+SS_MSG(matrix_editor_title,
+    EN("Match Matrix Editor"),
+    JA("照合行列エディタ"),
+    ZH_HANS("匹配矩阵编辑器"),
+    ZH_HANT("比對矩陣編輯器"),
+    KO("정합 행렬 편집기"),
+    DE("Zuordnungsmatrix-Editor"),
+    FR("Éditeur de matrice d'appariement"),
+    ES("Editor de matriz de emparejamiento"),
+    PT("Editor de matriz de pareamento"),
+    IT("Editor matrice di confronto"),
+    NL("Koppelingsmatrixbewerker"),
+    RU("Редактор матрицы сопоставлений"),
+    TR("Eşleşme Matrisi Düzenleyicisi"));
+
+SS_MSG(matrix_remove_matches,
+    EN("Remove Matches"),
+    JA("照合を削除"),
+    ZH_HANS("移除匹配"),
+    ZH_HANT("移除比對"),
+    KO("정합 제거"),
+    DE("Zuordnungen entfernen"),
+    FR("Supprimer les appariements"),
+    ES("Eliminar emparejamientos"),
+    PT("Remover pareamentos"),
+    IT("Rimuovi confronti"),
+    NL("Koppelingen verwijderen"),
+    RU("Удалить сопоставления"),
+    TR("Eşleşmeleri kaldır"));
+
+SS_MSG(matrix_undo,
+    EN("Undo"),
+    JA("元に戻す"),
+    ZH_HANS("撤销"),
+    ZH_HANT("復原"),
+    KO("실행 취소"),
+    DE("Rückgängig"),
+    FR("Annuler"),
+    ES("Deshacer"),
+    PT("Desfazer"),
+    IT("Annulla"),
+    NL("Ongedaan maken"),
+    RU("Отменить"),
+    TR("Geri al"));
+
+SS_MSG(matrix_restore_backup,
+    EN("Restore backup"),
+    JA("バックアップを復元"),
+    ZH_HANS("恢复备份"),
+    ZH_HANT("還原備份"),
+    KO("백업 복원"),
+    DE("Sicherung wiederherstellen"),
+    FR("Restaurer la sauvegarde"),
+    ES("Restaurar copia de seguridad"),
+    PT("Restaurar cópia de segurança"),
+    IT("Ripristina backup"),
+    NL("Back-up herstellen"),
+    RU("Восстановить резервную копию"),
+    TR("Yedeği geri yükle"));
+
+SS_MSG(matrix_restore_backup_help,
+    EN("Replace matches.bin with matches.bin.bak and clear the undo history. The backup is kept."),
+    JA("matches.bin を matches.bin.bak で置き換え、元に戻す履歴を消去します。バックアップは保持されます。"),
+    ZH_HANS("用 matches.bin.bak 替换 matches.bin 并清除撤销历史。备份将保留。"),
+    ZH_HANT("以 matches.bin.bak 取代 matches.bin 並清除復原記錄。備份會保留。"),
+    KO("matches.bin을 matches.bin.bak으로 바꾸고 실행 취소 기록을 지웁니다. 백업은 유지됩니다."),
+    DE("matches.bin durch matches.bin.bak ersetzen und den Rückgängig-Verlauf löschen. Die Sicherung bleibt erhalten."),
+    FR("Remplacer matches.bin par matches.bin.bak et effacer l’historique d’annulation. La sauvegarde est conservée."),
+    ES("Reemplazar matches.bin por matches.bin.bak y borrar el historial de deshacer. La copia se conserva."),
+    PT("Substituir matches.bin por matches.bin.bak e limpar o histórico de desfazer. A cópia é mantida."),
+    IT("Sostituisce matches.bin con matches.bin.bak e cancella la cronologia di annullamento. Il backup viene conservato."),
+    NL("Vervang matches.bin door matches.bin.bak en wis de geschiedenis voor ongedaan maken. De back-up blijft bewaard."),
+    RU("Заменить matches.bin файлом matches.bin.bak и очистить историю отмены. Резервная копия сохраняется."),
+    TR("matches.bin dosyasını matches.bin.bak ile değiştirir ve geri alma geçmişini temizler. Yedek korunur."));
+
+SS_MSG(matrix_clear_selection,
+    EN("Clear Selection"),
+    JA("選択を解除"),
+    ZH_HANS("清除选择"),
+    ZH_HANT("清除選擇"),
+    KO("선택 해제"),
+    DE("Auswahl aufheben"),
+    FR("Désélectionner"),
+    ES("Deseleccionar"),
+    PT("Limpar seleção"),
+    IT("Deseleziona"),
+    NL("Selectie wissen"),
+    RU("Снять выделение"),
+    TR("Seçimi temizle"));
+
+SS_MSG(matrix_show_features,
+    EN("Features"),
+    JA("特徴点"),
+    ZH_HANS("特征点"),
+    ZH_HANT("特徵點"),
+    KO("특징점"),
+    DE("Merkmale"),
+    FR("Points d'intérêt"),
+    ES("Puntos clave"),
+    PT("Pontos-chave"),
+    IT("Punti chiave"),
+    NL("Kenmerken"),
+    RU("Признаки"),
+    TR("Öznitelikler"));
+
+SS_MSG(matrix_show_matches,
+    EN("Matches"),
+    JA("対応線"),
+    ZH_HANS("匹配线"),
+    ZH_HANT("比對線"),
+    KO("대응선"),
+    DE("Linien"),
+    FR("Correspondances"),
+    ES("Líneas de coincidencia"),
+    PT("Linhas de pareamento"),
+    IT("Linee di confronto"),
+    NL("Koppelingslijnen"),
+    RU("Линии сопоставления"),
+    TR("Eşleşme çizgileri"));
+
+SS_MSG(matrix_reset_view,
+    EN("Reset View"),
+    JA("表示をリセット"),
+    ZH_HANS("重置视图"),
+    ZH_HANT("重設檢視"),
+    KO("화면 초기화"),
+    DE("Ansicht zurücksetzen"),
+    FR("Réinitialiser la vue"),
+    ES("Restablecer vista"),
+    PT("Redefinir visualização"),
+    IT("Reimposta vista"),
+    NL("Weergave herstellen"),
+    RU("Сбросить вид"),
+    TR("Görünümü sıfırla"));
+
+SS_MSG(matrix_help_edit,
+    EN("{0}\n\nRight-click the map to take false matches out by hand."),
+    JA("{0}\n\nマップを右クリックすると、誤った照合を手で取り除けます。"),
+    ZH_HANS("{0}\n\n在图上右键单击，可以手动去掉错误的匹配。"),
+    ZH_HANT("{0}\n\n在圖上按右鍵，可以手動去掉錯誤的比對。"),
+    KO("{0}\n\n지도를 오른쪽 클릭하면 잘못된 정합을 직접 없앨 수 있습니다."),
+    DE("{0}\n\nRechtsklick auf die Karte, um falsche Zuordnungen von Hand zu entfernen."),
+    FR("{0}\n\nClic droit sur la carte pour retirer à la main les faux appariements."),
+    ES("{0}\n\nHaga clic derecho en el mapa para quitar a mano los emparejamientos falsos."),
+    PT("{0}\n\nClique com o botão direito no mapa para retirar à mão os pareamentos falsos."),
+    IT("{0}\n\nFai clic destro sulla mappa per togliere a mano i confronti sbagliati."),
+    NL("{0}\n\nKlik met rechts op de kaart om foute koppelingen met de hand te verwijderen."),
+    RU("{0}\n\nЩёлкните по карте правой кнопкой, чтобы вручную убрать ложные сопоставления."),
+    TR("{0}\n\nYanlış eşleşmeleri elle kaldırmak için haritaya sağ tıklayın."));
+
+SS_MSG(matrix_editor_help,
+    EN("Removing pairs rewrites matches.bin; the first edit keeps the original as "
+       "matches.bin.bak. The next run then reconstructs again from the edited "
+       "matches. A run that matches again -- because a matching setting changed -- "
+       "replaces them."),
+    JA("ペアを取り除くと matches.bin が書き換わります。最初の編集のときに元のファイルを "
+       "matches.bin.bak として残します。次の実行では、編集した照合から再構成をやり直します。"
+       "照合の設定を変えて照合をやり直すと、編集は置き換えられます。"),
+    ZH_HANS("去掉图像对会改写 matches.bin；第一次编辑时，原文件保留为 matches.bin.bak。"
+            "下一次运行会用编辑后的匹配重新重建。如果改了匹配设置而重新匹配，编辑结果会被替换。"),
+    ZH_HANT("去掉影像對會改寫 matches.bin；第一次編輯時，原檔案保留為 matches.bin.bak。"
+            "下一次執行會用編輯後的比對重新重建。如果改了比對設定而重新比對，編輯結果會被取代。"),
+    KO("쌍을 없애면 matches.bin 이 다시 쓰입니다. 처음 편집할 때 원본을 matches.bin.bak 으로 "
+       "남겨 둡니다. 다음 실행은 편집한 정합으로 다시 재구성합니다. 정합 설정을 바꿔 정합을 "
+       "다시 하면 편집한 내용은 대체됩니다."),
+    DE("Entfernte Paare schreiben matches.bin neu; die erste Änderung behält das "
+       "Original als matches.bin.bak. Der nächste Lauf rekonstruiert dann aus den "
+       "bearbeiteten Zuordnungen neu. Ein Lauf, der neu zuordnet -- weil sich eine "
+       "Zuordnungseinstellung geändert hat --, ersetzt sie."),
+    FR("Retirer des paires réécrit matches.bin ; la première modification garde "
+       "l'original sous matches.bin.bak. Le passage suivant reconstruit alors à "
+       "partir des appariements modifiés. Un passage qui apparie de nouveau -- parce "
+       "qu'un réglage d'appariement a changé -- les remplace."),
+    ES("Quitar pares reescribe matches.bin; la primera edición guarda el original "
+       "como matches.bin.bak. La siguiente ejecución reconstruye entonces a partir "
+       "de los emparejamientos editados. Una ejecución que vuelve a emparejar -- "
+       "porque cambió un ajuste de emparejamiento -- los reemplaza."),
+    PT("Retirar pares reescreve matches.bin; a primeira edição guarda o original "
+       "como matches.bin.bak. A próxima execução reconstrói então a partir dos "
+       "pareamentos editados. Uma execução que pareia de novo -- porque uma "
+       "definição de pareamento mudou -- os substitui."),
+    IT("Togliere coppie riscrive matches.bin; la prima modifica conserva "
+       "l'originale come matches.bin.bak. L'esecuzione successiva ricostruisce "
+       "allora dai confronti modificati. Un'esecuzione che confronta di nuovo -- "
+       "perché è cambiata un'impostazione di confronto -- li sostituisce."),
+    NL("Paren verwijderen herschrijft matches.bin; de eerste bewerking bewaart het "
+       "origineel als matches.bin.bak. De volgende run reconstrueert dan opnieuw uit "
+       "de bewerkte koppelingen. Een run die opnieuw koppelt -- omdat een "
+       "koppelinstelling is veranderd -- vervangt ze."),
+    RU("Удаление пар перезаписывает matches.bin; при первой правке оригинал "
+       "сохраняется как matches.bin.bak. Следующий запуск реконструирует заново по "
+       "исправленным сопоставлениям. Запуск, который сопоставляет заново -- потому "
+       "что изменилась настройка сопоставления, -- заменит их."),
+    TR("Çift kaldırmak matches.bin dosyasını yeniden yazar; ilk düzenleme özgün "
+       "dosyayı matches.bin.bak olarak saklar. Sonraki çalıştırma düzenlenmiş "
+       "eşleşmelerden yeniden kurar. Eşleştirmeyi yeniden yapan bir çalıştırma -- "
+       "bir eşleştirme ayarı değiştiği için -- bunları değiştirir."));
+
+SS_MSG(matrix_selection_counts,
+    EN("Pairs: {0}   Matches: {1}"),
+    JA("ペア: {0}   対応: {1}"),
+    ZH_HANS("图像对：{0}   匹配：{1}"),
+    ZH_HANT("影像對：{0}   比對：{1}"),
+    KO("쌍: {0}   대응: {1}"),
+    DE("Paare: {0}   Zuordnungen: {1}"),
+    FR("Paires : {0}   Appariements : {1}"),
+    ES("Pares: {0}   Emparejamientos: {1}"),
+    PT("Pares: {0}   Pareamentos: {1}"),
+    IT("Coppie: {0}   Confronti: {1}"),
+    NL("Paren: {0}   Koppelingen: {1}"),
+    RU("Пар: {0}   Сопоставлений: {1}"),
+    TR("Çift: {0}   Eşleşme: {1}"));
+
+SS_MSG(matrix_removed,
+    EN("Removed -- pairs: {0}, matches: {1}"),
+    JA("取り除いたもの -- ペア: {0}、対応: {1}"),
+    ZH_HANS("已去掉 —— 图像对：{0}，匹配：{1}"),
+    ZH_HANT("已去掉 —— 影像對：{0}，比對：{1}"),
+    KO("없앤 것 -- 쌍: {0}, 대응: {1}"),
+    DE("Entfernt -- Paare: {0}, Zuordnungen: {1}"),
+    FR("Retiré -- paires : {0}, appariements : {1}"),
+    ES("Quitado -- pares: {0}, emparejamientos: {1}"),
+    PT("Retirado -- pares: {0}, pareamentos: {1}"),
+    IT("Tolto -- coppie: {0}, confronti: {1}"),
+    NL("Verwijderd -- paren: {0}, koppelingen: {1}"),
+    RU("Удалено -- пар: {0}, сопоставлений: {1}"),
+    TR("Kaldırıldı -- çift: {0}, eşleşme: {1}"));
+
+SS_MSG(matrix_restored,
+    EN("Restored -- pairs: {0}, matches: {1}"),
+    JA("元に戻したもの -- ペア: {0}、対応: {1}"),
+    ZH_HANS("已恢复 —— 图像对：{0}，匹配：{1}"),
+    ZH_HANT("已恢復 —— 影像對：{0}，比對：{1}"),
+    KO("되돌린 것 -- 쌍: {0}, 대응: {1}"),
+    DE("Wiederhergestellt -- Paare: {0}, Zuordnungen: {1}"),
+    FR("Rétabli -- paires : {0}, appariements : {1}"),
+    ES("Restaurado -- pares: {0}, emparejamientos: {1}"),
+    PT("Restaurado -- pares: {0}, pareamentos: {1}"),
+    IT("Ripristinato -- coppie: {0}, confronti: {1}"),
+    NL("Hersteld -- paren: {0}, koppelingen: {1}"),
+    RU("Восстановлено -- пар: {0}, сопоставлений: {1}"),
+    TR("Geri yüklendi -- çift: {0}, eşleşme: {1}"));
+
+SS_MSG(matrix_edit_failed,
+    EN("The matches were not changed: {0}"),
+    JA("照合は変更されていません: {0}"),
+    ZH_HANS("匹配没有改动：{0}"),
+    ZH_HANT("比對沒有改動：{0}"),
+    KO("정합은 바뀌지 않았습니다: {0}"),
+    DE("Die Zuordnungen wurden nicht geändert: {0}"),
+    FR("Les appariements n'ont pas été modifiés : {0}"),
+    ES("Los emparejamientos no se cambiaron: {0}"),
+    PT("Os pareamentos não foram alterados: {0}"),
+    IT("I confronti non sono stati modificati: {0}"),
+    NL("De koppelingen zijn niet gewijzigd: {0}"),
+    RU("Сопоставления не изменены: {0}"),
+    TR("Eşleşmeler değiştirilmedi: {0}"));
+
+SS_MSG(matrix_file_changed,
+    EN("matches.bin was rewritten by another run; there is nothing to undo."),
+    JA("matches.bin は別の実行で書き換えられました。元に戻せるものはありません。"),
+    ZH_HANS("matches.bin 已被另一次运行改写，没有可以撤销的操作。"),
+    ZH_HANT("matches.bin 已被另一次執行改寫，沒有可以復原的操作。"),
+    KO("matches.bin 이 다른 실행에서 다시 쓰였습니다. 실행 취소할 것이 없습니다."),
+    DE("matches.bin wurde von einem anderen Lauf neu geschrieben; es gibt nichts rückgängig zu machen."),
+    FR("matches.bin a été réécrit par un autre passage ; il n'y a rien à annuler."),
+    ES("Otra ejecución reescribió matches.bin; no hay nada que deshacer."),
+    PT("Outra execução reescreveu matches.bin; não há nada para desfazer."),
+    IT("Un'altra esecuzione ha riscritto matches.bin; non c'è nulla da annullare."),
+    NL("matches.bin is door een andere run herschreven; er valt niets ongedaan te maken."),
+    RU("matches.bin перезаписан другим запуском; отменять нечего."),
+    TR("matches.bin başka bir çalıştırma tarafından yeniden yazıldı; geri alınacak bir şey yok."));
+
+SS_MSG(matrix_close,
+    EN("Close"),
+    JA("閉じる"),
+    ZH_HANS("关闭"),
+    ZH_HANT("關閉"),
+    KO("닫기"),
+    DE("Schließen"),
+    FR("Fermer"),
+    ES("Cerrar"),
+    PT("Fechar"),
+    IT("Chiudi"),
+    NL("Sluiten"),
+    RU("Закрыть"),
+    TR("Kapat"));
+
 SS_MSG(model_live_counts,
     EN("Placed cameras: {0} of {1}   Points: {2}"),
     JA("配置できたカメラ: {0} / {1}   点: {2}"),

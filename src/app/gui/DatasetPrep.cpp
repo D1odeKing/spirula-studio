@@ -1035,7 +1035,7 @@ std::vector<std::string> workspace_artifacts(const std::string& workspace,
     for (const char* name : {kFeatureMaskDirName, "features", "sparse", "colmap",
                              "normals", "depths",
                              ".progress", sfm::resume::kDir, "matches.bin",
-                             "database.db", kDatasetRecordFile,
+                             "matches.bin.bak", "database.db", kDatasetRecordFile,
                              ".spirula-recon", ".spirula-frames"})
         add(name);
     return out;
@@ -1494,9 +1494,8 @@ bool DatasetPrep::run(const PrepJob& job_in, PrepResult& out, std::string& error
         }
     }
 
-    // The reel registered frames as they were decoded. Lenses split apart later,
-    // photographs copied in and the blur rule's moves are only on disk.
-    if (_films.frames && (job.make_frames || job.sort_frames)) {
+    // Reused frames and lenses split after decoding also need reel entries.
+    if (_films.frames) {
         std::vector<FilmFrame> listed;
         for (const Prepared& p : per)
             for (const fs::path& f : walk_images(p.images, p.masks)) {
@@ -1642,6 +1641,24 @@ bool DatasetPrep::run(const PrepJob& job_in, PrepResult& out, std::string& error
         // failing (n == 0 with rerr non-empty), must still say so.
         if (n > 0) log(fmt(mmsg::log_recomposited, {(long long)n}), /*detail=*/false);
         if (!rerr.empty()) log(fmt(mmsg::log_recomposite_failed, {rerr}), /*detail=*/false);
+    }
+    if (_films.masks && (!out.mask_dir.empty() || !out.feature_mask_dir.empty())) {
+        std::vector<FilmFrame> listed;
+        for (const fs::path& f : walk_images(out.image_dir, out.mask_dir)) {
+            if (!out.feature_mask_dir.empty() && inside(f, out.feature_mask_dir)) continue;
+            const fs::path rel = under_root(f, out.image_dir);
+            const fs::path mask_rel = rel.parent_path() / (rel.stem().string() + ".png");
+            FilmFrame ff;
+            ff.name = rel.generic_string();
+            ff.image_path = f.string();
+            if (!out.mask_dir.empty() && fs::is_regular_file(fs::path(out.mask_dir) / mask_rel, mec))
+                ff.mask_path = (fs::path(out.mask_dir) / mask_rel).string();
+            if (!out.feature_mask_dir.empty() && fs::is_regular_file(fs::path(out.feature_mask_dir) / mask_rel, mec))
+                ff.feature_mask_path = (fs::path(out.feature_mask_dir) / mask_rel).string();
+            if (ff.mask_path.empty() && ff.feature_mask_path.empty()) continue;
+            listed.push_back(std::move(ff));
+        }
+        _films.masks->relist(std::move(listed));
     }
     if (done) done(Stage::Masks, job);
     return true;

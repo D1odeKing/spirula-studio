@@ -108,6 +108,7 @@ void sweep_sfm_intermediates(const std::string& ws) {
     remove_tree(dir / sfm::resume::kDir);
     std::error_code ec;
     fs::remove(dir / "matches.bin", ec);
+    fs::remove(dir / "matches.bin.bak", ec);
 }
 
 
@@ -363,6 +364,10 @@ void SfmRunner::sweep_intermediates() {
         ws.swap(_sweep_dir);
     }
     sweep_sfm_intermediates(ws);
+}
+void SfmRunner::keep_intermediates() {
+    std::lock_guard<std::mutex> lk(_mu);
+    _sweep_dir.clear();
 }
 void SfmRunner::log(const std::string& line, bool detail) {
     _prog.note(line, detail);
