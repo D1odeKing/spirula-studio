@@ -1,6 +1,7 @@
 // MeshJob.cpp -- see MeshJob.h.
 
 #include "app/gui/MeshJob.h"
+#include "app/gui/MeshLabOutputs.h"
 
 #include "mesh/MeshExport.h"
 
@@ -52,6 +53,7 @@ std::string MeshJob::preview_path() const {
 std::vector<std::string> mesh_job_outputs(const MeshJob& job) {
     std::vector<std::string> out;
     if (job.output.empty()) return out;
+    if (job.source == 1) return meshlab_dense_outputs(job);
     for (const meshing::MeshOutputRequest& r : mesh_job_plan(job))
         out.push_back(r.base + "." + r.spec.fmt);
     return out;

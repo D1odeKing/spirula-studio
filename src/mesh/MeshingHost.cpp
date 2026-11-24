@@ -14,6 +14,7 @@
 #include "mesh/MeshUV.h"
 #include "mesh/Delaunay3D.h"
 #include "mesh/MeshLog.h"
+#include "mesh/MeshClean.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -240,6 +241,8 @@ private:
     union { int inl_[kInline]; int* heap_; };
 };
 
+} // namespace
+
 // Parallel manifold-preserving short-edge merge.
 //
 // Collapses mesh edges shorter than a local threshold (merge_factor times the
@@ -254,8 +257,8 @@ private:
 // The global-shortest candidate always wins, so each round makes progress, and
 // the winners' disjoint neighborhoods make the concurrent collapses race-free.
 // The outcome is deterministic regardless of thread count.
-static void merge_vertices(Mesh& mesh, float merge_factor, float max_flip_deg,
-                           bool verbose, int num_threads) {
+void merge_vertices(Mesh& mesh, float merge_factor, float max_flip_deg,
+                    bool verbose, int num_threads) {
     const int nv = (int)mesh.V.size();
     const long nf = (long)mesh.F.size();
     if (nv == 0 || merge_factor <= 0.0f) return;
@@ -537,7 +540,7 @@ static void merge_vertices(Mesh& mesh, float merge_factor, float max_flip_deg,
 // disagrees with the per-triangle outward guess from emission (majority vote),
 // so normals end up pointing outward.
 // ---------------------------------------------------------------------------
-static void orient_mesh(Mesh& mesh) {
+void orient_mesh(Mesh& mesh) {
     const int nf = (int)mesh.F.size();
     if (nf == 0) return;
     auto& F = mesh.F;
@@ -608,7 +611,7 @@ static void orient_mesh(Mesh& mesh) {
 // Drop every face whose (sorted) vertex triple was already seen, keeping one;
 // the leftover singleton then falls to the floater pass.
 // ---------------------------------------------------------------------------
-static void dedup_faces(Mesh& mesh, bool verbose) {
+void dedup_faces(Mesh& mesh, bool verbose) {
     const long nf = (long)mesh.F.size();
     if (nf == 0) return;
     std::vector<std::array<int,4>> key(nf);
@@ -644,7 +647,7 @@ static void dedup_faces(Mesh& mesh, bool verbose) {
 // the mesh compacted (orphan vertices, i.e. vertices no longer used by any face,
 // are dropped too). min_faces <= 1 disables the pass.
 // ---------------------------------------------------------------------------
-static void remove_floaters(Mesh& mesh, int min_faces, bool verbose) {
+void remove_floaters(Mesh& mesh, int min_faces, bool verbose) {
     const int nv = (int)mesh.V.size();
     const long nf = (long)mesh.F.size();
     if (min_faces <= 1 || nv == 0 || nf == 0) return;
@@ -712,7 +715,7 @@ static void remove_floaters(Mesh& mesh, int min_faces, bool verbose) {
 // left to the subsequent orient pass. Very large loops fall back to a (watertight)
 // centroid fan to keep the cubic DP bounded.
 // ---------------------------------------------------------------------------
-static void fill_holes(Mesh& mesh, float ratio, int max_edges, bool verbose) {
+void fill_holes(Mesh& mesh, float ratio, int max_edges, bool verbose) {
     const int nv = (int)mesh.V.size();
     const long nf = (long)mesh.F.size();
     if ((ratio <= 0.0f && max_edges <= 0) || nv == 0 || nf == 0) return;
@@ -954,7 +957,7 @@ static void fill_holes(Mesh& mesh, float ratio, int max_edges, bool verbose) {
 // position); the surface becomes a clean manifold-with-boundary, so the
 // subsequent orient pass yields a single consistent winding per component.
 // ---------------------------------------------------------------------------
-static void split_nonmanifold_vertices(Mesh& mesh, bool verbose) {
+void split_nonmanifold_vertices(Mesh& mesh, bool verbose) {
     const int nv0 = (int)mesh.V.size();
     const long nf = (long)mesh.F.size();
     if (nv0 == 0 || nf == 0) return;
@@ -1048,7 +1051,7 @@ static void split_nonmanifold_vertices(Mesh& mesh, bool verbose) {
 // disables the pass. The collapse/flip both preserve manifoldness, so no
 // re-split is needed before orient.
 // ---------------------------------------------------------------------------
-static void fix_degenerate_faces(Mesh& mesh, float angle_deg, bool verbose) {
+void fix_degenerate_faces(Mesh& mesh, float angle_deg, bool verbose) {
     const int nv = (int)mesh.V.size();
     if (angle_deg <= 0.0f || nv == 0 || mesh.F.empty()) return;
     auto& V = mesh.V;
@@ -1322,8 +1325,8 @@ static void fix_degenerate_faces(Mesh& mesh, float angle_deg, bool verbose) {
 //     triangulation slides along it. A vertex whose move would fold or
 //     degenerate an incident face is reverted. Boundary vertices stay fixed.
 // ---------------------------------------------------------------------------
-static void improve_mesh_quality(Mesh& mesh, int iters, bool verbose,
-                                 int num_threads) {
+void improve_mesh_quality(Mesh& mesh, int iters, bool verbose,
+                          int num_threads) {
     const int nv = (int)mesh.V.size();
     const long nf = (long)mesh.F.size();
     if (iters <= 0 || nv == 0 || nf == 0) return;
@@ -1531,7 +1534,6 @@ static void improve_mesh_quality(Mesh& mesh, int iters, bool verbose,
                   {total_flips, total_moved, iters});
 }
 
-} // namespace
 
 bool generate_mesh(
     const float* means, const float* quats,

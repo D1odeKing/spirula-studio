@@ -3,9 +3,11 @@
 #include "app/gui/MeshRunner.h"
 
 #include "app/AppPaths.h"
+#include "app/gui/MeshLabPanel.h"
 #include "app/gui/Subprocess.h"
 #include "i18n/Locale.h"
 #include "i18n/catalog/Log.h"
+#include "i18n/catalog/MeshLab.h"
 #include "mesh/MeshLog.h"
 
 #include <algorithm>
@@ -306,15 +308,29 @@ void MeshRunner::run(MeshJob job) {
         argv.push_back(std::to_string(job.cuda_device));
     }
 #endif
+    if (job.source == 1 && !meshlab_dense_argv(job, formats, colors, argv))
+        return fail(spirula::i18n::msg::meshlab::gui_err_no_dataset.get());
 
     std::string cmd;
     for (const auto& a : argv) cmd += (cmd.empty() ? "$ " : " ") + a;
     log(cmd);
 
-    const int rc = run_process(argv, "", [this](const std::string& l) {
+    int rc = run_process(argv, "", [this](const std::string& l) {
         log(l);
         note_line(l);
     }, _cancel);
+    if (rc == 0 && job.refine_normals) {
+        std::error_code ec;
+        std::vector<std::string> made;
+        for (const std::string& f : mesh_job_outputs(job))
+            if (fs::is_regular_file(f, ec)) made.push_back(f);
+        rc = meshlab_refine(job, {argv[0], argv[1], argv[2]}, made, [&](const std::vector<std::string>& r) {
+            std::string line;
+            for (const auto& a : r) line += (line.empty() ? "$ " : " ") + a;
+            log(line);
+            return run_process(r, "", [this](const std::string& l) { log(l); note_line(l); }, _cancel);
+        });
+    }
 
     if (rc == kCancelled) {
         _state = State::Cancelled;

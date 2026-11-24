@@ -335,6 +335,9 @@ static void test_mesh_preset() {
     p.job.cull_unseen = false;
     p.job.carve_k = 3;
     p.job.extra_args = "--verbose";
+    p.job.source = 1;
+    p.job.refine_normals = true;
+    p.job.max_shift = 0.005f;
     // What the preset must NOT carry.
     p.job.checkpoint = "C:/runs/one";
     p.job.data_dir = "C:/datasets/one";
@@ -358,6 +361,9 @@ static void test_mesh_preset() {
     CHECK_EQ(back.job.merge_factor, p.job.merge_factor);
     CHECK_EQ(back.job.quality_iters, p.job.quality_iters);
     CHECK_EQ(back.job.floater_min_faces, p.job.floater_min_faces);
+    CHECK_EQ(back.job.source, p.job.source);
+    CHECK_EQ(back.job.refine_normals, p.job.refine_normals);
+    CHECK_EQ(back.job.max_shift, p.job.max_shift);
     CHECK_EQ(back.job.cull_unseen, p.job.cull_unseen);
     CHECK_EQ(back.job.carve_k, p.job.carve_k);
     CHECK_EQ(back.job.extra_args, p.job.extra_args);
@@ -414,6 +420,16 @@ static void test_sanitize() {
     two.colors[0] = false;
     CHECK_EQ(gui::mesh_job_outputs(two).size(), (size_t)1);
     CHECK_EQ(gui::mesh_job_outputs(two)[0], std::string("C:/runs/one/mesh.ply"));
+
+    // mesh-dense writes one file per format, whatever colours are ticked.
+    gui::MeshJob dense = two;
+    dense.source = 1;
+    dense.colors[0] = true;
+    dense.formats[4] = true;    // stl
+    const std::vector<std::string> d = gui::mesh_job_outputs(dense);
+    CHECK_EQ(d.size(), (size_t)2);
+    CHECK_EQ(d[0], std::string("C:/runs/one/mesh.ply"));
+    CHECK_EQ(d[1], std::string("C:/runs/one/mesh.stl"));
 }
 
 // A key a newer build no longer knows is skipped, not an error.

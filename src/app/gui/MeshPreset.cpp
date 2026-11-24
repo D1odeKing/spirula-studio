@@ -26,6 +26,9 @@ namespace {
     X("cull_unseen",       cull_unseen)                                       \
     X("carve_k",           carve_k)                                           \
     X("extra_args",        extra_args)                                        \
+    X("source",            source)                                            \
+    X("refine_normals",    refine_normals)                                    \
+    X("max_shift",         max_shift)                                         \
     /* end */
 
 // The two sets, written as arrays of the tokens the CLI spells rather than as
@@ -59,6 +62,8 @@ void sanitize_mesh_job(MeshJob& job) {
     job.floater_min_faces = std::clamp(job.floater_min_faces, 0, 10000000);
     job.carve_k = std::clamp(job.carve_k, 0, 64);
     job.merge_factor = std::clamp(job.merge_factor, 0.05f, 16.0f);
+    job.source = std::clamp(job.source, 0, 1);
+    job.max_shift = std::max(0.0f, job.max_shift);
 
     bool any_color = false, any_format = false;
     for (int i = 0; i < kNumMeshColorModes; i++) any_color |= job.colors[i];

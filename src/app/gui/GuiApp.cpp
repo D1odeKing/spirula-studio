@@ -26,6 +26,7 @@
 #include "app/LogLuts.h"
 #include "app/gui/DatasetPrep.h"
 #include "app/gui/MaskPrompt.h"
+#include "app/gui/MeshLabPanel.h"
 #include "app/gui/Subprocess.h"
 #include "app/gui/ViewBookmarks.h"
 #include "mesh/MeshImport.h"
@@ -1107,10 +1108,13 @@ void GuiApp::apply_mesh_preset(const MeshPreset& p) {
     const std::string checkpoint = _mesh_job.checkpoint;
     const std::string data_dir = _mesh_job.data_dir;
     const std::string output = _mesh_job.output;
+    const std::string normal_dir = _mesh_job.normal_dir, depth_dir = _mesh_job.depth_dir;
     _mesh_job = p.job;
     _mesh_job.checkpoint = checkpoint;
     _mesh_job.data_dir = data_dir;
     _mesh_job.output = output;
+    _mesh_job.normal_dir = normal_dir;
+    _mesh_job.depth_dir = depth_dir;
     sanitize_mesh_job(_mesh_job);
     _mesh_presets.file = p.path;
     _mesh_presets.display = p.name;
@@ -8879,6 +8883,16 @@ void GuiApp::draw_train() {
     // it costs the preview below no height.
     {
         const float w = px(160.0f);
+        // Before the screenshot controls, which place themselves from the right.
+        if (!_preview_images) {
+            ImGui::SameLine();
+            const spirula::TrainerSession* s = _runner.session();
+            if (_measure.draw_toolbar(_viewport, s ? &s->ds : nullptr, _cfg.data,
+                                      _runner.phase() == TrainRunner::Phase::Ready &&
+                                          !native_work_busy() && !_batch_active))
+                _parse_dirty = true;
+            for (const std::string& l : _measure.take_log()) log(l);
+        }
         draw_screenshot_controls(w);
         ImGui::SameLine(std::max(0.0f, ImGui::GetContentRegionMax().x - w));
         ImGui::SetNextItemWidth(w);
@@ -9143,6 +9157,7 @@ void GuiApp::draw_mesh_options() {
     }
     ui::help_on_hover(msg::mesh_source_help);
     ui::TextDisabled(msg::mesh_drop_hint);
+    draw_meshlab_options(_mesh_job);
 
     // ---- the photos ----
     ui::Checkbox(msg::mesh_use_photos, &_mesh_job.use_data);
@@ -9189,7 +9204,9 @@ void GuiApp::draw_mesh_options() {
     for (int i = 0; i < kNumMeshColorModes; i++) {
         if (i) ImGui::SameLine();
         ImGui::PushID(i);
+        ImGui::BeginDisabled(i == 2 && meshlab_no_texture(_mesh_job));
         ui::Checkbox(*color_names[i], &_mesh_job.colors[i]);
+        ImGui::EndDisabled();
         ImGui::PopID();
     }
     ui::help_on_hover(msg::mesh_color_help);

@@ -116,6 +116,11 @@ list(APPEND SS_TOOL_DEFS SS_TOOL_DENSE=1)
 list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/mesh_main.cpp)
 list(APPEND SS_TOOL_DEFS SS_TOOL_MESH=1)
 
+# ---- mesh-lab (docs/meshlab.md): host only, both backends ----
+list(APPEND SS_TOOL_SOURCES ${SS_SRC}/app/cli/meshEval_main.cpp ${SS_SRC}/app/cli/meshDense_main.cpp
+     ${SS_SRC}/app/cli/meshRefine_main.cpp ${SS_SRC}/app/cli/scale_main.cpp)
+list(APPEND SS_TOOL_DEFS SS_TOOL_MESHLAB=1)
+
 # ---- a dataset from an E57 laser scan: host only, both backends ----
 list(APPEND SS_TOOL_SOURCES
      ${SS_SRC}/app/cli/e57_main.cpp

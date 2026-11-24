@@ -19,6 +19,7 @@
 #include "app/gui/GeometryPanel.h"
 #include "app/gui/PartitionPanel.h"
 #include "app/gui/RoiEditor.h"
+#include "app/gui/MeasureTool.h"
 #include "app/gui/ImageCompare.h"
 #include "app/gui/MatchMatrix.h"
 #include "app/gui/PickSheet.h"
@@ -785,6 +786,7 @@ private:
 
     TrainRunner _runner;
     ViewportPanel _viewport;
+    MeasureTool _measure;            // the ruler on _viewport (mesh-lab)
     // The trainer screen's other preview: one training photograph beside the
     // render of the same camera. Reads from the session's engine, so it is
     // released together with the viewport (detach_session_views).

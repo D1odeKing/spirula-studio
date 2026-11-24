@@ -56,6 +56,12 @@ struct MeshJob {
     int carve_k = 1;
     std::string extra_args;            // appended verbatim
 
+    // ---- mesh-lab (docs/meshlab.md, app/gui/MeshLabPanel.h) ----
+    int source = 0;                    // 0 = the Gaussians, 1 = the dense cloud
+    bool refine_normals = false;
+    float max_shift = 0.0f;            // 0 = mesh-refine's own cap, one mean edge
+    std::string normal_dir, depth_dir; // "" = the dataset's normals/ and depths/
+
     // The file the preview should open when the run finishes: the richest of
     // the outputs below, which is the first of them.
     std::string preview_path() const;

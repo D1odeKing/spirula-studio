@@ -10,6 +10,9 @@
 #include "app/AppPaths.h"
 #include "app/CrashLog.h"
 #include "app/Tools.h"
+#ifdef SS_TOOL_MESHLAB
+#include "app/cli/MeshLabCli.h"
+#endif
 #include "i18n/Locale.h"
 #include "i18n/catalog/Cli.h"
 #include "i18n/catalog/Dense.h"
@@ -90,6 +93,9 @@ const std::vector<Tool>& tools() {
 #endif
 #ifdef SS_TOOL_MESH
         {app::kToolMesh, &cmsg::tool_mesh, spirula_mesh_main},
+#endif
+#ifdef SS_TOOL_MESHLAB
+        SS_MESHLAB_TOOL_ROWS
 #endif
 #ifdef SS_TOOL_E57
         {app::kToolE57, &cmsg::tool_e57, spirula_e57_main},
